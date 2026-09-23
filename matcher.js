@@ -181,8 +181,13 @@ function readablePictureUrl(url) {
 }
 
 function loadPicture(url) {
-	const picture = new Image();
-	picture.crossOrigin = "anonymous";
-	picture.src = readablePictureUrl(url);
-	return picture.decode().then(() => picture);
+	// Waits for the "load" event rather than picture.decode(): browsers put decode() on hold
+	// while the page is hidden (say, the phone switched to another app), and never give up.
+	return new Promise((resolve, reject) => {
+		const picture = new Image();
+		picture.crossOrigin = "anonymous";
+		picture.onload = () => resolve(picture);
+		picture.onerror = () => reject(new Error("Card picture didn't load: " + url));
+		picture.src = readablePictureUrl(url);
+	});
 }
