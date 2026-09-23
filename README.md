@@ -2,6 +2,8 @@
 
 Photograph a Pokémon card on your phone and see what it sells for.
 
+**Live at <https://mzdad.github.io/kortpris/>.** Every push to `main` updates it.
+
 It is a single web page, `index.html`, with nothing to install:
 
 1. **Photo → text.** [Tesseract.js](https://github.com/naptha/tesseract.js) reads the
