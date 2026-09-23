@@ -157,12 +157,14 @@ async function refreshCollectionPrices() {
 }
 
 function collectionTotals() {
-	// The total is in kroner from Cardmarket prices. Cards without one are counted separately
-	// rather than guessed: TCGplayer's dollars can't be turned into kroner without today's rate.
-	const totals = { kroner: 0, cards: 0, unpriced: 0, oldestUpdate: null };
+	// The total is in the shown currency: each card's Cardmarket price, or TCGplayer's when
+	// Cardmarket has none (see localPrice in app.js). Cards with neither are counted separately
+	// rather than guessed.
+	const totals = { value: 0, cards: 0, unpriced: 0, oldestUpdate: null };
 	for (const entry of collection) {
 		totals.cards += entry.count;
-		if (entry.priceEur > 0) totals.kroner += entry.count * entry.priceEur * DKK_PER_EUR;
+		const each = localPrice(entry.priceEur, entry.priceUsd);
+		if (each !== null) totals.value += entry.count * each;
 		else totals.unpriced += entry.count;
 		// Dates look like "2026/07/01", so comparing them as text puts them in date order.
 		if (entry.updatedAt && (!totals.oldestUpdate || entry.updatedAt < totals.oldestUpdate)) {

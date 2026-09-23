@@ -46,6 +46,7 @@ Anthropic.
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
 | `storage.js` | Saves things on the phone (language, My cards) |
+| `currency.js` | Shows prices in DKK, EUR, GBP or IDR, with the central bank's daily rates |
 | `account.js` | Accounts: sign up, sign in, and My cards kept online (Firebase) |
 | `password.js` | Decides whether a new password is strong enough |
 | `firebase-config.js` | Which Firebase project holds the accounts |
@@ -57,15 +58,16 @@ Anthropic.
 
 ## Publishing a change
 
-Every push to `main` goes live within a minute or two. Before pushing, change the release tag
-`?v=...` on our own files in `index.html` (and in `dev_reading_test.html`), for example:
+Every push to `main` goes live within a minute or two. Before pushing, raise the version
+number `?v=...` on our own files in `index.html` (and in `dev_reading_test.html`), for example:
 
 ```bash
-sed -i 's/?v=2026-09-23c/?v=2026-09-24a/g' index.html dev_reading_test.html
+sed -i 's/?v=1.7.0/?v=1.7.1/g' index.html dev_reading_test.html
 ```
 
-Browsers keep copies of files for a while. A new tag makes them fetch a matching set, instead
-of mixing new files with old ones, which can break the app for up to ten minutes.
+The page shows that number at the bottom ("Kortpris version 1.7.0"), so it's easy to check which
+version a phone has. It also makes browsers fetch a matching set of files, instead of mixing
+new ones with old cached copies, which could break the app for up to ten minutes.
 
 ## Run it on the computer
 

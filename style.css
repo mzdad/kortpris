@@ -84,6 +84,16 @@ a { color: var(--link); }
 }
 .tagline { margin: 0; color: var(--muted); font-size: 0.95rem; grid-column: 2 / span 2; }
 
+.header-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
+.currency-select {
+	font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.04em;
+	color: var(--ink);
+	background: var(--surface);
+	border: 1px solid var(--line); border-radius: 999px;
+	min-height: 38px; padding: 0 10px;
+	cursor: pointer;
+}
+.currency-select:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; }
 .language-switch {
 	display: inline-flex;
 	padding: 2px;
@@ -390,8 +400,11 @@ button.version { cursor: pointer; }
 .settings-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
 .note.error { color: var(--error); }
 
-footer { color: var(--muted); font-size: 0.8rem; }
+footer { color: var(--muted); font-size: 0.8rem; display: grid; gap: 4px; }
 footer p { margin: 0; }
+footer p:empty { display: none; }
+.app-version { font-family: var(--font-mono); font-size: 0.75rem; }
+.graded-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 
 /* ---------- Button bar, always within thumb reach ---------- */
 .actionbar {

@@ -2,8 +2,9 @@
 
 // ---------- Settings ----------
 
-// The Danish krone is pegged to the euro at this central rate, so the conversion stays accurate.
-const DKK_PER_EUR = 7.46038;
+// The release number, read from this file's own address in index.html ("app.js?v=1.7.0"),
+// so it is set in one place only. Shown at the bottom of the page.
+const APP_VERSION = new URL(document.currentScript.src).searchParams.get("v") || "dev";
 // Prices older than this get an "out of date" label.
 const STALE_AFTER_DAYS = 14;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -52,6 +53,9 @@ const libraryButton = document.getElementById("library-button");
 const cameraInput = document.getElementById("camera-input");
 const libraryInput = document.getElementById("library-input");
 const languageButtons = document.querySelectorAll("[data-language]");
+const currencySelect = document.getElementById("currency-select");
+const appVersionText = document.getElementById("app-version");
+const ratesNote = document.getElementById("rates-note");
 const viewButtons = document.querySelectorAll("[data-view]");
 const scanView = document.getElementById("scan-view");
 const collectionView = document.getElementById("collection-view");
@@ -90,7 +94,8 @@ const accountMessageText = document.getElementById("account-message");
 // Kept as plain data so everything can be redrawn when the language changes.
 
 let language = startLanguage();
-let money = makeMoneyFormats(language);
+let currency = startCurrency();   // the currency picked in the menu (currency.js)
+let money = makeMoneyFormats(language, shownCurrency());
 let statusMessage = { key: "statusIdle", values: {}, tone: "" };
 let shownCards = [];              // the cards from the latest search
 let shownDescription = null;      // which kind of search found them: { key, values }
@@ -121,6 +126,14 @@ let lastPhoto = null;
 
 applyLanguage();
 
+// Today's exchange rates arrive a moment after the page; then every price is drawn again.
+loadRates().then(() => {
+	money = makeMoneyFormats(language, shownCurrency());
+	renderResults();
+	renderCollection();
+	renderFooter();
+});
+
 if (accountsAvailable()) {
 	startAccounts(handleAccountChange).then(
 		() => {
@@ -149,19 +162,41 @@ function t(key, values = {}) {
 	return text.replace(/\{(\w+)\}/g, (marker, name) => values[name] ?? marker);
 }
 
-function makeMoneyFormats(lang) {
+function makeMoneyFormats(lang, code) {
 	const locale = NUMBER_LOCALES[lang];
+	// Rupiah amounts are large and have no cents in everyday use.
+	const decimals = code === "IDR" ? 0 : 2;
 	return {
 		locale: locale,
+		code: code,   // the currency prices are shown in
 		euros: new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" }),
-		kroner: new Intl.NumberFormat(locale, { style: "currency", currency: "DKK" }),
 		dollars: new Intl.NumberFormat(locale, { style: "currency", currency: "USD" }),
+		local: new Intl.NumberFormat(locale, {
+			style: "currency",
+			currency: code,
+			minimumFractionDigits: decimals,
+			maximumFractionDigits: decimals,
+		}),
 	};
+}
+
+// The picked currency, or euros until its exchange rate is known.
+function shownCurrency() {
+	return canShowCurrency(currency) ? currency : "EUR";
+}
+
+// The price that stands for a card version, in the shown currency: Cardmarket's if it has one,
+// otherwise TCGplayer's converted from dollars. null when there is neither (or no rate yet).
+function localPrice(eur, usd) {
+	if (eur > 0) return fromEuros(eur, money.code);
+	if (usd > 0) return fromDollars(usd, money.code);
+	return null;
 }
 
 function applyLanguage() {
 	document.documentElement.lang = language;
-	money = makeMoneyFormats(language);
+	money = makeMoneyFormats(language, shownCurrency());
+	currencySelect.value = currency;
 
 	// Fixed text in index.html is marked with the key of its translation.
 	for (const element of document.querySelectorAll("[data-text]")) element.textContent = t(element.dataset.text);
@@ -177,7 +212,30 @@ function applyLanguage() {
 	renderCollection();
 	renderClaudeSettings();
 	renderAccount();
+	renderFooter();
 }
+
+function renderFooter() {
+	appVersionText.textContent = t("appVersion", { version: APP_VERSION });
+	if (shownCurrency() !== currency) {
+		ratesNote.textContent = t("ratesMissing");
+	} else if (ratesDate && currency !== "EUR") {
+		const day = new Date(ratesDate + "T12:00:00");
+		const shownDate = day.toLocaleDateString(money.locale, { day: "numeric", month: "short", year: "numeric" });
+		ratesNote.textContent = t("ratesFrom", { date: shownDate });
+	} else {
+		ratesNote.textContent = "";
+	}
+}
+
+currencySelect.addEventListener("change", () => {
+	currency = currencySelect.value;
+	saveCurrency(currency);
+	money = makeMoneyFormats(language, shownCurrency());
+	renderResults();
+	renderCollection();
+	renderFooter();
+});
 
 for (const button of languageButtons) {
 	button.addEventListener("click", () => {
@@ -668,6 +726,7 @@ function cardDetailHtml(card) {
 		${own}
 		${cardmarketTableHtml(card.cardmarket)}
 		${tcgplayerTableHtml(card.tcgplayer)}
+		${gradedLinksHtml(card, version)}
 		<p class="fineprint">${t("ungraded")}</p>
 		${notYours}`;
 }
@@ -734,8 +793,9 @@ function versionsHtml(versions, chosenKey) {
 	if (versions.length === 0) return `<p class="note">${t("noPrices")}</p>`;
 	const choosing = versions.length > 1;
 	const tiles = versions.map((version) => {
+		const local = localPrice(version.eur, version.usd);
 		let main = t("noPrice");
-		if (version.eur !== null) main = money.kroner.format(version.eur * DKK_PER_EUR);
+		if (local !== null) main = money.local.format(local);
 		else if (version.usd !== null) main = money.dollars.format(version.usd);
 		const sources = [];
 		if (version.eur !== null) sources.push(money.euros.format(version.eur) + " · Cardmarket");
@@ -765,18 +825,21 @@ function bestCardmarketPrice(cardmarket) {
 
 function cardmarketTableHtml(cardmarket) {
 	if (!bestCardmarketPrice(cardmarket)) return "";
+	// Euros is the shop's own currency; a second column converts when another one is picked.
+	const showsEuros = money.code === "EUR";
 	const rows = CARDMARKET_ROWS
 		.filter((key) => cardmarket.prices[key] > 0)
 		.map((key) => {
 			const value = cardmarket.prices[key];
-			return `<tr><td>${t(key)}</td><td>${money.euros.format(value)}</td><td>${money.kroner.format(value * DKK_PER_EUR)}</td></tr>`;
+			const converted = showsEuros ? "" : `<td>${money.local.format(fromEuros(value, money.code))}</td>`;
+			return `<tr><td>${t(key)}</td><td>${money.euros.format(value)}</td>${converted}</tr>`;
 		});
 	return `
 		<div class="source">
 			<h3>Cardmarket</h3>
 			${updatedHtml(cardmarket.updatedAt)}
 			<table class="price-table">
-				<thead><tr><th>${t("cardmarketPrice")}</th><th>${t("euro")}</th><th>${t("kroner")}</th></tr></thead>
+				<thead><tr><th>${t("cardmarketPrice")}</th><th>${t("euro")}</th>${showsEuros ? "" : `<th>${money.code}</th>`}</tr></thead>
 				<tbody>${rows.join("")}</tbody>
 			</table>
 			${storeLinkHtml(cardmarket.url, t("openCardmarket"))}
@@ -809,6 +872,27 @@ function tcgplayerTableHtml(tcgplayer) {
 				<tbody>${rows.join("")}</tbody>
 			</table>
 			${storeLinkHtml(tcgplayer.url, t("openTcgplayer"))}
+		</div>`;
+}
+
+// Graded cards: no free price database has them, so these links search real sales instead.
+function gradedLinksHtml(card, version) {
+	const words = ["Pokemon", card.name, collectorNumber(card), card.set.name];
+	if (version.key === "reverseHolofoil") words.push("reverse holo");
+	if (version.key.startsWith("firstEdition")) words.push("1st edition");
+	const ebaySold = (grade) => "https://www.ebay.com/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw="
+		+ encodeURIComponent(words.join(" ") + " " + grade);
+	const priceCharting = "https://www.pricecharting.com/search-products?type=prices&q="
+		+ encodeURIComponent(card.name + " " + card.set.name + " " + card.number);
+	return `
+		<div class="source">
+			<h3>${t("gradedTitle")}</h3>
+			<p class="hint">${t("gradedExplain")}</p>
+			<div class="graded-links">
+				${storeLinkHtml(ebaySold("PSA 10"), t("gradedEbay", { grade: "PSA 10" }))}
+				${storeLinkHtml(ebaySold("PSA 9"), t("gradedEbay", { grade: "PSA 9" }))}
+				${storeLinkHtml(priceCharting, t("gradedPriceCharting"))}
+			</div>
 		</div>`;
 }
 
@@ -865,7 +949,8 @@ function renderCollection() {
 }
 
 function savedValue(entry) {
-	return entry.priceEur > 0 ? entry.count * entry.priceEur * DKK_PER_EUR : -1;
+	const each = localPrice(entry.priceEur, entry.priceUsd);
+	return each === null ? -1 : entry.count * each;
 }
 
 function collectionSummaryHtml(totals) {
@@ -877,7 +962,7 @@ function collectionSummaryHtml(totals) {
 		: "";
 	return `
 		<span class="stat-label">${t("totalValue")}</span>
-		<span class="total-value">${money.kroner.format(totals.kroner)}</span>
+		<span class="total-value">${money.local.format(totals.value)}</span>
 		<span class="stat-sub">${countText} · ${t("valueBasis")}</span>
 		${updatedHtml(totals.oldestUpdate)}
 		${unpriced}
@@ -890,11 +975,12 @@ function collectionSummaryHtml(totals) {
 }
 
 function savedCardHtml(entry) {
+	const local = localPrice(entry.priceEur, entry.priceUsd);
 	let each = t("noPrice");
-	if (entry.priceEur > 0) each = money.kroner.format(entry.priceEur * DKK_PER_EUR);
+	if (local !== null) each = money.local.format(local) + (entry.priceEur > 0 ? "" : " (TCGplayer)");
 	else if (entry.priceUsd > 0) each = money.dollars.format(entry.priceUsd) + " (TCGplayer)";
-	const lineTotal = entry.priceEur > 0 && entry.count > 1
-		? " · " + t("allOfThem", { price: money.kroner.format(savedValue(entry)) })
+	const lineTotal = local !== null && entry.count > 1
+		? " · " + t("allOfThem", { price: money.local.format(savedValue(entry)) })
 		: "";
 	const id = escapeHtml(entry.id);
 	const version = entry.version ? escapeHtml(entry.version) : "";
