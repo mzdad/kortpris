@@ -22,37 +22,41 @@
 			<rect class="card-art" x="4" y="4" width="22" height="16" rx="1.5"/>
 		</svg>
 		<h1 class="brand">Kortpris</h1>
-		<p class="tagline">Photograph a Pokémon card. See what it sells for.</p>
+		<div class="language-switch" role="group" data-label="languageSwitch">
+			<button type="button" data-language="da" lang="da" aria-pressed="false">DA</button>
+			<button type="button" data-language="en" lang="en" aria-pressed="false">EN</button>
+		</div>
+		<p class="tagline" data-text="tagline"></p>
 	</header>
 
-	<section id="intro" class="intro" aria-label="How it works">
+	<section id="intro" class="intro" data-label="howItWorks">
 		<ol class="steps">
-			<li><span><strong>Snap</strong> the whole card, straight on, in good light.</span></li>
-			<li><span><strong>Check</strong> the name and number it read, then tap your card.</span></li>
-			<li><span><strong>See</strong> recent prices from Cardmarket and TCGplayer.</span></li>
+			<li><span><strong data-text="step1Verb"></strong><span data-text="step1Rest"></span></span></li>
+			<li><span><strong data-text="step2Verb"></strong><span data-text="step2Rest"></span></span></li>
+			<li><span><strong data-text="step3Verb"></strong><span data-text="step3Rest"></span></span></li>
 		</ol>
-		<button id="example-button" class="text-button" type="button">Try it with an example card</button>
+		<button id="example-button" class="text-button" type="button" data-text="tryExample"></button>
 	</section>
 
-	<section class="panel lookup" aria-label="Your card">
+	<section class="panel lookup" data-label="yourCard">
 		<div id="scan-row" class="scan-row no-photo">
-			<img id="photo-thumb" class="photo-thumb" alt="Your photo" hidden>
+			<img id="photo-thumb" class="photo-thumb" data-alt="yourPhoto" alt="" hidden>
 			<div>
-				<p id="status" class="status" role="status" aria-live="polite">Take a photo, or type the name and number from the card.</p>
+				<p id="status" class="status" role="status" aria-live="polite"></p>
 				<div id="progress" class="progress" hidden><div id="progress-bar" class="progress-bar"></div></div>
 			</div>
 		</div>
 		<form id="search-form" class="fields" autocomplete="off">
 			<div class="field">
-				<label for="name-input">Name on the card</label>
-				<input id="name-input" type="text" autocapitalize="words" spellcheck="false" enterkeyhint="search" placeholder="e.g. Charizard">
+				<label for="name-input" data-text="nameLabel"></label>
+				<input id="name-input" type="text" autocapitalize="words" spellcheck="false" enterkeyhint="search" data-placeholder="namePlaceholder">
 			</div>
 			<div class="field-row">
 				<div class="field">
-					<label for="number-input">Number in the bottom corner</label>
-					<input id="number-input" type="text" autocapitalize="characters" spellcheck="false" enterkeyhint="search" placeholder="e.g. 4/102">
+					<label for="number-input" data-text="numberLabel"></label>
+					<input id="number-input" type="text" autocapitalize="characters" spellcheck="false" enterkeyhint="search" data-placeholder="numberPlaceholder">
 				</div>
-				<button id="search-button" class="button secondary" type="submit">Search</button>
+				<button id="search-button" class="button secondary" type="submit" data-text="search"></button>
 			</div>
 		</form>
 	</section>
@@ -60,20 +64,20 @@
 	<section id="detail" class="panel detail" aria-live="polite" hidden></section>
 
 	<section id="results" class="results" hidden>
-		<h2 id="results-title" class="section-title">Which one is yours?</h2>
+		<h2 class="section-title" data-text="resultsTitle"></h2>
 		<p id="results-note" class="note"></p>
 		<div id="results-grid" class="grid"></div>
 	</section>
 
 	<footer>
-		<p>Card data and prices come from the free <a href="https://pokemontcg.io" target="_blank" rel="noopener">Pokémon TCG API</a>. Not made by or linked to Pokémon, Cardmarket or TCGplayer.</p>
+		<p><span data-text="footerBefore"></span><a href="https://pokemontcg.io" target="_blank" rel="noopener" data-text="footerLink"></a><span data-text="footerAfter"></span></p>
 	</footer>
 </main>
 
-<nav class="actionbar" aria-label="Scan">
+<nav class="actionbar" data-label="scanBar">
 	<div class="actionbar-inner">
-		<button id="camera-button" class="button primary" type="button">Take photo</button>
-		<button id="library-button" class="button secondary" type="button">Choose photo</button>
+		<button id="camera-button" class="button primary" type="button" data-text="takePhoto"></button>
+		<button id="library-button" class="button secondary" type="button" data-text="choosePhoto"></button>
 	</div>
 	<!-- capture="environment" opens the back camera directly; the second input opens the photo library -->
 	<input id="camera-input" class="visually-hidden" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
@@ -82,6 +86,7 @@
 
 <!-- Tesseract reads text out of pictures (OCR = optical character recognition). -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
+<script src="strings.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -23,6 +23,8 @@ const NAME_SIZE_RATIO = 0.7;
 const STALE_AFTER_DAYS = 14;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EXAMPLE_CARD_IMAGE = "https://images.pokemontcg.io/base1/4_hires.png";
+// Where the phone remembers the chosen language between visits.
+const LANGUAGE_STORAGE_KEY = "kortpris.language";
 
 // Words printed near the name that are never part of it.
 const NOT_NAME_WORDS = new Set([
@@ -31,33 +33,22 @@ const NOT_NAME_WORDS = new Set([
 	"ABILITY", "POWER", "WEAKNESS", "RESISTANCE", "RETREAT", "COST", "ILLUS", "NO",
 ]);
 
-// TCGplayer splits prices by print version. These are the names it uses, in the order we show them.
+// TCGplayer splits prices by print version: [its name for the version, our text key].
 const TCGPLAYER_VARIANTS = [
-	["holofoil", "Holo"],
-	["normal", "Normal"],
-	["reverseHolofoil", "Reverse holo"],
-	["1stEditionHolofoil", "1st edition holo"],
-	["1stEditionNormal", "1st edition"],
-	["unlimitedHolofoil", "Unlimited holo"],
-	["unlimited", "Unlimited"],
+	["holofoil", "holofoil"],
+	["normal", "normal"],
+	["reverseHolofoil", "reverseHolofoil"],
+	["1stEditionHolofoil", "firstEditionHolofoil"],
+	["1stEditionNormal", "firstEditionNormal"],
+	["unlimitedHolofoil", "unlimitedHolofoil"],
+	["unlimited", "unlimited"],
 ];
 
-// Cardmarket figures worth showing, in order. Zero means "no data", so those rows are skipped.
+// Cardmarket figures worth showing, in order. Each name doubles as its text key in strings.js.
+// Zero means "no data", so those rows are skipped.
 const CARDMARKET_ROWS = [
-	["avg30", "30-day average"],
-	["avg7", "7-day average"],
-	["trendPrice", "Trend"],
-	["averageSellPrice", "Average sale"],
-	["lowPrice", "Cheapest listing"],
-	["reverseHoloAvg30", "Reverse holo, 30-day average"],
-	["reverseHoloTrend", "Reverse holo, trend"],
+	"avg30", "avg7", "trendPrice", "averageSellPrice", "lowPrice", "reverseHoloAvg30", "reverseHoloTrend",
 ];
-
-// Money is written the way the phone's language expects: "18.114,21 kr." in Danish.
-const locale = navigator.language || "da-DK";
-const euros = new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" });
-const kroner = new Intl.NumberFormat(locale, { style: "currency", currency: "DKK" });
-const dollars = new Intl.NumberFormat(locale, { style: "currency", currency: "USD" });
 
 // ---------- Page elements ----------
 
@@ -74,13 +65,23 @@ const numberInput = document.getElementById("number-input");
 const searchButton = document.getElementById("search-button");
 const detail = document.getElementById("detail");
 const results = document.getElementById("results");
-const resultsTitle = document.getElementById("results-title");
 const resultsNote = document.getElementById("results-note");
 const resultsGrid = document.getElementById("results-grid");
 const cameraButton = document.getElementById("camera-button");
 const libraryButton = document.getElementById("library-button");
 const cameraInput = document.getElementById("camera-input");
 const libraryInput = document.getElementById("library-input");
+const languageButtons = document.querySelectorAll("[data-language]");
+
+// ---------- What is on screen right now ----------
+// Kept as plain data so everything can be redrawn when the language changes.
+
+let language = startLanguage();
+let money = makeMoneyFormats(language);
+let statusMessage = { key: "statusIdle", values: {}, tone: "" };
+let shownCards = [];              // the cards from the latest search
+let shownDescription = null;      // which kind of search found them: { key, values }
+let selectedCardId = null;        // the card whose prices are open
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
@@ -88,7 +89,57 @@ let latestScanId = 0;
 let latestSearchId = 0;
 let ocrWorkerPromise = null;
 let photoUrl = null;
-let cardsById = new Map();
+
+applyLanguage();
+
+// ---------- Language ----------
+
+function startLanguage() {
+	// Use the language picked last time; otherwise Danish on Danish phones, English elsewhere.
+	const saved = readStorage(LANGUAGE_STORAGE_KEY);
+	if (saved && STRINGS[saved]) return saved;
+	return (navigator.language || "").toLowerCase().startsWith("da") ? "da" : "en";
+}
+
+function t(key, values = {}) {
+	// Look up a text in the current language and fill in its {markers}.
+	const text = STRINGS[language][key] ?? STRINGS.en[key] ?? key;
+	return text.replace(/\{(\w+)\}/g, (marker, name) => values[name] ?? marker);
+}
+
+function makeMoneyFormats(lang) {
+	const locale = NUMBER_LOCALES[lang];
+	return {
+		locale: locale,
+		euros: new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" }),
+		kroner: new Intl.NumberFormat(locale, { style: "currency", currency: "DKK" }),
+		dollars: new Intl.NumberFormat(locale, { style: "currency", currency: "USD" }),
+	};
+}
+
+function applyLanguage() {
+	document.documentElement.lang = language;
+	money = makeMoneyFormats(language);
+
+	// Fixed text in index.html is marked with the key of its translation.
+	for (const element of document.querySelectorAll("[data-text]")) element.textContent = t(element.dataset.text);
+	for (const element of document.querySelectorAll("[data-placeholder]")) element.placeholder = t(element.dataset.placeholder);
+	for (const element of document.querySelectorAll("[data-label]")) element.setAttribute("aria-label", t(element.dataset.label));
+	for (const element of document.querySelectorAll("[data-alt]")) element.alt = t(element.dataset.alt);
+	for (const button of languageButtons) button.setAttribute("aria-pressed", String(button.dataset.language === language));
+
+	// Text the app wrote itself is drawn again from the data it came from.
+	showStatus();
+	renderResults();
+}
+
+for (const button of languageButtons) {
+	button.addEventListener("click", () => {
+		language = button.dataset.language;
+		writeStorage(LANGUAGE_STORAGE_KEY, language);
+		applyLanguage();
+	});
+}
 
 // ---------- Buttons ----------
 
@@ -103,7 +154,7 @@ searchForm.addEventListener("submit", (event) => {
 });
 
 exampleButton.addEventListener("click", async () => {
-	setStatus("Downloading the example card…");
+	setStatus("downloadingExample");
 	showProgress(null);
 	try {
 		const response = await fetch(EXAMPLE_CARD_IMAGE);
@@ -112,14 +163,16 @@ exampleButton.addEventListener("click", async () => {
 	} catch (error) {
 		console.error(error);
 		hideProgress();
-		setStatus("Could not download the example card. Check the internet connection.", "error");
+		setStatus("exampleFailed", {}, "error");
 	}
 });
 
 resultsGrid.addEventListener("click", (event) => {
 	const button = event.target.closest(".result");
 	if (!button) return;
-	showCardDetail(cardsById.get(button.dataset.cardId), true);
+	selectedCardId = button.dataset.cardId;
+	renderResults();
+	scrollToDetail();
 });
 
 function takeFileFrom(input) {
@@ -138,7 +191,7 @@ async function scanPhoto(imageFile) {
 	clearResults();
 	nameInput.value = "";
 	numberInput.value = "";
-	setStatus("Getting the text reader ready…");
+	setStatus("readerStarting");
 	showProgress(null);
 	searchButton.disabled = true;
 
@@ -156,7 +209,7 @@ async function scanPhoto(imageFile) {
 	numberInput.value = reading.number;
 	if (!reading.name && !reading.number) {
 		hideProgress();
-		setStatus("Couldn't read the card. Type the name and number below, or try a sharper photo in better light.", "error");
+		setStatus("readFailed", {}, "error");
 		return;
 	}
 	await searchForCard();
@@ -194,10 +247,10 @@ function getOcrWorker() {
 function showOcrProgress(message) {
 	// Tesseract reports what it is doing, plus how far along it is from 0 to 1.
 	if (message.status === "recognizing text") {
-		setStatus("Reading the card…");
+		setStatus("reading");
 		showProgress(message.progress);
 	} else {
-		setStatus("Getting the text reader ready (slow the first time)…");
+		setStatus("readerStartingSlow");
 	}
 }
 
@@ -286,12 +339,12 @@ async function searchForCard() {
 	const { number, total } = parseCollectorNumber(numberInput.value);
 	if (!nameWord && !number) {
 		hideProgress();
-		setStatus("Type the card's name or its number to search.", "error");
+		setStatus("needNameOrNumber", {}, "error");
 		return;
 	}
 
 	clearResults();
-	setStatus("Looking up prices…");
+	setStatus("lookingUp");
 	showProgress(null);
 	searchButton.disabled = true;
 	try {
@@ -301,18 +354,19 @@ async function searchForCard() {
 			if (searchId !== latestSearchId) return;
 			if (cards.length > 0) {
 				hideProgress();
-				setStatus(cards.length === 1 ? "Found it." : "Found " + cards.length + " possible cards. Tap yours.");
+				if (cards.length === 1) setStatus("foundOne");
+				else setStatus("foundMany", { count: cards.length });
 				showResults(cards, attempt.description);
 				return;
 			}
 		}
 		hideProgress();
-		setStatus("No cards matched. Check the name and number against the card and search again.", "error");
+		setStatus("noMatch", {}, "error");
 	} catch (error) {
 		console.error(error);
 		if (searchId !== latestSearchId) return;
 		hideProgress();
-		setStatus("The price database didn't answer. Wait a moment, then press Search.", "error");
+		setStatus("apiDown", {}, "error");
 	} finally {
 		if (searchId === latestSearchId) searchButton.disabled = false;
 	}
@@ -339,39 +393,40 @@ function parseCollectorNumber(text) {
 }
 
 function buildSearchAttempts(nameWord, number, total) {
+	// Each attempt is a database query plus the text explaining what it found.
 	const nameQuery = 'name:"' + nameWord + '*"';
 	const shownNumber = total ? number + "/" + total : number;
 	const attempts = [];
 	if (nameWord && number && total) {
 		attempts.push({
 			query: nameQuery + " number:" + number + " set.printedTotal:" + total,
-			description: "Cards named “" + nameWord + "” with number " + shownNumber + ".",
+			description: { key: "matchExact", values: { name: nameWord, number: shownNumber } },
 		});
 	}
 	if (nameWord && number) {
 		attempts.push({
 			query: nameQuery + " number:" + number,
-			description: "Cards named “" + nameWord + "” with number " + number + ", from any set.",
+			description: { key: "matchAnySet", values: { name: nameWord, number: number } },
 		});
 	}
 	if (number && total) {
 		attempts.push({
 			query: "number:" + number + " set.printedTotal:" + total,
 			description: nameWord
-				? "Nothing named “" + nameWord + "” has number " + shownNumber + ", so here is every card with that number. Check the name."
-				: "Every card with number " + shownNumber + ".",
+				? { key: "matchNumberNameMissed", values: { name: nameWord, number: shownNumber } }
+				: { key: "matchNumberOnly", values: { number: shownNumber } },
 		});
 	}
 	if (nameWord) {
 		attempts.push({
 			query: nameQuery,
-			description: "Every “" + nameWord + "” card, newest first. Add the number from the bottom corner to narrow it down.",
+			description: { key: "matchNameOnly", values: { name: nameWord } },
 		});
 	}
 	if (!nameWord && number && !total) {
 		attempts.push({
 			query: "number:" + number,
-			description: "Cards with number " + number + ", newest first. Add the name to narrow it down.",
+			description: { key: "matchNumberNoTotal", values: { number: number } },
 		});
 	}
 	return attempts;
@@ -407,46 +462,49 @@ function wait(ms) {
 // ---------- Step 3: show the matches and the prices ----------
 
 function showResults(cards, description) {
-	cardsById = new Map(cards.map((card) => [card.id, card]));
-	if (cards.length === 1) {
-		// Only one match: go straight to its prices, no need to pick.
-		showCardDetail(cards[0], false);
-		results.hidden = true;
+	shownCards = cards;
+	shownDescription = description;
+	// Only one match: open its prices straight away, no need to pick.
+	selectedCardId = cards.length === 1 ? cards[0].id : null;
+	renderResults();
+}
+
+function clearResults() {
+	shownCards = [];
+	shownDescription = null;
+	selectedCardId = null;
+	renderResults();
+}
+
+function renderResults() {
+	// Draws the grid of matches and the open card's prices from the data above.
+	const selectedCard = shownCards.find((card) => card.id === selectedCardId);
+	detail.hidden = !selectedCard;
+	detail.innerHTML = selectedCard ? cardDetailHtml(selectedCard) : "";
+
+	results.hidden = shownCards.length < 2;
+	if (shownCards.length < 2) {
+		resultsGrid.innerHTML = "";
 		return;
 	}
-	resultsTitle.textContent = "Which one is yours?";
-	resultsNote.textContent = description + (cards.length === RESULTS_PAGE_SIZE ? " Showing the first " + RESULTS_PAGE_SIZE + "." : "");
-	resultsGrid.innerHTML = cards.map(resultButtonHtml).join("");
-	results.hidden = false;
+	let note = t(shownDescription.key, shownDescription.values);
+	if (shownCards.length === RESULTS_PAGE_SIZE) note += t("showingFirst", { count: RESULTS_PAGE_SIZE });
+	resultsNote.textContent = note;
+	resultsGrid.innerHTML = shownCards.map(resultButtonHtml).join("");
 }
 
 function resultButtonHtml(card) {
 	return `
-		<button class="result" type="button" data-card-id="${escapeHtml(card.id)}" aria-pressed="false">
+		<button class="result" type="button" data-card-id="${escapeHtml(card.id)}" aria-pressed="${card.id === selectedCardId}">
 			<img class="card-image" src="${escapeHtml(card.images.small)}" alt="" loading="lazy" width="245" height="342">
 			<span class="result-name">${escapeHtml(card.name)}</span>
 			<span class="result-set">${escapeHtml(card.set.name)}<br><span class="mono">${escapeHtml(collectorNumber(card))}</span></span>
 		</button>`;
 }
 
-function clearResults() {
-	detail.hidden = true;
-	detail.innerHTML = "";
-	results.hidden = true;
-	resultsGrid.innerHTML = "";
-	cardsById = new Map();
-}
-
-function showCardDetail(card, scrollToIt) {
-	for (const button of resultsGrid.querySelectorAll(".result")) {
-		button.setAttribute("aria-pressed", String(button.dataset.cardId === card.id));
-	}
-	detail.innerHTML = cardDetailHtml(card);
-	detail.hidden = false;
-	if (scrollToIt) {
-		const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-		detail.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-	}
+function scrollToDetail() {
+	const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+	detail.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
 }
 
 function cardDetailHtml(card) {
@@ -454,12 +512,8 @@ function cardDetailHtml(card) {
 	if (card.rarity) meta.push(escapeHtml(card.rarity));
 
 	const worth = [cardmarketStatHtml(card.cardmarket), tcgplayerStatHtml(card.tcgplayer)].join("");
-	const noPrices = worth === ""
-		? `<p class="note">Nobody has sold this card on Cardmarket or TCGplayer recently, so there is no price yet.</p>`
-		: "";
-	const notYours = cardsById.size === 1
-		? `<p class="fineprint">Not your card? Fix the name or number above and press Search.</p>`
-		: "";
+	const noPrices = worth === "" ? `<p class="note">${t("noPrices")}</p>` : "";
+	const notYours = shownCards.length === 1 ? `<p class="fineprint">${t("notYours")}</p>` : "";
 
 	return `
 		<div class="detail-head">
@@ -472,7 +526,7 @@ function cardDetailHtml(card) {
 		${worth ? `<div class="worth">${worth}</div>` : noPrices}
 		${cardmarketTableHtml(card.cardmarket)}
 		${tcgplayerTableHtml(card.tcgplayer)}
-		<p class="fineprint">These are prices for ungraded cards. A scratched, bent or faded card sells for less.</p>
+		<p class="fineprint">${t("ungraded")}</p>
 		${notYours}`;
 }
 
@@ -484,9 +538,9 @@ function collectorNumber(card) {
 
 function bestCardmarketPrice(cardmarket) {
 	const prices = (cardmarket && cardmarket.prices) || {};
-	if (prices.avg30 > 0) return { value: prices.avg30, label: "30-day average" };
-	if (prices.trendPrice > 0) return { value: prices.trendPrice, label: "trend price" };
-	if (prices.averageSellPrice > 0) return { value: prices.averageSellPrice, label: "average sale" };
+	for (const key of ["avg30", "trendPrice", "averageSellPrice"]) {
+		if (prices[key] > 0) return { value: prices[key], key: key };
+	}
 	return null;
 }
 
@@ -495,29 +549,29 @@ function cardmarketStatHtml(cardmarket) {
 	if (!best) return "";
 	return `
 		<div class="stat">
-			<span class="stat-label">Cardmarket · Europe</span>
-			<span class="stat-value">${kroner.format(best.value * DKK_PER_EUR)}</span>
-			<span class="stat-sub">${euros.format(best.value)} · ${best.label}</span>
+			<span class="stat-label">${t("cardmarketStat")}</span>
+			<span class="stat-value">${money.kroner.format(best.value * DKK_PER_EUR)}</span>
+			<span class="stat-sub">${money.euros.format(best.value)} · ${t(best.key)}</span>
 		</div>`;
 }
 
 function cardmarketTableHtml(cardmarket) {
 	if (!bestCardmarketPrice(cardmarket)) return "";
 	const rows = CARDMARKET_ROWS
-		.filter(([key]) => cardmarket.prices[key] > 0)
-		.map(([key, label]) => {
+		.filter((key) => cardmarket.prices[key] > 0)
+		.map((key) => {
 			const value = cardmarket.prices[key];
-			return `<tr><td>${label}</td><td>${euros.format(value)}</td><td>${kroner.format(value * DKK_PER_EUR)}</td></tr>`;
+			return `<tr><td>${t(key)}</td><td>${money.euros.format(value)}</td><td>${money.kroner.format(value * DKK_PER_EUR)}</td></tr>`;
 		});
 	return `
 		<div class="source">
 			<h3>Cardmarket</h3>
 			${updatedHtml(cardmarket.updatedAt)}
 			<table class="price-table">
-				<thead><tr><th>Price</th><th>Euro</th><th>Kroner</th></tr></thead>
+				<thead><tr><th>${t("cardmarketPrice")}</th><th>${t("euro")}</th><th>${t("kroner")}</th></tr></thead>
 				<tbody>${rows.join("")}</tbody>
 			</table>
-			${storeLinkHtml(cardmarket.url, "Open on Cardmarket")}
+			${storeLinkHtml(cardmarket.url, t("openCardmarket"))}
 		</div>`;
 }
 
@@ -526,9 +580,9 @@ function cardmarketTableHtml(cardmarket) {
 function tcgplayerVariants(tcgplayer) {
 	const prices = (tcgplayer && tcgplayer.prices) || {};
 	const variants = [];
-	for (const [key, label] of TCGPLAYER_VARIANTS) {
-		const price = prices[key];
-		if (price && (price.market > 0 || price.low > 0)) variants.push({ label, price });
+	for (const [apiName, textKey] of TCGPLAYER_VARIANTS) {
+		const price = prices[apiName];
+		if (price && (price.market > 0 || price.low > 0)) variants.push({ label: t(textKey), price });
 	}
 	return variants;
 }
@@ -539,9 +593,9 @@ function tcgplayerStatHtml(tcgplayer) {
 	const first = withMarket[0];
 	return `
 		<div class="stat">
-			<span class="stat-label">TCGplayer · USA</span>
-			<span class="stat-value">${dollars.format(first.price.market)}</span>
-			<span class="stat-sub">${first.label} · market price</span>
+			<span class="stat-label">${t("tcgplayerStat")}</span>
+			<span class="stat-value">${money.dollars.format(first.price.market)}</span>
+			<span class="stat-sub">${first.label} · ${t("marketPrice")}</span>
 		</div>`;
 }
 
@@ -555,15 +609,15 @@ function tcgplayerTableHtml(tcgplayer) {
 			<h3>TCGplayer</h3>
 			${updatedHtml(tcgplayer.updatedAt)}
 			<table class="price-table">
-				<thead><tr><th>Version</th><th>Market</th><th>Lowest</th></tr></thead>
+				<thead><tr><th>${t("tcgplayerVersion")}</th><th>${t("tcgplayerMarket")}</th><th>${t("tcgplayerLowest")}</th></tr></thead>
 				<tbody>${rows.join("")}</tbody>
 			</table>
-			${storeLinkHtml(tcgplayer.url, "Open on TCGplayer")}
+			${storeLinkHtml(tcgplayer.url, t("openTcgplayer"))}
 		</div>`;
 }
 
 function formatDollars(value) {
-	return value > 0 ? dollars.format(value) : "–";
+	return value > 0 ? money.dollars.format(value) : "–";
 }
 
 function updatedHtml(updatedAt) {
@@ -572,14 +626,14 @@ function updatedHtml(updatedAt) {
 	if (parts.length !== 3 || parts.some(Number.isNaN)) return "";
 	const date = new Date(parts[0], parts[1] - 1, parts[2]);
 	const daysOld = Math.floor((Date.now() - date.getTime()) / MS_PER_DAY);
-	const shownDate = date.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
-	const staleChip = daysOld > STALE_AFTER_DAYS ? `<span class="chip">${ageInWords(daysOld)} old</span>` : "";
-	return `<p class="updated"><span>Prices from ${shownDate}</span>${staleChip}</p>`;
+	const shownDate = date.toLocaleDateString(money.locale, { day: "numeric", month: "short", year: "numeric" });
+	const staleChip = daysOld > STALE_AFTER_DAYS ? `<span class="chip">${ageInWords(daysOld)}</span>` : "";
+	return `<p class="updated"><span>${t("pricesFrom", { date: shownDate })}</span>${staleChip}</p>`;
 }
 
 function ageInWords(days) {
-	if (days < 60) return Math.round(days / 7) + " weeks";
-	return Math.round(days / 30) + " months";
+	if (days < 60) return t("weeksOld", { count: Math.round(days / 7) });
+	return t("monthsOld", { count: Math.round(days / 30) });
 }
 
 function storeLinkHtml(url, text) {
@@ -589,9 +643,14 @@ function storeLinkHtml(url, text) {
 
 // ---------- Small helpers ----------
 
-function setStatus(text, tone) {
-	statusText.textContent = text;
-	statusText.classList.toggle("error", tone === "error");
+function setStatus(key, values = {}, tone = "") {
+	statusMessage = { key, values, tone };
+	showStatus();
+}
+
+function showStatus() {
+	statusText.textContent = t(statusMessage.key, statusMessage.values);
+	statusText.classList.toggle("error", statusMessage.tone === "error");
 }
 
 function showProgress(fraction) {
@@ -603,6 +662,23 @@ function showProgress(fraction) {
 
 function hideProgress() {
 	progress.hidden = true;
+}
+
+function readStorage(key) {
+	// Private browsing can block storage; the app then simply forgets between visits.
+	try {
+		return localStorage.getItem(key);
+	} catch (error) {
+		return null;
+	}
+}
+
+function writeStorage(key, value) {
+	try {
+		localStorage.setItem(key, value);
+	} catch (error) {
+		// Not saved - fine, it only matters on the next visit.
+	}
 }
 
 function escapeHtml(text) {
