@@ -109,6 +109,8 @@ function accountProblem(error) {
 		case "auth/operation-not-allowed":
 		case "auth/admin-restricted-operation":
 			return { key: "signUpClosed", values: {} };
+		case "auth/configuration-not-found":
+			return { key: "accountsNotSetUp", values: {} };
 		case "auth/network-request-failed":
 		case "unavailable":
 			return { key: "noConnection", values: {} };
