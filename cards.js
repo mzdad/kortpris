@@ -10,14 +10,16 @@ const RESULTS_PAGE_SIZE = 24;
 // "Charizard" alone fits over a hundred, and the right one may be an old one.
 const WIDE_PAGE_SIZE = 48;
 // The free price database fails about half of its requests on the first try
-// (measured September 2026), so every lookup is retried a few times.
-const MAX_API_ATTEMPTS = 8;
+// (measured September 2026), so every lookup is sent twice at once and retried a few times.
+const MAX_API_ATTEMPTS = 6;
 const RETRY_DELAY_MS = 400;
 
 // Searches for the card with this name and collector number ("4/102").
 // Tries the most exact search first, then looser ones in case the photo was misread.
-// Returns { cards, description }: description says which kind of search found them,
-// as a text key from strings.js plus the values to fill in. No match gives an empty list.
+// Returns { cards, description, totalCount, exactFound }: description says which kind of search
+// found them, as a text key from strings.js plus the values to fill in. totalCount is how many
+// cards fit altogether (more than are returned for a common name). exactFound means name and
+// number matched a card exactly. No match gives an empty list.
 // Throws an error when the database doesn't answer at all.
 // withPhoto = true means a photo can pick among many cards by their looks (see matcher.js).
 async function findCards(name, numberText, withPhoto = false) {
@@ -28,27 +30,44 @@ async function findCards(name, numberText, withPhoto = false) {
 	// Without a photo: the first search that finds anything wins.
 	if (!withPhoto) {
 		for (const attempt of attempts) {
-			const cards = await fetchCards(attempt.query, RESULTS_PAGE_SIZE);
-			if (cards.length > 0) return { cards: cards, description: attempt.description };
+			const page = await fetchCardPage(attempt.query, RESULTS_PAGE_SIZE);
+			if (page.cards.length > 0) {
+				return {
+					cards: page.cards,
+					description: attempt.description,
+					totalCount: page.totalCount,
+					exactFound: Boolean(attempt.exact),
+				};
+			}
 		}
-		return { cards: [], description: null };
+		return { cards: [], description: null, totalCount: 0, exactFound: false };
 	}
 
 	// With a photo: an exact match on name and number still wins straight away.
 	if (attempts.length > 0 && attempts[0].exact) {
-		const cards = await fetchCards(attempts[0].query, RESULTS_PAGE_SIZE);
-		if (cards.length > 0) return { cards: cards, description: attempts[0].description };
+		const page = await fetchCardPage(attempts[0].query, RESULTS_PAGE_SIZE);
+		if (page.cards.length > 0) {
+			return { cards: page.cards, description: attempts[0].description, totalCount: page.totalCount, exactFound: true };
+		}
 	}
 	// Otherwise part of the text was misread, and nobody knows which part. So every looser
 	// search goes into one pile, and the pictures decide.
 	const pile = new Map();
+	let totalCount = 0;
 	for (const attempt of attempts) {
 		if (attempt.exact) continue;
 		const pageSize = attempt.loose ? WIDE_PAGE_SIZE : RESULTS_PAGE_SIZE;
-		for (const card of await fetchCards(attempt.query, pageSize)) pile.set(card.id, card);
+		const page = await fetchCardPage(attempt.query, pageSize);
+		for (const card of page.cards) pile.set(card.id, card);
+		totalCount = Math.max(totalCount, page.totalCount);
 	}
 	const cards = [...pile.values()];
-	return { cards: cards, description: cards.length > 0 ? { key: "matchByLook", values: {} } : null };
+	return {
+		cards: cards,
+		description: cards.length > 0 ? { key: "matchByLook", values: {} } : null,
+		totalCount: Math.max(totalCount, cards.length),
+		exactFound: false,
+	};
 }
 
 // True when there is enough to search on: a name or a number.
@@ -128,6 +147,12 @@ function buildSearchAttempts(nameWord, number, total) {
 }
 
 async function fetchCards(query, pageSize) {
+	return (await fetchCardPage(query, pageSize)).cards;
+}
+
+// Returns { cards, totalCount }: the first pageSize matching cards, newest first,
+// and how many cards match altogether.
+async function fetchCardPage(query, pageSize) {
 	const url = API_URL
 		+ "?q=" + encodeURIComponent(query)
 		+ "&orderBy=-set.releaseDate"
@@ -136,18 +161,23 @@ async function fetchCards(query, pageSize) {
 	let lastProblem = null;
 	for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
 		try {
-			const response = await fetch(url);
-			if (response.ok) {
-				const body = await response.json();
-				return body.data || [];
-			}
-			lastProblem = new Error("Price database answered " + response.status);
-		} catch (error) {
-			lastProblem = error;   // no answer at all, e.g. a dropped connection
+			// Each try sends the same question twice at once and takes whichever answer
+			// comes back first: with half of all requests failing, both failing is far rarer.
+			const body = await Promise.any([askOnce(url), askOnce(url)]);
+			return { cards: body.data || [], totalCount: body.totalCount || 0 };
+		} catch (problem) {
+			lastProblem = problem.errors ? problem.errors[0] : problem;
 		}
 		await wait(RETRY_DELAY_MS * attempt);   // wait a little longer after each failure
 	}
 	throw lastProblem;
+}
+
+async function askOnce(url) {
+	// Throws when there is no answer at all (like a dropped connection) or an error answer.
+	const response = await fetch(url);
+	if (!response.ok) throw new Error("Price database answered " + response.status);
+	return response.json();
 }
 
 function wait(ms) {

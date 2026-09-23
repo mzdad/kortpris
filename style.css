@@ -164,6 +164,8 @@ input[type="text"], input[type="password"] {
 	width: 100%;
 }
 #number-input { font-family: var(--font-mono); }
+/* the box the viewer should fill in next */
+input.needs-attention { border-color: var(--accent-edge); box-shadow: 0 0 0 2px var(--accent); }
 .hint { margin: 0; font-size: 0.85rem; color: var(--muted); }
 
 /* ---------- Buttons ---------- */
@@ -200,6 +202,31 @@ input:focus-visible, a:focus-visible {
 	text-wrap: balance;
 }
 .detail-meta { margin: 6px 0 0; color: var(--muted); font-size: 0.92rem; }
+
+/* versions of the card, each with its price; the chosen one gets the yellow card-border edge */
+.versions-block { display: grid; gap: 8px; }
+.versions-question { margin: 0; font-weight: 700; }
+.versions-block .hint { margin: 0; }
+.versions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.version {
+	font: inherit; color: inherit; text-align: left;
+	min-width: 0;
+	display: grid; gap: 2px; align-content: start;
+	padding: 12px 14px;
+	border-radius: 12px;
+	border: 2px solid transparent;
+	background: var(--surface-2);
+}
+button.version { cursor: pointer; }
+.version[aria-pressed="true"] { border-color: var(--accent-edge); }
+.version:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+.version-name { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.version-price {
+	font-size: 1.6rem; line-height: 1.15;
+	font-weight: 800; font-stretch: 80%;
+	font-variant-numeric: tabular-nums;
+}
+.version-sub { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* two boxes side by side on wide screens, stacked on phones so big prices never get cut off */
 .worth { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }

@@ -10,6 +10,8 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EXAMPLE_CARD_IMAGE = "https://images.pokemontcg.io/base1/4_hires.png";
 // Where the phone remembers the chosen language between visits.
 const LANGUAGE_STORAGE_KEY = "kortpris.language";
+// Claude's word for a card's finish, and the version (price) that goes with it.
+const CLAUDE_FINISH_VERSIONS = { holo: "holofoil", reverse_holo: "reverseHolofoil", normal: "normal" };
 
 // TCGplayer splits prices by print version: [its name for the version, our text key].
 const TCGPLAYER_VARIANTS = [
@@ -94,10 +96,12 @@ let shownCards = [];              // the cards from the latest search
 let shownDescription = null;      // which kind of search found them: { key, values }
 let selectedCardId = null;        // the card whose prices are open
 let bestMatchId = null;           // the card that looks most like the photo
+let chosenVersion = null;         // the version picked on the open card ("reverseHolofoil"), or null
+let versionHint = null;           // the version Claude saw in the photo, used until one is picked
 let saveFailed = false;           // the browser refused to save "My cards"
 let refreshingPrices = false;     // "Update prices" is busy
 let refreshMessage = null;        // what the last price update said: a text key, or null
-let noticeKey = null;             // why Claude couldn't read the last photo: a text key, or null
+let noticeMessage = null;         // a yellow notice under the status: { key, values }, or null
 let claudeMessageKey = null;      // what the Claude settings last said: a text key, or null
 let accountMode = "sign-in";      // the account form signs in, or creates an account ("create")
 let accountBusy = false;          // waiting for Firebase to sign in or create an account
@@ -219,15 +223,22 @@ resultsGrid.addEventListener("click", (event) => {
 	const button = event.target.closest(".result");
 	if (!button) return;
 	selectedCardId = button.dataset.cardId;
+	chosenVersion = null;
 	renderResults();
 	scrollToDetail();
 });
 
 detail.addEventListener("click", (event) => {
-	if (!event.target.closest("[data-action='add-to-collection']")) return;
 	const card = shownCards.find((shown) => shown.id === selectedCardId);
-	if (!card || !collectionReady()) return;
-	saveFailed = !addToCollection(card);
+	if (!card) return;
+	const versionButton = event.target.closest("[data-version]");
+	if (versionButton) {
+		chosenVersion = versionButton.dataset.version;
+		renderResults();
+		return;
+	}
+	if (!event.target.closest("[data-action='add-to-collection']") || !collectionReady()) return;
+	saveFailed = !addToCollection(card, versionOf(card).key);
 	renderResults();
 	renderCollection();
 });
@@ -349,7 +360,8 @@ moveCardsButton.addEventListener("click", () => {
 collectionList.addEventListener("click", (event) => {
 	const button = event.target.closest("[data-action]");
 	if (!button || !collectionReady()) return;
-	changeSavedCount(button.dataset.cardId, button.dataset.action === "more" ? 1 : -1);
+	const version = button.dataset.savedVersion || null;   // older saved cards have no version
+	changeSavedCount(button.dataset.cardId, version, button.dataset.action === "more" ? 1 : -1);
 	renderCollection();
 	renderResults();   // the open card's "You have 2" line may have changed
 });
@@ -389,6 +401,7 @@ async function scanPhoto(imageFile) {
 	numberInput.value = "";
 	searchButton.disabled = true;
 	setNotice(null);
+	versionHint = null;
 
 	// With a saved API key, Claude reads the card. If that fails for any reason,
 	// the built-in reader takes over, and a notice says why.
@@ -407,11 +420,13 @@ async function scanPhoto(imageFile) {
 			}
 			reading = {
 				name: answer.name,
+				nameSure: true,
 				number: answer.number,
 				setName: answer.setName,
 				photo: await photoForLooks(imageFile),
 				textArea: null,
 			};
+			versionHint = CLAUDE_FINISH_VERSIONS[answer.finish] || null;
 		} catch (error) {
 			if (scanId !== latestScanId) return;
 			setNotice(await claudeProblem(error));
@@ -429,6 +444,13 @@ async function scanPhoto(imageFile) {
 	if (!reading.name && !reading.number) {
 		hideProgress();
 		setStatus("readFailed", {}, "error");
+		return;
+	}
+	// A name the reader isn't sure of, and no number: searching on it would show random cards.
+	if (!reading.nameSure && !reading.number) {
+		hideProgress();
+		setStatus("unsureName", {}, "error");
+		numberInput.classList.add("needs-attention");
 		return;
 	}
 	await searchForCard();
@@ -482,12 +504,15 @@ async function searchForCard() {
 	}
 
 	clearResults();
+	setNotice(null);
+	numberInput.classList.remove("needs-attention");
 	setStatus("lookingUp");
 	showProgress(null);
 	searchButton.disabled = true;
 	try {
 		const found = await findCards(nameInput.value, numberInput.value, lastPhoto !== null);
 		if (searchId !== latestSearchId) return;   // a newer photo or search took over
+		showNumberHint(found);
 		if (found.cards.length === 0) {
 			hideProgress();
 			setStatus("noMatch", {}, "error");
@@ -534,11 +559,29 @@ async function searchForCard() {
 	}
 }
 
+function showNumberHint(found) {
+	// The collector number is what tells apart the many cards with the same name.
+	const name = longestWord(nameInput.value);
+	const { number } = parseCollectorNumber(numberInput.value);
+	if (!name || found.cards.length === 0) return;
+	let hint = null;
+	if (number && !found.exactFound) {
+		hint = { key: "numberNotFound", values: { name: name, number: numberInput.value.trim() } };
+	} else if (!number && found.totalCount > found.cards.length) {
+		hint = { key: "typeNumber", values: { name: name, total: found.totalCount } };
+	}
+	if (hint) {
+		setNotice(hint.key, hint.values);
+		numberInput.classList.add("needs-attention");
+	}
+}
+
 // ---------- Step 3: show the matches and the prices ----------
 
 // openId: the card whose prices open straight away (or null to let the viewer pick).
 // bestId: the card to mark "Best match" (or null).
 function showResults(cards, description, openId, bestId) {
+	chosenVersion = null;
 	shownCards = cards;
 	shownDescription = description;
 	selectedCardId = openId;
@@ -592,12 +635,15 @@ function cardDetailHtml(card) {
 	const meta = [escapeHtml(card.set.name), `<span class="mono">${escapeHtml(collectorNumber(card))}</span>`];
 	if (card.rarity) meta.push(escapeHtml(card.rarity));
 
-	const worth = [cardmarketStatHtml(card.cardmarket), tcgplayerStatHtml(card.tcgplayer)].join("");
-	const noPrices = worth === "" ? `<p class="note">${t("noPrices")}</p>` : "";
+	const versions = cardVersions(card);
+	const version = versionOf(card);
 	const notYours = shownCards.length === 1 ? `<p class="fineprint">${t("notYours")}</p>` : "";
 
-	const owned = savedCount(card.id);
-	const ownedNote = owned > 0 ? `<p class="own-note">${t("inCollection", { count: owned })}</p>` : "";
+	const owned = savedCount(card.id, version.key);
+	let ownedNote = "";
+	if (owned > 0) {
+		ownedNote = `<p class="own-note">${t(versions.length > 1 ? "inCollectionVersion" : "inCollection", { count: owned })}</p>`;
+	}
 	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
 	let addText = owned > 0 ? "addAnother" : "addToCollection";
 	if (!collectionReady()) addText = "loadingAccountCards";
@@ -618,7 +664,7 @@ function cardDetailHtml(card) {
 				<p class="detail-meta">${meta.join(" · ")}</p>
 			</div>
 		</div>
-		${worth ? `<div class="worth">${worth}</div>` : noPrices}
+		${versionsHtml(versions, version.key)}
 		${own}
 		${cardmarketTableHtml(card.cardmarket)}
 		${tcgplayerTableHtml(card.tcgplayer)}
@@ -630,6 +676,83 @@ function collectorNumber(card) {
 	return card.set.printedTotal ? card.number + "/" + card.set.printedTotal : card.number;
 }
 
+// ---------- Versions ----------
+// One card can be printed in several versions - normal, holo, reverse holo, 1st edition - and
+// their prices can be worlds apart: a reverse holo can be worth a hundred times the normal one.
+
+// Cardmarket keeps two prices per card: its regular print and its reverse holo. Best first.
+const CARDMARKET_REGULAR = ["avg30", "trendPrice", "averageSellPrice"];
+const CARDMARKET_REVERSE = ["reverseHoloAvg30", "reverseHoloTrend", "reverseHoloSell"];
+// Cardmarket's regular price belongs to the first of these versions the card has.
+const REGULAR_VERSIONS = ["holofoil", "normal", "unlimitedHolofoil", "unlimited"];
+
+// Returns [{ key, eur, usd }]: key is the version's text key in strings.js, eur its Cardmarket
+// price in euros, usd TCGplayer's market price in dollars. Either price may be null.
+function cardVersions(card) {
+	const tcgplayer = (card.tcgplayer && card.tcgplayer.prices) || {};
+	const cardmarket = (card.cardmarket && card.cardmarket.prices) || {};
+	const versions = [];
+	for (const [apiName, textKey] of TCGPLAYER_VARIANTS) {
+		const price = tcgplayer[apiName];
+		if (price && (price.market > 0 || price.low > 0)) {
+			versions.push({ key: textKey, eur: null, usd: price.market > 0 ? price.market : null });
+		}
+	}
+	const reverse = firstPrice(cardmarket, CARDMARKET_REVERSE);
+	if (reverse !== null) findOrAddVersion(versions, ["reverseHolofoil"], "reverseHolofoil").eur = reverse;
+	const regular = firstPrice(cardmarket, CARDMARKET_REGULAR);
+	if (regular !== null) findOrAddVersion(versions, REGULAR_VERSIONS, "normal").eur = regular;
+	return versions;
+}
+
+function firstPrice(prices, keys) {
+	for (const key of keys) {
+		if (prices[key] > 0) return prices[key];
+	}
+	return null;
+}
+
+function findOrAddVersion(versions, keys, newKey) {
+	let version = versions.find((candidate) => keys.includes(candidate.key));
+	if (!version) {
+		version = { key: newKey, eur: null, usd: null };
+		versions.unshift(version);
+	}
+	return version;
+}
+
+// The version the viewer picked, or else the card's main one (the first with a Cardmarket price).
+function versionOf(card, pickedKey = chosenVersion || versionHint) {
+	const versions = cardVersions(card);
+	return versions.find((version) => version.key === pickedKey)
+		|| versions.find((version) => version.eur !== null)
+		|| versions[0]
+		|| { key: "normal", eur: null, usd: null };
+}
+
+function versionsHtml(versions, chosenKey) {
+	if (versions.length === 0) return `<p class="note">${t("noPrices")}</p>`;
+	const choosing = versions.length > 1;
+	const tiles = versions.map((version) => {
+		let main = t("noPrice");
+		if (version.eur !== null) main = money.kroner.format(version.eur * DKK_PER_EUR);
+		else if (version.usd !== null) main = money.dollars.format(version.usd);
+		const sources = [];
+		if (version.eur !== null) sources.push(money.euros.format(version.eur) + " · Cardmarket");
+		if (version.usd !== null) sources.push(money.dollars.format(version.usd) + " · TCGplayer");
+		const inside = `
+			<span class="version-name">${t(version.key)}</span>
+			<span class="version-price">${main}</span>
+			<span class="version-sub">${sources.join("<br>")}</span>`;
+		// With one version there is nothing to pick, so it is shown as a plain box.
+		if (!choosing) return `<div class="version">${inside}</div>`;
+		return `<button type="button" class="version" data-version="${version.key}" aria-pressed="${version.key === chosenKey}">${inside}</button>`;
+	});
+	const question = choosing ? `<p class="versions-question">${t("whichVersion")}</p>` : "";
+	const hint = choosing ? `<p class="hint">${t("versionHint")}</p>` : "";
+	return `<div class="versions-block">${question}<div class="versions">${tiles.join("")}</div>${hint}</div>`;
+}
+
 // Cardmarket is Europe's biggest card shop, priced in euros.
 
 function bestCardmarketPrice(cardmarket) {
@@ -638,17 +761,6 @@ function bestCardmarketPrice(cardmarket) {
 		if (prices[key] > 0) return { value: prices[key], key: key };
 	}
 	return null;
-}
-
-function cardmarketStatHtml(cardmarket) {
-	const best = bestCardmarketPrice(cardmarket);
-	if (!best) return "";
-	return `
-		<div class="stat">
-			<span class="stat-label">${t("cardmarketStat")}</span>
-			<span class="stat-value">${money.kroner.format(best.value * DKK_PER_EUR)}</span>
-			<span class="stat-sub">${money.euros.format(best.value)} · ${t(best.key)}</span>
-		</div>`;
 }
 
 function cardmarketTableHtml(cardmarket) {
@@ -681,18 +793,6 @@ function tcgplayerVariants(tcgplayer) {
 		if (price && (price.market > 0 || price.low > 0)) variants.push({ label: t(textKey), textKey, price });
 	}
 	return variants;
-}
-
-function tcgplayerStatHtml(tcgplayer) {
-	const withMarket = tcgplayerVariants(tcgplayer).filter((variant) => variant.price.market > 0);
-	if (withMarket.length === 0) return "";
-	const first = withMarket[0];
-	return `
-		<div class="stat">
-			<span class="stat-label">${t("tcgplayerStat")}</span>
-			<span class="stat-value">${money.dollars.format(first.price.market)}</span>
-			<span class="stat-sub">${first.label} · ${t("marketPrice")}</span>
-		</div>`;
 }
 
 function tcgplayerTableHtml(tcgplayer) {
@@ -797,18 +897,20 @@ function savedCardHtml(entry) {
 		? " · " + t("allOfThem", { price: money.kroner.format(savedValue(entry)) })
 		: "";
 	const id = escapeHtml(entry.id);
+	const version = entry.version ? escapeHtml(entry.version) : "";
+	const versionName = entry.version ? " · " + t(entry.version) : "";
 	return `
 		<li class="saved-card">
 			<img class="card-image" src="${escapeHtml(readablePictureUrl(entry.image))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
 			<div class="saved-info">
 				<span class="saved-name">${escapeHtml(entry.name)}</span>
-				<span class="saved-meta">${escapeHtml(entry.setName)} · <span class="mono">${escapeHtml(entry.number)}</span></span>
+				<span class="saved-meta">${escapeHtml(entry.setName)} · <span class="mono">${escapeHtml(entry.number)}</span>${versionName}</span>
 				<span class="saved-price">${t("each", { price: each })}${lineTotal}</span>
 			</div>
 			<div class="stepper">
-				<button type="button" data-action="fewer" data-card-id="${id}" aria-label="${t("oneFewer")}">−</button>
+				<button type="button" data-action="fewer" data-card-id="${id}" data-saved-version="${version}" aria-label="${t("oneFewer")}">−</button>
 				<span class="stepper-count">${entry.count}</span>
-				<button type="button" data-action="more" data-card-id="${id}" aria-label="${t("oneMore")}">+</button>
+				<button type="button" data-action="more" data-card-id="${id}" data-saved-version="${version}" aria-label="${t("oneMore")}">+</button>
 			</div>
 		</li>`;
 }
@@ -922,14 +1024,14 @@ function sameSetName(a, b) {
 	return lettersOnly(a || "") !== "" && lettersOnly(a || "") === lettersOnly(b || "");
 }
 
-function setNotice(key) {
-	noticeKey = key;
+function setNotice(key, values = {}) {
+	noticeMessage = key ? { key: key, values: values } : null;
 	showNotice();
 }
 
 function showNotice() {
-	notice.hidden = !noticeKey;
-	notice.textContent = noticeKey ? t(noticeKey) : "";
+	notice.hidden = noticeMessage === null;
+	notice.textContent = noticeMessage ? t(noticeMessage.key, noticeMessage.values) : "";
 }
 
 // ---------- Small helpers ----------

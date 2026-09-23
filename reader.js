@@ -31,6 +31,9 @@ const NUMBER_ZOOM = 3;
 const NUMBER_LINE_PADDING = 0.9;
 // Even secret rares (like 215/203) have a number at most this many times the set's total.
 const MAX_NUMBER_OVER_TOTAL = 1.6;
+// For sparkly foil cards: pixels lighter than this (0 = black, 255 = white) are wiped out,
+// leaving only the near-black printed ink. Found on a reverse holo Pikachu (Legendary Collection).
+const INK_CUTOFF = 90;
 
 // Ways of telling Tesseract to read. tessedit_pageseg_mode picks how it looks for text:
 // "11" = scattered bits anywhere (suits a card: text between pictures), "6" = one block,
@@ -41,6 +44,8 @@ const READING_MODES = {
 	block: { tessedit_pageseg_mode: "6", thresholding_method: "2" },
 	// On one short strip a single cut-off works fine, and it reads tiny print better.
 	line: { tessedit_pageseg_mode: "7", thresholding_method: "0" },
+	// For the ink-only copy of a foil card (see inkOnly).
+	ink: { tessedit_pageseg_mode: "6", thresholding_method: "0" },
 };
 
 // Words printed near the name that are never part of it.
@@ -59,8 +64,9 @@ let reportProgress = () => {};
 
 // Reads a photo. onProgress(stage, fraction) is told "starting" first, "loading" while the
 // reader downloads (first time only), then "reading" with a fraction from 0 to 1.
-// Returns { name, number, photo, textArea }: photo is the resized picture and textArea the
-// box around the card's text in it, both used later to compare the card's looks.
+// Returns { name, nameSure, number, photo, textArea }. nameSure means the name is a known Pokémon.
+// photo is the resized picture and textArea the box around the card's text in it, both used
+// later to compare the card's looks.
 async function readCardPhoto(imageFile, onProgress = () => {}) {
 	reportProgress = onProgress;
 	onProgress("starting", null);
@@ -77,15 +83,45 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 		const secondName = guessCardName(secondRead.lines, secondRead.textArea);
 		if (secondName.sure || !name.text) name = secondName;
 	}
+	// Still nothing: maybe a sparkly foil card, whose glitter looks like hundreds of tiny letters.
+	// Read a copy with only the dark ink left. Glitter can still fake a close-enough name
+	// ("Seel"), so only an exact Pokémon name counts from this read.
+	if (!name.sure) {
+		const inkRead = await readPage(worker, inkOnly(photo), "ink");
+		const inkName = guessCardName(inkRead.lines, inkRead.textArea, 0);
+		if (inkName.sure) name = inkName;
+	}
 
 	const number = await readCollectorNumber(worker, original, photo, firstRead);
 	original.close();   // the full-size photo takes a lot of memory; it isn't needed any more
 	return {
 		name: name.text,
+		nameSure: name.sure,
 		number: number,
 		photo: photo,
 		textArea: firstRead.textArea,
 	};
+}
+
+function inkOnly(picture) {
+	// A copy of the picture in pure black and white: black where the ink is dark, white elsewhere.
+	const copy = document.createElement("canvas");
+	copy.width = picture.width;
+	copy.height = picture.height;
+	const ctx = copy.getContext("2d", { willReadFrequently: true });
+	ctx.drawImage(picture, 0, 0);
+	const image = ctx.getImageData(0, 0, copy.width, copy.height);
+	const pixels = image.data;
+	for (let i = 0; i < pixels.length; i += 4) {
+		// How bright the pixel looks to the eye: green counts most, blue least.
+		const brightness = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+		const value = brightness < INK_CUTOFF ? 0 : 255;
+		pixels[i] = value;
+		pixels[i + 1] = value;
+		pixels[i + 2] = value;
+	}
+	ctx.putImageData(image, 0, 0);
+	return copy;
 }
 
 function shrinkPhoto(original) {
@@ -156,8 +192,9 @@ function findTextArea(lines) {
 
 // ---------- The name ----------
 
-// Returns { text, sure }. "sure" means the text is a known Pokémon name.
-function guessCardName(lines, textArea) {
+// Returns { text, sure }. "sure" means the text is a known Pokémon name, read with at most
+// maxMistakes wrong letters (the default allows the usual typos, see countMistakes).
+function guessCardName(lines, textArea, maxMistakes = Infinity) {
 	// The name is the biggest text near the top of the card. Only the top part counts,
 	// because further down some cards print their attack names even bigger.
 	const zoneBottom = textArea ? textArea.y0 + (textArea.y1 - textArea.y0) * NAME_ZONE_SHARE : Infinity;
@@ -172,7 +209,7 @@ function guessCardName(lines, textArea) {
 		const size = line.rowAttributes ? line.rowAttributes.rowHeight : tallest;
 
 		// A known Pokémon name always beats text that isn't one.
-		const pokemon = findPokemonName(words.map((word) => word.text));
+		const pokemon = findPokemonName(words.map((word) => word.text), maxMistakes);
 		if (pokemon) {
 			if (!best.sure || size > best.size) best = { text: pokemon, size: size, sure: true };
 			continue;
@@ -223,7 +260,7 @@ function cleanWord(rawWord) {
 	return trimmed;
 }
 
-function findPokemonName(words) {
+function findPokemonName(words, maxMistakes = Infinity) {
 	// Checks each word, and each pair of neighbouring words ("Mr. Mime", "Iron Treads"),
 	// against the name list. The closest match on the line wins.
 	let best = null;
@@ -232,7 +269,8 @@ function findPokemonName(words) {
 		if (i + 1 < words.length) tries.push(words[i] + " " + words[i + 1]);
 		for (const text of tries) {
 			const match = matchPokemonName(text);
-			if (match && (!best || match.mistakes < best.mistakes)) best = match;
+			if (!match || match.mistakes > maxMistakes) continue;
+			if (!best || match.mistakes < best.mistakes) best = match;
 		}
 	}
 	return best ? best.name : "";

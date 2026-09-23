@@ -25,8 +25,9 @@ const CARD_ANSWER_SCHEMA = {
 		name: { type: "string" },
 		number: { type: "string" },
 		setName: { type: "string" },
+		finish: { type: "string", enum: ["normal", "holo", "reverse_holo"] },
 	},
-	required: ["isPokemonCard", "name", "number", "setName"],
+	required: ["isPokemonCard", "name", "number", "setName", "finish"],
 	additionalProperties: false,
 };
 
@@ -39,6 +40,9 @@ const CARD_READING_PROMPT = [
 	"  \"TG05/TG30\". Copy it exactly, leading zeros included. Use \"\" if you can't read it.",
 	"- setName: the English name of the card's set, if its set symbol or set code tells you.",
 	"  Use \"\" if you are not sure.",
+	"- finish: \"reverse_holo\" if the card sparkles or has a shiny pattern everywhere except the",
+	"  picture; \"holo\" if the picture itself is shiny; otherwise \"normal\". This decides the price:",
+	"  a reverse holo can be worth a hundred times the normal card.",
 ].join("\n");
 
 let sdkPromise = null;
@@ -88,7 +92,7 @@ async function claudeClient() {
 	return client;
 }
 
-// Returns { isPokemonCard, name, number, setName }. Throws when Claude can't be reached,
+// Returns { isPokemonCard, name, number, setName, finish }. Throws when Claude can't be reached,
 // doesn't accept the key, or declines - claudeProblem() turns the error into a message.
 async function readCardWithClaude(imageFile) {
 	const claude = await claudeClient();

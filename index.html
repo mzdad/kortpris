@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2026-09-23c">
 </head>
 <body>
 
@@ -171,19 +171,21 @@
 	<input id="library-input" class="visually-hidden" type="file" accept="image/*" tabindex="-1" aria-hidden="true">
 </nav>
 
+<!-- Our own files (these, and style.css at the top) end in ?v=2026-09-23c. Change it on every
+     release (see README), so phones never mix new and old files from their cache. -->
 <!-- Tesseract reads text out of pictures (OCR = optical character recognition). -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="strings.js"></script>
-<script src="pokemon-names.js"></script>
-<script src="storage.js"></script>
-<script src="firebase-config.js"></script>
-<script src="password.js"></script>
-<script src="account.js"></script>
-<script src="reader.js"></script>
-<script src="cards.js"></script>
-<script src="matcher.js"></script>
-<script src="collection.js"></script>
-<script src="claude.js"></script>
-<script src="app.js"></script>
+<script src="strings.js?v=2026-09-23c"></script>
+<script src="pokemon-names.js?v=2026-09-23c"></script>
+<script src="storage.js?v=2026-09-23c"></script>
+<script src="firebase-config.js?v=2026-09-23c"></script>
+<script src="password.js?v=2026-09-23c"></script>
+<script src="account.js?v=2026-09-23c"></script>
+<script src="reader.js?v=2026-09-23c"></script>
+<script src="cards.js?v=2026-09-23c"></script>
+<script src="matcher.js?v=2026-09-23c"></script>
+<script src="collection.js?v=2026-09-23c"></script>
+<script src="claude.js?v=2026-09-23c"></script>
+<script src="app.js?v=2026-09-23c"></script>
 </body>
 </html>

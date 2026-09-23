@@ -10,7 +10,9 @@ const COLLECTION_STORAGE_KEY = "kortpris.collection";
 const REFRESH_BATCH_SIZE = 25;
 
 // Each saved card looks like:
-// { id, name, setName, number, image, count, priceEur, updatedAt, priceUsd, usdVersion }
+// { id, version, name, setName, number, image, count, priceEur, updatedAt, priceUsd }
+// version is which print it is, like "reverseHolofoil" (cards saved before versions existed
+// have none). The same card in two versions is two entries, because their prices differ.
 // Only what "My cards" shows is kept, so even a big collection fits in the browser's storage.
 let collection = loadCollection();
 // When someone is signed in, their cards live in their account instead of on this phone.
@@ -90,61 +92,65 @@ function movePhoneCardsIntoAccount() {
 	saveCollection();
 }
 
-function savedCount(cardId) {
-	const entry = collection.find((saved) => saved.id === cardId);
+function findSaved(cardId, version) {
+	return collection.find((saved) => saved.id === cardId && (saved.version || null) === (version || null));
+}
+
+function savedCount(cardId, version) {
+	const entry = findSaved(cardId, version);
 	return entry ? entry.count : 0;
 }
 
 // Returns true when it was saved.
-function addToCollection(card) {
-	const entry = collection.find((saved) => saved.id === card.id);
+function addToCollection(card, version) {
+	const entry = findSaved(card.id, version);
 	if (entry) {
 		entry.count++;
-		Object.assign(entry, pricesOf(card));   // take the chance to freshen its prices
+		Object.assign(entry, pricesOf(card, version));   // take the chance to freshen its prices
 	} else {
 		collection.push({
 			id: card.id,
+			version: version,
 			name: card.name,
 			setName: card.set.name,
 			number: collectorNumber(card),
 			image: card.images.small,
 			count: 1,
-			...pricesOf(card),
+			...pricesOf(card, version),
 		});
 	}
 	return saveCollection();
 }
 
 // change is +1 or -1. At zero the card leaves the list.
-function changeSavedCount(cardId, change) {
-	const entry = collection.find((saved) => saved.id === cardId);
+function changeSavedCount(cardId, version, change) {
+	const entry = findSaved(cardId, version);
 	if (!entry) return;
 	entry.count += change;
-	if (entry.count <= 0) collection = collection.filter((saved) => saved.id !== cardId);
+	if (entry.count <= 0) collection = collection.filter((saved) => saved !== entry);
 	saveCollection();
 }
 
-function pricesOf(card) {
-	// The same prices the card's own page leads with: Cardmarket in euros, TCGplayer in dollars.
-	const cardmarket = bestCardmarketPrice(card.cardmarket);
-	const tcgplayer = tcgplayerVariants(card.tcgplayer).find((variant) => variant.price.market > 0);
+function pricesOf(card, version) {
+	// The saved version's prices: Cardmarket in euros, TCGplayer in dollars.
+	const chosen = versionOf(card, version);
 	return {
-		priceEur: cardmarket ? cardmarket.value : null,
+		priceEur: chosen.eur,
 		updatedAt: card.cardmarket ? card.cardmarket.updatedAt : null,
-		priceUsd: tcgplayer ? tcgplayer.price.market : null,
-		usdVersion: tcgplayer ? tcgplayer.textKey : null,
+		priceUsd: chosen.usd,
 	};
 }
 
 async function refreshCollectionPrices() {
 	// Asks for the saved cards a group at a time: "(id:base1-4 OR id:xy12-11 OR ...)".
-	const ids = collection.map((saved) => saved.id);
+	const ids = [...new Set(collection.map((saved) => saved.id))];   // each card once, even if saved in two versions
 	for (let start = 0; start < ids.length; start += REFRESH_BATCH_SIZE) {
 		const group = ids.slice(start, start + REFRESH_BATCH_SIZE);
 		const query = "(" + group.map((id) => "id:" + id).join(" OR ") + ")";
 		for (const card of await fetchCards(query, REFRESH_BATCH_SIZE)) {
-			const entry = collection.find((saved) => saved.id === card.id);
-			if (entry) Object.assign(entry, pricesOf(card));
+			for (const entry of collection.filter((saved) => saved.id === card.id)) {
+				Object.assign(entry, pricesOf(card, entry.version));
+			}
 		}
 	}
 	saveCollection();

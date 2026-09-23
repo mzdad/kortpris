@@ -55,6 +55,18 @@ Anthropic.
 | `app.js` | The screen: buttons, results, prices |
 | `dev_reading_test.html` | Development tool, not part of the app (see below) |
 
+## Publishing a change
+
+Every push to `main` goes live within a minute or two. Before pushing, change the release tag
+`?v=...` on our own files in `index.html` (and in `dev_reading_test.html`), for example:
+
+```bash
+sed -i 's/?v=2026-09-23c/?v=2026-09-24a/g' index.html dev_reading_test.html
+```
+
+Browsers keep copies of files for a while. A new tag makes them fetch a matching set, instead
+of mixing new files with old ones, which can break the app for up to ten minutes.
+
 ## Run it on the computer
 
 ```bash
