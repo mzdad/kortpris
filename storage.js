@@ -21,3 +21,11 @@ function writeStorage(key, value) {
 		return false;
 	}
 }
+
+function removeStorage(key) {
+	try {
+		localStorage.removeItem(key);
+	} catch (error) {
+		// Nothing was stored, so there is nothing to remove.
+	}
+}

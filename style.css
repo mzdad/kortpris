@@ -150,7 +150,7 @@ a { color: var(--link); }
 .field { display: grid; gap: 4px; }
 .field label { font-size: 0.85rem; font-weight: 600; color: var(--muted); letter-spacing: 0.01em; }
 .field-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
-input[type="text"] {
+input[type="text"], input[type="password"] {
 	font: inherit; font-size: 16px;   /* 16px stops iPhones from zooming in on focus */
 	color: var(--ink);
 	background: var(--surface-2);
@@ -316,6 +316,33 @@ input:focus-visible, a:focus-visible {
 }
 .stepper button:focus-visible { outline: 3px solid var(--link); outline-offset: -2px; }
 .stepper-count { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* ---------- Read cards with Claude ---------- */
+.notice {
+	margin: 8px 0 0; padding: 6px 10px; border-radius: 8px;
+	font-size: 0.85rem;
+	background: var(--warn-bg); color: var(--warn-ink);
+}
+.settings summary {
+	display: flex; align-items: center; gap: 10px;
+	font-weight: 700;
+	cursor: pointer;
+	list-style: none;
+}
+.settings summary::-webkit-details-marker { display: none; }
+.settings summary::after { content: "▾"; margin-left: auto; color: var(--muted); }
+.settings[open] summary::after { content: "▴"; }
+.settings summary:focus-visible { outline: 3px solid var(--link); outline-offset: 4px; border-radius: 4px; }
+.state {
+	font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
+	padding: 1px 8px; border-radius: 999px;
+	background: var(--surface-2); color: var(--muted);
+}
+.state.on { background: var(--accent); color: var(--accent-ink); }
+.settings-body { display: grid; gap: 12px; margin-top: 14px; }
+.settings-body p { margin: 0; }
+.settings-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.note.error { color: var(--error); }
 
 footer { color: var(--muted); font-size: 0.8rem; }
 footer p { margin: 0; }

@@ -51,6 +51,7 @@
 				<img id="photo-thumb" class="photo-thumb" data-alt="yourPhoto" alt="" hidden>
 				<div>
 					<p id="status" class="status" role="status" aria-live="polite"></p>
+					<p id="notice" class="notice" hidden></p>
 					<div id="progress" class="progress" hidden><div id="progress-bar" class="progress-bar"></div></div>
 				</div>
 			</div>
@@ -76,6 +77,31 @@
 			<p id="results-note" class="note"></p>
 			<div id="results-grid" class="grid"></div>
 		</section>
+
+		<details id="claude-settings" class="panel settings">
+			<summary>
+				<span data-text="claudeTitle"></span>
+				<span id="claude-state" class="state"></span>
+			</summary>
+			<div class="settings-body">
+				<p data-text="claudeExplain"></p>
+				<form id="claude-form" class="fields" autocomplete="off">
+					<div class="field">
+						<label for="claude-key-input" data-text="claudeKeyLabel"></label>
+						<input id="claude-key-input" type="password" autocomplete="off" spellcheck="false" data-placeholder="claudeKeyPlaceholder">
+					</div>
+					<p class="hint">
+						<span data-text="claudeKeyHelpBefore"></span><a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a><span data-text="claudeKeyHelpAfter"></span>
+					</p>
+					<div class="settings-buttons">
+						<button type="submit" class="button secondary" data-text="claudeSave"></button>
+						<button type="button" id="claude-remove" class="button secondary" data-text="claudeRemove"></button>
+					</div>
+					<p id="claude-message" class="note" role="status"></p>
+				</form>
+				<p class="fineprint" data-text="claudePrivacy"></p>
+			</div>
+		</details>
 	</div>
 
 	<section id="collection-view" class="view" data-label="viewCollection" hidden>
@@ -108,6 +134,7 @@
 <script src="cards.js"></script>
 <script src="matcher.js"></script>
 <script src="collection.js"></script>
+<script src="claude.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -19,6 +19,13 @@ A web page with nothing to install. What happens to a photo:
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
    value in kroner. It is kept in the phone's browser only, never sent anywhere.
 
+**Optional: read cards with Claude.** Under "Read cards with Claude" on the Scan screen,
+the viewer can save their own Anthropic API key. Photos are then read by Claude Opus 5
+(`claude.js`), which handles worn, foil and non-English cards far better, at roughly
+US$0.03 per photo on the key owner's account. If Claude fails, the built-in reader takes
+over and a notice says why. The key is kept in the phone's browser and sent only to
+Anthropic.
+
 ## Files
 
 | File | What it does |
@@ -31,6 +38,7 @@ A web page with nothing to install. What happens to a photo:
 | `cards.js` | Searches the price database |
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
 | `collection.js` | "My cards": saved cards, how many of each, total value |
+| `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
 | `storage.js` | Saves things on the phone (language, My cards) |
 | `app.js` | The screen: buttons, results, prices |
 | `dev_reading_test.html` | Development tool, not part of the app (see below) |

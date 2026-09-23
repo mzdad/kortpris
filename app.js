@@ -56,6 +56,12 @@ const collectionView = document.getElementById("collection-view");
 const collectionCount = document.getElementById("collection-count");
 const collectionSummary = document.getElementById("collection-summary");
 const collectionList = document.getElementById("collection-list");
+const notice = document.getElementById("notice");
+const claudeState = document.getElementById("claude-state");
+const claudeForm = document.getElementById("claude-form");
+const claudeKeyInput = document.getElementById("claude-key-input");
+const claudeRemoveButton = document.getElementById("claude-remove");
+const claudeMessage = document.getElementById("claude-message");
 
 // ---------- What is on screen right now ----------
 // Kept as plain data so everything can be redrawn when the language changes.
@@ -70,6 +76,8 @@ let bestMatchId = null;           // the card that looks most like the photo
 let saveFailed = false;           // the browser refused to save "My cards"
 let refreshingPrices = false;     // "Update prices" is busy
 let refreshMessage = null;        // what the last price update said: a text key, or null
+let noticeKey = null;             // why Claude couldn't read the last photo: a text key, or null
+let claudeMessageKey = null;      // what the Claude settings last said: a text key, or null
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
@@ -120,8 +128,10 @@ function applyLanguage() {
 
 	// Text the app wrote itself is drawn again from the data it came from.
 	showStatus();
+	showNotice();
 	renderResults();
 	renderCollection();
+	renderClaudeSettings();
 }
 
 for (const button of languageButtons) {
@@ -185,6 +195,27 @@ for (const button of viewButtons) {
 	button.addEventListener("click", () => showView(button.dataset.view));
 }
 
+claudeForm.addEventListener("submit", (event) => {
+	event.preventDefault();   // stay on this page instead of reloading it
+	const key = claudeKeyInput.value.trim();
+	if (!looksLikeClaudeKey(key)) {
+		claudeMessageKey = "claudeKeyShape";
+	} else if (!saveClaudeKey(key)) {
+		claudeMessageKey = "claudeSaveFailed";
+	} else {
+		claudeKeyInput.value = "";   // don't leave the key showing on screen
+		claudeMessageKey = "claudeSaved";
+	}
+	renderClaudeSettings();
+});
+
+claudeRemoveButton.addEventListener("click", () => {
+	forgetClaudeKey();
+	claudeKeyInput.value = "";
+	claudeMessageKey = "claudeRemoved";
+	renderClaudeSettings();
+});
+
 collectionList.addEventListener("click", (event) => {
 	const button = event.target.closest("[data-action]");
 	if (!button) return;
@@ -227,10 +258,55 @@ async function scanPhoto(imageFile) {
 	nameInput.value = "";
 	numberInput.value = "";
 	searchButton.disabled = true;
+	setNotice(null);
 
-	let reading = { name: "", number: "" };
+	// With a saved API key, Claude reads the card. If that fails for any reason,
+	// the built-in reader takes over, and a notice says why.
+	let reading = null;
+	if (claudeKey()) {
+		setStatus("claudeReading");
+		showProgress(null);
+		try {
+			const answer = await readCardWithClaude(imageFile);
+			if (scanId !== latestScanId) return;
+			if (!answer.isPokemonCard) {
+				searchButton.disabled = false;
+				hideProgress();
+				setStatus("claudeNotACard", {}, "error");
+				return;
+			}
+			reading = {
+				name: answer.name,
+				number: answer.number,
+				setName: answer.setName,
+				photo: await photoForLooks(imageFile),
+				textArea: null,
+			};
+		} catch (error) {
+			if (scanId !== latestScanId) return;
+			setNotice(await claudeProblem(error));
+		}
+	}
+	if (!reading) reading = await readWithBuiltInReader(imageFile, scanId);
+	if (scanId !== latestScanId) return;
+
+	searchButton.disabled = false;
+	if (reading.photo) {
+		lastPhoto = { picture: reading.photo, textArea: reading.textArea, setName: reading.setName || "" };
+	}
+	nameInput.value = reading.name;
+	numberInput.value = reading.number;
+	if (!reading.name && !reading.number) {
+		hideProgress();
+		setStatus("readFailed", {}, "error");
+		return;
+	}
+	await searchForCard();
+}
+
+async function readWithBuiltInReader(imageFile, scanId) {
 	try {
-		reading = await readCardPhoto(imageFile, (stage, fraction) => {
+		return await readCardPhoto(imageFile, (stage, fraction) => {
 			if (scanId !== latestScanId) return;
 			if (stage === "reading") {
 				setStatus("reading");
@@ -245,19 +321,16 @@ async function scanPhoto(imageFile) {
 		});
 	} catch (error) {
 		console.error(error);
+		return { name: "", number: "" };
 	}
-	if (scanId !== latestScanId) return;
+}
 
-	searchButton.disabled = false;
-	if (reading.photo) lastPhoto = { picture: reading.photo, textArea: reading.textArea };
-	nameInput.value = reading.name;
-	numberInput.value = reading.number;
-	if (!reading.name && !reading.number) {
-		hideProgress();
-		setStatus("readFailed", {}, "error");
-		return;
-	}
-	await searchForCard();
+async function photoForLooks(imageFile) {
+	// The same shrunk copy the built-in reader makes, for comparing cards' looks.
+	const original = await createImageBitmap(imageFile);
+	const photo = shrinkPhoto(original);
+	original.close();
+	return photo;
 }
 
 function showPhoto(imageFile) {
@@ -302,9 +375,18 @@ async function searchForCard() {
 			const ranked = await rankByLook(lastPhoto.picture, lastPhoto.textArea, found.cards);
 			if (searchId !== latestSearchId) return;
 			hideProgress();
-			const cards = ranked.slice(0, RESULTS_PAGE_SIZE).map((entry) => entry.card);
+			let cards = ranked.map((entry) => entry.card);
+			// Only trust looks alone when the reader also found where the card sits in the photo.
+			let clear = lastPhoto.textArea !== null && isClearWinner(ranked);
+			// Claude also names the set. If exactly one candidate is from that set, that settles it.
+			const fromSet = cards.filter((card) => sameSetName(card.set.name, lastPhoto.setName));
+			if (fromSet.length === 1) {
+				cards = [fromSet[0], ...cards.filter((card) => card !== fromSet[0])];
+				clear = true;
+			}
+			cards = cards.slice(0, RESULTS_PAGE_SIZE);
 			const best = cards[0].id;
-			if (isClearWinner(ranked)) {
+			if (clear) {
 				setStatus("bestMatchOpened");
 				showResults(cards, found.description, best, best);
 			} else {
@@ -588,6 +670,31 @@ function savedCardHtml(entry) {
 				<button type="button" data-action="more" data-card-id="${id}" aria-label="${t("oneMore")}">+</button>
 			</div>
 		</li>`;
+}
+
+// ---------- Read cards with Claude ----------
+
+function renderClaudeSettings() {
+	const on = claudeKey() !== "";
+	claudeState.textContent = t(on ? "claudeOn" : "claudeOff");
+	claudeState.classList.toggle("on", on);
+	claudeRemoveButton.hidden = !on;
+	claudeMessage.textContent = claudeMessageKey ? t(claudeMessageKey) : "";
+	claudeMessage.classList.toggle("error", claudeMessageKey === "claudeKeyShape" || claudeMessageKey === "claudeSaveFailed");
+}
+
+function sameSetName(a, b) {
+	return lettersOnly(a || "") !== "" && lettersOnly(a || "") === lettersOnly(b || "");
+}
+
+function setNotice(key) {
+	noticeKey = key;
+	showNotice();
+}
+
+function showNotice() {
+	notice.hidden = !noticeKey;
+	notice.textContent = noticeKey ? t(noticeKey) : "";
 }
 
 // ---------- Small helpers ----------
