@@ -62,6 +62,27 @@ const claudeForm = document.getElementById("claude-form");
 const claudeKeyInput = document.getElementById("claude-key-input");
 const claudeRemoveButton = document.getElementById("claude-remove");
 const claudeMessage = document.getElementById("claude-message");
+const collectionWhere = document.getElementById("collection-where");
+const accountPanel = document.getElementById("account-panel");
+const signedOutPart = document.getElementById("signed-out");
+const signedInPart = document.getElementById("signed-in");
+const accountModeButtons = document.querySelectorAll("[data-account-mode]");
+const accountForm = document.getElementById("account-form");
+const usernameInput = document.getElementById("username-input");
+const usernameHint = document.getElementById("username-hint");
+const passwordInput = document.getElementById("password-input");
+const passwordAgainInput = document.getElementById("password-again-input");
+const showPasswordButton = document.getElementById("show-password");
+const createOnly = document.getElementById("create-only");
+const strengthMeter = document.getElementById("strength-meter");
+const passwordFeedback = document.getElementById("password-feedback");
+const accountSubmit = document.getElementById("account-submit");
+const accountNameText = document.getElementById("account-name");
+const signOutButton = document.getElementById("sign-out");
+const phoneCardsOffer = document.getElementById("phone-cards-offer");
+const phoneCardsText = document.getElementById("phone-cards-text");
+const moveCardsButton = document.getElementById("move-cards");
+const accountMessageText = document.getElementById("account-message");
 
 // ---------- What is on screen right now ----------
 // Kept as plain data so everything can be redrawn when the language changes.
@@ -78,6 +99,12 @@ let refreshingPrices = false;     // "Update prices" is busy
 let refreshMessage = null;        // what the last price update said: a text key, or null
 let noticeKey = null;             // why Claude couldn't read the last photo: a text key, or null
 let claudeMessageKey = null;      // what the Claude settings last said: a text key, or null
+let accountMode = "sign-in";      // the account form signs in, or creates an account ("create")
+let accountBusy = false;          // waiting for Firebase to sign in or create an account
+let accountsReady = false;        // Firebase has started
+let accountMessage = null;        // { key, values, tone } shown under the account form, or null
+let passwordsShown = false;       // the password boxes show their letters
+let stopWatchingCards = null;     // stops listening for the signed-in account's cards
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
@@ -89,6 +116,19 @@ let photoUrl = null;
 let lastPhoto = null;
 
 applyLanguage();
+
+if (accountsAvailable()) {
+	startAccounts(handleAccountChange).then(
+		() => {
+			accountsReady = true;
+			renderAccount();
+		},
+		(error) => {
+			console.error(error);
+			setAccountMessage({ key: "accountsOffline", values: {} }, "error");
+		},
+	);
+}
 
 // ---------- Language ----------
 
@@ -132,6 +172,7 @@ function applyLanguage() {
 	renderResults();
 	renderCollection();
 	renderClaudeSettings();
+	renderAccount();
 }
 
 for (const button of languageButtons) {
@@ -185,7 +226,7 @@ resultsGrid.addEventListener("click", (event) => {
 detail.addEventListener("click", (event) => {
 	if (!event.target.closest("[data-action='add-to-collection']")) return;
 	const card = shownCards.find((shown) => shown.id === selectedCardId);
-	if (!card) return;
+	if (!card || !collectionReady()) return;
 	saveFailed = !addToCollection(card);
 	renderResults();
 	renderCollection();
@@ -216,9 +257,98 @@ claudeRemoveButton.addEventListener("click", () => {
 	renderClaudeSettings();
 });
 
+for (const button of accountModeButtons) {
+	button.addEventListener("click", () => {
+		accountMode = button.dataset.accountMode;
+		setAccountMessage(null);
+		if (accountMode === "create") {
+			// The password checker is big, so it is only fetched when someone wants an account.
+			loadPasswordChecker().then(renderAccount, () => {
+				setAccountMessage({ key: "passwordCheckerFailed", values: {} }, "error");
+			});
+		}
+		renderAccount();
+	});
+}
+
+usernameInput.addEventListener("input", () => {
+	if (accountMode === "create") showPasswordStrength();
+});
+passwordInput.addEventListener("input", () => {
+	if (accountMode === "create") showPasswordStrength();
+});
+
+showPasswordButton.addEventListener("click", () => {
+	passwordsShown = !passwordsShown;
+	renderAccount();
+});
+
+accountForm.addEventListener("submit", async (event) => {
+	event.preventDefault();   // stay on this page instead of reloading it
+	if (accountBusy || !accountsReady) return;
+	const username = cleanUsername(usernameInput.value);
+	const password = passwordInput.value;
+	const creating = accountMode === "create";
+
+	// Catch what we can here, before asking Firebase.
+	let problem = null;
+	if (!isValidUsername(username)) {
+		problem = { key: "usernameInvalid", values: {} };
+	} else if (password === "") {
+		problem = { key: "needPassword", values: {} };
+	} else if (creating) {
+		const check = checkNewPassword(password, username);
+		if (!check.ok) problem = { key: check.problem, values: check.values };
+		else if (password !== passwordAgainInput.value) problem = { key: "passwordsDiffer", values: {} };
+	}
+	if (problem) {
+		setAccountMessage(problem, "error");
+		return;
+	}
+
+	accountBusy = true;
+	setAccountMessage(null);
+	renderAccount();
+	try {
+		if (creating) {
+			await createAccount(username, password);
+			setAccountMessage({ key: "accountCreated", values: { name: username } }, "");
+		} else {
+			await signIn(username, password);
+		}
+		// Don't leave passwords sitting in the boxes after they've been used.
+		passwordInput.value = "";
+		passwordAgainInput.value = "";
+	} catch (error) {
+		console.error(error);
+		setAccountMessage(accountProblem(error), "error");
+	}
+	accountBusy = false;
+	renderAccount();
+});
+
+signOutButton.addEventListener("click", async () => {
+	try {
+		await signOutOfAccount();
+		setAccountMessage(null);
+	} catch (error) {
+		console.error(error);
+		setAccountMessage(accountProblem(error), "error");
+	}
+});
+
+moveCardsButton.addEventListener("click", () => {
+	if (!collectionReady()) return;
+	movePhoneCardsIntoAccount();
+	setAccountMessage({ key: "cardsMoved", values: {} }, "");
+	renderCollection();
+	renderResults();
+	renderAccount();
+});
+
 collectionList.addEventListener("click", (event) => {
 	const button = event.target.closest("[data-action]");
-	if (!button) return;
+	if (!button || !collectionReady()) return;
 	changeSavedCount(button.dataset.cardId, button.dataset.action === "more" ? 1 : -1);
 	renderCollection();
 	renderResults();   // the open card's "You have 2" line may have changed
@@ -469,10 +599,12 @@ function cardDetailHtml(card) {
 	const owned = savedCount(card.id);
 	const ownedNote = owned > 0 ? `<p class="own-note">${t("inCollection", { count: owned })}</p>` : "";
 	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
+	let addText = owned > 0 ? "addAnother" : "addToCollection";
+	if (!collectionReady()) addText = "loadingAccountCards";
 	const own = `
 		<div class="own">
-			<button type="button" class="button secondary" data-action="add-to-collection">
-				${t(owned > 0 ? "addAnother" : "addToCollection")}
+			<button type="button" class="button secondary" data-action="add-to-collection" ${collectionReady() ? "" : "disabled"}>
+				${t(addText)}
 			</button>
 			${ownedNote}
 			${saveProblem}
@@ -617,7 +749,16 @@ function showView(view) {
 function renderCollection() {
 	const totals = collectionTotals();
 	collectionCount.textContent = totals.cards > 0 ? totals.cards : "";
-	collectionSummary.innerHTML = collectionSummaryHtml(totals);
+	collectionWhere.textContent = accountName ? t("savedInAccount", { name: accountName }) : t("savedOnPhone");
+	if (!collectionReady()) {
+		collectionSummary.innerHTML = `<p class="note">${t("loadingAccountCards")}</p>`;
+		collectionList.innerHTML = "";
+		return;
+	}
+	const saveProblem = accountSaveProblem
+		? `<p class="status error">${t("notSaved")} ${t(accountSaveProblem.key, accountSaveProblem.values)}</p>`
+		: "";
+	collectionSummary.innerHTML = saveProblem + collectionSummaryHtml(totals);
 	// Most valuable first; cards without a Cardmarket price at the end.
 	const sorted = [...collection].sort((a, b) => savedValue(b) - savedValue(a));
 	collectionList.innerHTML = sorted.map(savedCardHtml).join("");
@@ -670,6 +811,100 @@ function savedCardHtml(entry) {
 				<button type="button" data-action="more" data-card-id="${id}" aria-label="${t("oneMore")}">+</button>
 			</div>
 		</li>`;
+}
+
+// ---------- Accounts ----------
+
+function handleAccountChange(username) {
+	if (stopWatchingCards) {
+		stopWatchingCards();
+		stopWatchingCards = null;
+	}
+	if (username) {
+		useAccountCollection(username);
+		stopWatchingCards = watchAccountCards(
+			username,
+			(cards) => {
+				useAccountCards(cards);
+				renderCollection();
+				renderResults();
+				renderAccount();
+			},
+			(error) => {
+				console.error(error);
+				setAccountMessage(accountProblem(error), "error");
+			},
+		);
+	} else {
+		usePhoneCollection();
+	}
+	renderAccount();
+	renderCollection();
+	renderResults();
+}
+
+function renderAccount() {
+	accountPanel.hidden = !accountsAvailable();
+	if (accountPanel.hidden) return;
+	const signedIn = accountName !== null;
+	signedOutPart.hidden = signedIn;
+	signedInPart.hidden = !signedIn;
+
+	if (signedIn) {
+		accountNameText.textContent = accountName;
+		// Cards saved on this phone before signing in can be moved into the account.
+		const onPhone = accountCardsLoaded ? phoneCardCount() : 0;
+		phoneCardsOffer.hidden = onPhone === 0;
+		phoneCardsText.textContent = onPhone === 1 ? t("phoneCardsOne") : t("phoneCards", { count: onPhone });
+	} else {
+		const creating = accountMode === "create";
+		for (const button of accountModeButtons) {
+			button.setAttribute("aria-pressed", String(button.dataset.accountMode === accountMode));
+		}
+		createOnly.hidden = !creating;
+		usernameHint.hidden = !creating;
+		// Tells the phone's password manager whether to fill in a saved password or offer a new one.
+		passwordInput.autocomplete = creating ? "new-password" : "current-password";
+		passwordInput.type = passwordsShown ? "text" : "password";
+		passwordAgainInput.type = passwordsShown ? "text" : "password";
+		showPasswordButton.textContent = t(passwordsShown ? "hidePassword" : "showPassword");
+		showPasswordButton.setAttribute("aria-pressed", String(passwordsShown));
+		let submitText = creating ? "createAccount" : "signIn";
+		if (accountBusy) submitText = creating ? "creatingAccount" : "signingIn";
+		accountSubmit.textContent = t(submitText);
+		accountSubmit.disabled = accountBusy || !accountsReady;
+		if (creating) showPasswordStrength();
+	}
+	showAccountMessage();
+}
+
+function showPasswordStrength() {
+	const password = passwordInput.value;
+	if (password === "") {
+		passwordFeedback.textContent = t("passwordTip");
+		setStrengthBars(0, "");
+		return;
+	}
+	const check = checkNewPassword(password, cleanUsername(usernameInput.value));
+	passwordFeedback.textContent = check.ok ? t("passwordStrong") : t(check.problem, check.values);
+	const bars = check.score === null ? 1 : Math.max(1, check.score);
+	setStrengthBars(bars, check.ok ? "strong" : "weak");
+}
+
+function setStrengthBars(filled, level) {
+	strengthMeter.dataset.level = level;
+	[...strengthMeter.children].forEach((bar, index) => bar.classList.toggle("filled", index < filled));
+}
+
+function setAccountMessage(message, tone = "") {
+	accountMessage = message ? { ...message, tone: tone } : null;
+	showAccountMessage();
+}
+
+function showAccountMessage() {
+	accountMessageText.textContent = accountMessage ? t(accountMessage.key, accountMessage.values) : "";
+	accountMessageText.classList.toggle("error", accountMessage !== null && accountMessage.tone === "error");
+	accountMessageText.hidden = accountMessage === null;
 }
 
 // ---------- Read cards with Claude ----------

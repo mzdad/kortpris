@@ -13,6 +13,8 @@
 	--error: #B3261E;
 	--warn-bg: #FFF1CC;
 	--warn-ink: #6E4B00;
+	--good: #1E7A4C;
+	--bad: #C2410C;
 	--font-ui: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 	--radius: 16px;
@@ -32,6 +34,8 @@
 		--error: #FF8A80;
 		--warn-bg: #3A2F10;
 		--warn-ink: #F5D272;
+		--good: #5DD39E;
+		--bad: #FB923C;
 		color-scheme: dark;
 	}
 }
@@ -316,6 +320,21 @@ input:focus-visible, a:focus-visible {
 }
 .stepper button:focus-visible { outline: 3px solid var(--link); outline-offset: -2px; }
 .stepper-count { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* ---------- Accounts ---------- */
+.account { display: grid; gap: 14px; }
+.account-part { display: grid; gap: 14px; }
+.account-part p, .account > p { margin: 0; }
+.view-switch.compact button { min-height: 38px; font-size: 0.95rem; }
+.password-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.password-row .button { min-height: 44px; padding: 0 14px; }
+.strength { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.strength span { height: 6px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--line); }
+.strength[data-level="weak"] span.filled { background: var(--bad); border-color: var(--bad); }
+.strength[data-level="strong"] span.filled { background: var(--good); border-color: var(--good); }
+.signed-in-row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.signed-in-as { font-size: 1.05rem; }
+.phone-cards { display: grid; gap: 8px; justify-items: start; }
 
 /* ---------- Read cards with Claude ---------- */
 .notice {

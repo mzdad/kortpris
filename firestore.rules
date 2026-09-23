@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// Who may read and change what in Kortpris's online storage (Firestore).
+// These rules run on Firebase's side, so they hold whatever an app sends.
+//
+// Each account's cards live in collections/<username>, and only that account may touch them.
+// The cards are filed under the username rather than Firebase's internal account id, so if a
+// forgotten password means deleting and re-creating an account, the cards are still there.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /collections/{username} {
+      allow read, delete: if isOwner(username);
+      allow create, update: if isOwner(username) && isValidCollection(request.resource.data);
+    }
+
+    // Signed in as the account whose made-up email is <username>@kortpris.example.com
+    // (see USERNAME_EMAIL_DOMAIN in account.js).
+    function isOwner(username) {
+      return request.auth != null
+        && request.auth.token.email == username + '@kortpris.example.com';
+    }
+
+    // Only the two fields the app writes, and a sensible number of cards.
+    function isValidCollection(data) {
+      return data.keys().hasOnly(['cards', 'updatedAt'])
+        && data.cards is list
+        && data.cards.size() <= 5000
+        && data.updatedAt == request.time;
+    }
+  }
+}

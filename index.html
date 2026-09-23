@@ -105,9 +105,55 @@
 	</div>
 
 	<section id="collection-view" class="view" data-label="viewCollection" hidden>
+		<section id="account-panel" class="panel account" data-label="accountTitle" hidden>
+			<div id="signed-out" class="account-part">
+				<h2 class="section-title" data-text="accountTitle"></h2>
+				<p class="note" data-text="accountExplain"></p>
+				<div class="view-switch compact" role="group" data-label="accountModes">
+					<button type="button" data-account-mode="sign-in" aria-pressed="true" data-text="signIn"></button>
+					<button type="button" data-account-mode="create" aria-pressed="false" data-text="createAccount"></button>
+				</div>
+				<form id="account-form" class="fields">
+					<div class="field">
+						<label for="username-input" data-text="usernameLabel"></label>
+						<input id="username-input" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
+						<p id="username-hint" class="hint" data-text="usernameHint" hidden></p>
+					</div>
+					<div class="field">
+						<label for="password-input" data-text="passwordLabel"></label>
+						<div class="password-row">
+							<input id="password-input" type="password" autocomplete="current-password">
+							<button type="button" id="show-password" class="button secondary" aria-pressed="false"></button>
+						</div>
+					</div>
+					<div id="create-only" class="fields" hidden>
+						<div id="strength-meter" class="strength" aria-hidden="true">
+							<span></span><span></span><span></span><span></span>
+						</div>
+						<p id="password-feedback" class="hint" aria-live="polite"></p>
+						<div class="field">
+							<label for="password-again-input" data-text="passwordAgainLabel"></label>
+							<input id="password-again-input" type="password" autocomplete="new-password">
+						</div>
+					</div>
+					<button id="account-submit" type="submit" class="button primary"></button>
+				</form>
+			</div>
+			<div id="signed-in" class="account-part" hidden>
+				<div class="signed-in-row">
+					<p class="signed-in-as"><span data-text="signedInAs"></span> <strong id="account-name"></strong></p>
+					<button type="button" id="sign-out" class="button secondary" data-text="signOut"></button>
+				</div>
+				<div id="phone-cards-offer" class="phone-cards" hidden>
+					<p id="phone-cards-text" class="note"></p>
+					<button type="button" id="move-cards" class="button secondary" data-text="moveCards"></button>
+				</div>
+			</div>
+			<p id="account-message" class="note" role="status"></p>
+		</section>
 		<div id="collection-summary" class="panel collection-summary"></div>
 		<ul id="collection-list" class="collection-list"></ul>
-		<p class="fineprint" data-text="savedOnPhone"></p>
+		<p id="collection-where" class="fineprint"></p>
 	</section>
 
 	<footer>
@@ -130,6 +176,9 @@
 <script src="strings.js"></script>
 <script src="pokemon-names.js"></script>
 <script src="storage.js"></script>
+<script src="firebase-config.js"></script>
+<script src="password.js"></script>
+<script src="account.js"></script>
 <script src="reader.js"></script>
 <script src="cards.js"></script>
 <script src="matcher.js"></script>
