@@ -60,12 +60,16 @@ let statusMessage = { key: "statusIdle", values: {}, tone: "" };
 let shownCards = [];              // the cards from the latest search
 let shownDescription = null;      // which kind of search found them: { key, values }
 let selectedCardId = null;        // the card whose prices are open
+let bestMatchId = null;           // the card that looks most like the photo
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
 let latestScanId = 0;
 let latestSearchId = 0;
 let photoUrl = null;
+// The latest photo (shrunk) and where its text was, for comparing cards' looks.
+// Stays null until a photo is taken, so typed searches work as they always did.
+let lastPhoto = null;
 
 applyLanguage();
 
@@ -165,6 +169,7 @@ async function scanPhoto(imageFile) {
 	latestSearchId++;   // cancel any search still running for the previous card
 	intro.hidden = true;
 	showPhoto(imageFile);
+	lastPhoto = null;
 	clearResults();
 	nameInput.value = "";
 	numberInput.value = "";
@@ -191,6 +196,7 @@ async function scanPhoto(imageFile) {
 	if (scanId !== latestScanId) return;
 
 	searchButton.disabled = false;
+	if (reading.photo) lastPhoto = { picture: reading.photo, textArea: reading.textArea };
 	nameInput.value = reading.name;
 	numberInput.value = reading.number;
 	if (!reading.name && !reading.number) {
@@ -224,15 +230,34 @@ async function searchForCard() {
 	showProgress(null);
 	searchButton.disabled = true;
 	try {
-		const found = await findCards(nameInput.value, numberInput.value);
+		const found = await findCards(nameInput.value, numberInput.value, lastPhoto !== null);
 		if (searchId !== latestSearchId) return;   // a newer photo or search took over
-		hideProgress();
 		if (found.cards.length === 0) {
+			hideProgress();
 			setStatus("noMatch", {}, "error");
+		} else if (found.cards.length === 1) {
+			hideProgress();
+			setStatus("foundOne");
+			showResults(found.cards, found.description, found.cards[0].id, null);
+		} else if (!lastPhoto) {
+			hideProgress();
+			setStatus("foundMany", { count: found.cards.length });
+			showResults(found.cards, found.description, null, null);
 		} else {
-			if (found.cards.length === 1) setStatus("foundOne");
-			else setStatus("foundMany", { count: found.cards.length });
-			showResults(found.cards, found.description);
+			// Several cards fit the text: let the photo pick the one that looks most like it.
+			setStatus("comparingPictures");
+			const ranked = await rankByLook(lastPhoto.picture, lastPhoto.textArea, found.cards);
+			if (searchId !== latestSearchId) return;
+			hideProgress();
+			const cards = ranked.slice(0, RESULTS_PAGE_SIZE).map((entry) => entry.card);
+			const best = cards[0].id;
+			if (isClearWinner(ranked)) {
+				setStatus("bestMatchOpened");
+				showResults(cards, found.description, best, best);
+			} else {
+				setStatus("foundManyByLook", { count: cards.length });
+				showResults(cards, found.description, null, best);
+			}
 		}
 	} catch (error) {
 		console.error(error);
@@ -246,11 +271,13 @@ async function searchForCard() {
 
 // ---------- Step 3: show the matches and the prices ----------
 
-function showResults(cards, description) {
+// openId: the card whose prices open straight away (or null to let the viewer pick).
+// bestId: the card to mark "Best match" (or null).
+function showResults(cards, description, openId, bestId) {
 	shownCards = cards;
 	shownDescription = description;
-	// Only one match: open its prices straight away, no need to pick.
-	selectedCardId = cards.length === 1 ? cards[0].id : null;
+	selectedCardId = openId;
+	bestMatchId = bestId;
 	renderResults();
 }
 
@@ -258,6 +285,7 @@ function clearResults() {
 	shownCards = [];
 	shownDescription = null;
 	selectedCardId = null;
+	bestMatchId = null;
 	renderResults();
 }
 
@@ -279,9 +307,12 @@ function renderResults() {
 }
 
 function resultButtonHtml(card) {
+	const badge = card.id === bestMatchId ? `<span class="badge">${t("bestMatch")}</span>` : "";
+	// Loaded the same way matcher.js loads it, so each picture downloads only once.
 	return `
 		<button class="result" type="button" data-card-id="${escapeHtml(card.id)}" aria-pressed="${card.id === selectedCardId}">
-			<img class="card-image" src="${escapeHtml(card.images.small)}" alt="" loading="lazy" width="245" height="342">
+			<img class="card-image" src="${escapeHtml(readablePictureUrl(card.images.small))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
+			${badge}
 			<span class="result-name">${escapeHtml(card.name)}</span>
 			<span class="result-set">${escapeHtml(card.set.name)}<br><span class="mono">${escapeHtml(collectorNumber(card))}</span></span>
 		</button>`;
@@ -302,7 +333,7 @@ function cardDetailHtml(card) {
 
 	return `
 		<div class="detail-head">
-			<img class="card-image" src="${escapeHtml(card.images.small)}" alt="${escapeHtml(card.name)}" width="245" height="342">
+			<img class="card-image" src="${escapeHtml(readablePictureUrl(card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
 			<div>
 				<h2 class="detail-name">${escapeHtml(card.name)}</h2>
 				<p class="detail-meta">${meta.join(" · ")}</p>

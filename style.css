@@ -244,6 +244,12 @@ input:focus-visible, a:focus-visible {
 .result .card-image { outline: 3px solid transparent; outline-offset: 2px; }
 .result[aria-pressed="true"] .card-image { outline-color: var(--accent-edge); }
 .result-name { font-weight: 700; font-size: 0.85rem; line-height: 1.2; }
+.badge {
+	justify-self: start;
+	font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+	padding: 1px 8px; border-radius: 999px;
+	background: var(--accent); color: var(--accent-ink);
+}
 .result-set { font-size: 0.78rem; color: var(--muted); line-height: 1.25; }
 
 footer { color: var(--muted); font-size: 0.8rem; }

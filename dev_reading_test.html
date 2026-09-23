@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kortpris reading test</title>
+<style>
+	body { font: 14px/1.45 system-ui, sans-serif; margin: 0; padding: 16px; background: #EDF0F5; color: #141C28; }
+	h1 { font-size: 1.3rem; margin: 0 0 4px; }
+	p { margin: 0 0 12px; max-width: 70ch; }
+	#summary { font-weight: 700; font-size: 1.05rem; }
+	.table-wrap { overflow-x: auto; }
+	table { border-collapse: collapse; background: #fff; }
+	th, td { padding: 6px 10px; border-bottom: 1px solid #D6DCE6; text-align: left; vertical-align: top; }
+	th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #586579; }
+	td img { width: 90px; display: block; }
+	.pass { color: #1E7A4C; font-weight: 700; }
+	.fail { color: #B3261E; font-weight: 700; }
+	code { font-family: ui-monospace, Consolas, monospace; }
+</style>
+</head>
+<body>
+<h1>Kortpris reading test</h1>
+<p>Development tool, not part of the app. It makes fake phone photos of real cards (tilted, badly lit,
+blurred, noisy, JPEG-compressed), runs them through the app's own reader and search, and scores the result.
+The fake photos are the same on every run, so scores can be compared before and after a change.</p>
+<p id="summary">Running…</p>
+<div class="table-wrap">
+	<table>
+		<thead><tr><th>Photo</th><th>Card</th><th>Level</th><th>Name read</th><th>Number read</th><th>Card found</th><th>Shown first</th><th>Look gap</th><th>Seconds</th></tr></thead>
+		<tbody id="rows"></tbody>
+	</table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
+<script src="pokemon-names.js"></script>
+<script src="reader.js"></script>
+<script src="cards.js"></script>
+<script src="matcher.js"></script>
+<script>
+"use strict";
+
+// Real cards from different eras. "number" is what is printed in the corner.
+const TEST_CARDS = [
+	{ id: "base1-4", name: "Charizard", number: "4/102" },
+	{ id: "base1-58", name: "Pikachu", number: "58/102" },
+	{ id: "neo1-9", name: "Lugia", number: "9/111" },
+	{ id: "xy12-11", name: "Charizard", number: "11/108" },
+	{ id: "swsh1-65", name: "Pikachu", number: "065/202" },
+	{ id: "swsh7-215", name: "Umbreon VMAX", number: "215/203" },
+	{ id: "sv3pt5-25", name: "Pikachu", number: "025/165" },
+	{ id: "me1-1", name: "Bulbasaur", number: "001/132" },
+];
+
+// How rough each fake photo is. Blur is in pixels of the 3000 x 4000 photo.
+const LEVELS = {
+	easy: { maxTiltDegrees: 3, blurPx: 2, noise: 6, cardHeight: [0.78, 0.86], jpegQuality: 0.85 },
+	hard: { maxTiltDegrees: 7, blurPx: 4.5, noise: 14, cardHeight: [0.6, 0.7], jpegQuality: 0.6 },
+};
+// The size of a 12-megapixel phone photo. Note: the card pictures these are made from are only
+// 1024 pixels tall, so the tiny collector number has much less detail than in a real photo.
+// Number scores here are therefore worse than on real cards; name scores are about right.
+const PHOTO_WIDTH = 3000;
+const PHOTO_HEIGHT = 4000;
+const TABLE_COLOURS = ["#8B6B4A", "#5E6670", "#D9D4CC", "#2E3440", "#A3452F"];
+const RANDOM_SEED = 20260923;
+
+const rows = document.getElementById("rows");
+const summary = document.getElementById("summary");
+
+runAllTests();
+
+async function runAllTests() {
+	const random = seededRandom(RANDOM_SEED);
+	const scores = { total: 0, name: 0, number: 0, found: 0, first: 0, openedRight: 0, openedWrong: 0 };
+	const allRows = [];
+	for (const card of TEST_CARDS) {
+		const cardImage = await loadImage(hiresImageUrl(card.id));
+		for (const [levelName, level] of Object.entries(LEVELS)) {
+			const photo = await makeFakePhoto(cardImage, level, random);
+			const row = await testOnePhoto(card, levelName, photo);
+			allRows.push({ id: card.id, level: levelName, ...row });
+			scores.total++;
+			if (row.nameOk) scores.name++;
+			if (row.numberOk) scores.number++;
+			if (row.foundAt >= 0) scores.found++;
+			if (row.foundAt === 0) scores.first++;
+			if (row.opened && row.foundAt === 0) scores.openedRight++;
+			if (row.opened && row.foundAt !== 0) scores.openedWrong++;
+			summary.textContent = "Running… " + scores.total + " of " + TEST_CARDS.length * Object.keys(LEVELS).length;
+		}
+	}
+	const line = "Name read " + scores.name + "/" + scores.total
+		+ " · number read " + scores.number + "/" + scores.total
+		+ " · card found " + scores.found + "/" + scores.total
+		+ " · shown first " + scores.first + "/" + scores.total
+		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong";
+	summary.textContent = line;
+	console.log("READING TEST: " + line);
+	window.testScores = scores;   // lets a script read the result
+	window.testRows = allRows;
+}
+
+async function testOnePhoto(card, levelName, photo) {
+	const started = performance.now();
+	const reading = await readCardPhoto(photo);
+	const nameOk = longestWord(reading.name).toLowerCase() === longestWord(card.name).toLowerCase();
+	const numberOk = sameNumber(reading.number, card.number);
+	let foundAt = -1;
+	let lookGap = null;
+	let opened = false;   // would the app open a card's prices without asking?
+	let error = "";
+	try {
+		const found = await findCards(reading.name, reading.number, true);
+		const ranked = await rankByLook(reading.photo, reading.textArea, found.cards);
+		foundAt = ranked.findIndex((entry) => entry.card.id === card.id);
+		// How much further the runner-up is from the photo than the winner.
+		// A big gap means the winner is clear; the app uses this to open it straight away.
+		if (ranked.length >= 2) lookGap = ranked[1].distance / ranked[0].distance;
+		opened = ranked.length > 0 && isClearWinner(ranked);
+	} catch (problem) {
+		error = String(problem);
+	}
+	const row = { nameOk, numberOk, foundAt, lookGap, opened, seconds: (performance.now() - started) / 1000 };
+	addRow(photo, card, levelName, reading, row, error);
+	return row;
+}
+
+function sameNumber(read, expected) {
+	const a = parseCollectorNumber(read);
+	const b = parseCollectorNumber(expected);
+	return a.number !== "" && a.number === b.number && a.total === b.total;
+}
+
+function addRow(photo, card, levelName, reading, row, error) {
+	const tr = document.createElement("tr");
+	const thumb = document.createElement("img");
+	thumb.src = URL.createObjectURL(photo);
+	const cells = [
+		thumb,
+		card.id + " · " + card.name + " " + card.number,
+		levelName,
+		mark(row.nameOk, reading.name || "(nothing)"),
+		mark(row.numberOk, reading.number || "(nothing)"),
+		mark(row.foundAt >= 0, error || (row.foundAt >= 0 ? "yes" : "no")),
+		mark(row.foundAt === 0, row.foundAt >= 0 ? "position " + (row.foundAt + 1) : "–"),
+		(row.lookGap === null ? "–" : row.lookGap.toFixed(2) + (row.foundAt === 0 ? " (right)" : " (wrong)"))
+			+ (row.opened ? " · opened" : ""),
+		row.seconds.toFixed(1),
+	];
+	for (const content of cells) {
+		const td = document.createElement("td");
+		if (content instanceof Node) td.append(content);
+		else td.innerHTML = content;
+		tr.append(td);
+	}
+	rows.append(tr);
+}
+
+function mark(ok, text) {
+	const safe = String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+	return `<span class="${ok ? "pass" : "fail"}">${ok ? "PASS" : "FAIL"}</span> <code>${safe}</code>`;
+}
+
+// ---------- Fake phone photos ----------
+
+async function makeFakePhoto(cardImage, level, random) {
+	const canvas = document.createElement("canvas");
+	canvas.width = PHOTO_WIDTH;
+	canvas.height = PHOTO_HEIGHT;
+	const ctx = canvas.getContext("2d");
+
+	// A plain table, slightly darker towards one side.
+	ctx.fillStyle = TABLE_COLOURS[Math.floor(random() * TABLE_COLOURS.length)];
+	ctx.fillRect(0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
+
+	// The card: a random size, position and tilt.
+	const heightShare = between(random, level.cardHeight[0], level.cardHeight[1]);
+	const cardHeight = PHOTO_HEIGHT * heightShare;
+	const cardWidth = cardHeight * cardImage.width / cardImage.height;
+	const centerX = PHOTO_WIDTH / 2 + between(random, -0.05, 0.05) * PHOTO_WIDTH;
+	const centerY = PHOTO_HEIGHT / 2 + between(random, -0.04, 0.04) * PHOTO_HEIGHT;
+	const tilt = between(random, -level.maxTiltDegrees, level.maxTiltDegrees) * Math.PI / 180;
+	ctx.save();
+	ctx.translate(centerX, centerY);
+	ctx.rotate(tilt);
+	ctx.filter = "blur(" + level.blurPx + "px)";
+	ctx.drawImage(cardImage, -cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight);
+	ctx.restore();
+
+	// Uneven light: a bright spot on one side, a shadow on the other.
+	const light = ctx.createLinearGradient(0, 0, PHOTO_WIDTH * between(random, 0.5, 1), PHOTO_HEIGHT);
+	light.addColorStop(0, "rgba(255, 255, 240, 0.18)");
+	light.addColorStop(1, "rgba(0, 0, 20, 0.28)");
+	ctx.fillStyle = light;
+	ctx.fillRect(0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
+
+	// Camera speckle.
+	const pixels = ctx.getImageData(0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
+	for (let i = 0; i < pixels.data.length; i += 4) {
+		const speck = (random() - 0.5) * 2 * level.noise;
+		pixels.data[i] += speck;
+		pixels.data[i + 1] += speck;
+		pixels.data[i + 2] += speck;
+	}
+	ctx.putImageData(pixels, 0, 0);
+
+	return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", level.jpegQuality));
+}
+
+function hiresImageUrl(cardId) {
+	const dash = cardId.lastIndexOf("-");
+	return "https://images.pokemontcg.io/" + cardId.slice(0, dash) + "/" + cardId.slice(dash + 1) + "_hires.png";
+}
+
+function loadImage(url) {
+	const image = new Image();
+	image.crossOrigin = "anonymous";   // allowed by the image server, and keeps the canvas readable
+	image.src = url;
+	return image.decode().then(() => image);
+}
+
+function between(random, low, high) {
+	return low + random() * (high - low);
+}
+
+function seededRandom(seed) {
+	// Mulberry32: a tiny random number generator that gives the same sequence for the same seed.
+	return function () {
+		seed |= 0;
+		seed = (seed + 0x6D2B79F5) | 0;
+		let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+		x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+		return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+	};
+}
+</script>
+</body>
+</html>

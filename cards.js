@@ -6,9 +6,12 @@ const API_URL = "https://api.pokemontcg.io/v2/cards";
 // Only ask for the fields we show, so answers arrive faster on mobile data.
 const CARD_FIELDS = "id,name,number,rarity,set,images,tcgplayer,cardmarket";
 const RESULTS_PAGE_SIZE = 24;
+// With a photo to compare against, a search on the name alone fetches this many cards:
+// "Charizard" alone fits over a hundred, and the right one may be an old one.
+const WIDE_PAGE_SIZE = 48;
 // The free price database fails about half of its requests on the first try
 // (measured September 2026), so every lookup is retried a few times.
-const MAX_API_ATTEMPTS = 6;
+const MAX_API_ATTEMPTS = 8;
 const RETRY_DELAY_MS = 400;
 
 // Searches for the card with this name and collector number ("4/102").
@@ -16,14 +19,36 @@ const RETRY_DELAY_MS = 400;
 // Returns { cards, description }: description says which kind of search found them,
 // as a text key from strings.js plus the values to fill in. No match gives an empty list.
 // Throws an error when the database doesn't answer at all.
-async function findCards(name, numberText) {
+// withPhoto = true means a photo can pick among many cards by their looks (see matcher.js).
+async function findCards(name, numberText, withPhoto = false) {
 	const nameWord = longestWord(name);
 	const { number, total } = parseCollectorNumber(numberText);
-	for (const attempt of buildSearchAttempts(nameWord, number, total)) {
-		const cards = await fetchCards(attempt.query);
-		if (cards.length > 0) return { cards: cards, description: attempt.description };
+	const attempts = buildSearchAttempts(nameWord, number, total);
+
+	// Without a photo: the first search that finds anything wins.
+	if (!withPhoto) {
+		for (const attempt of attempts) {
+			const cards = await fetchCards(attempt.query, RESULTS_PAGE_SIZE);
+			if (cards.length > 0) return { cards: cards, description: attempt.description };
+		}
+		return { cards: [], description: null };
 	}
-	return { cards: [], description: null };
+
+	// With a photo: an exact match on name and number still wins straight away.
+	if (attempts.length > 0 && attempts[0].exact) {
+		const cards = await fetchCards(attempts[0].query, RESULTS_PAGE_SIZE);
+		if (cards.length > 0) return { cards: cards, description: attempts[0].description };
+	}
+	// Otherwise part of the text was misread, and nobody knows which part. So every looser
+	// search goes into one pile, and the pictures decide.
+	const pile = new Map();
+	for (const attempt of attempts) {
+		if (attempt.exact) continue;
+		const pageSize = attempt.loose ? WIDE_PAGE_SIZE : RESULTS_PAGE_SIZE;
+		for (const card of await fetchCards(attempt.query, pageSize)) pile.set(card.id, card);
+	}
+	const cards = [...pile.values()];
+	return { cards: cards, description: cards.length > 0 ? { key: "matchByLook", values: {} } : null };
 }
 
 // True when there is enough to search on: a name or a number.
@@ -60,12 +85,20 @@ function buildSearchAttempts(nameWord, number, total) {
 		attempts.push({
 			query: nameQuery + " number:" + number + " set.printedTotal:" + total,
 			description: { key: "matchExact", values: { name: nameWord, number: shownNumber } },
+			exact: true,
 		});
 	}
 	if (nameWord && number) {
 		attempts.push({
 			query: nameQuery + " number:" + number,
 			description: { key: "matchAnySet", values: { name: nameWord, number: number } },
+		});
+	}
+	if (nameWord && total) {
+		// The number was misread, but the set's size ("/108") may still be right.
+		attempts.push({
+			query: nameQuery + " set.printedTotal:" + total,
+			description: { key: "matchNameTotal", values: { name: nameWord, total: total } },
 		});
 	}
 	if (number && total) {
@@ -76,26 +109,29 @@ function buildSearchAttempts(nameWord, number, total) {
 				: { key: "matchNumberOnly", values: { number: shownNumber } },
 		});
 	}
+	// The last two are "loose": they can fit a great many cards.
 	if (nameWord) {
 		attempts.push({
 			query: nameQuery,
 			description: { key: "matchNameOnly", values: { name: nameWord } },
+			loose: true,
 		});
 	}
 	if (!nameWord && number && !total) {
 		attempts.push({
 			query: "number:" + number,
 			description: { key: "matchNumberNoTotal", values: { number: number } },
+			loose: true,
 		});
 	}
 	return attempts;
 }
 
-async function fetchCards(query) {
+async function fetchCards(query, pageSize) {
 	const url = API_URL
 		+ "?q=" + encodeURIComponent(query)
 		+ "&orderBy=-set.releaseDate"
-		+ "&pageSize=" + RESULTS_PAGE_SIZE
+		+ "&pageSize=" + pageSize
 		+ "&select=" + CARD_FIELDS;
 	let lastProblem = null;
 	for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
