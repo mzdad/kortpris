@@ -2,36 +2,14 @@
 
 // ---------- Settings ----------
 
-const API_URL = "https://api.pokemontcg.io/v2/cards";
-// Only ask for the fields we show, so answers arrive faster on mobile data.
-const CARD_FIELDS = "id,name,number,rarity,set,images,tcgplayer,cardmarket";
-const RESULTS_PAGE_SIZE = 24;
-// The free price database fails about half of its requests on the first try
-// (measured September 2026), so every lookup is retried a few times.
-const MAX_API_ATTEMPTS = 6;
-const RETRY_DELAY_MS = 400;
 // The Danish krone is pegged to the euro at this central rate, so the conversion stays accurate.
 const DKK_PER_EUR = 7.46038;
-// Photos are resized to this length (longest side) before reading the text:
-// huge phone photos would be slow, and small ones read better when enlarged.
-const OCR_TARGET_SIDE_PX = 2000;
-// Tesseract rates every word 0-100. Low scores are usually smudges in the artwork, not text.
-const MIN_WORD_CONFIDENCE = 55;
-// On the name's line, words much smaller than the biggest one are small print, not the name.
-const NAME_SIZE_RATIO = 0.7;
 // Prices older than this get an "out of date" label.
 const STALE_AFTER_DAYS = 14;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EXAMPLE_CARD_IMAGE = "https://images.pokemontcg.io/base1/4_hires.png";
 // Where the phone remembers the chosen language between visits.
 const LANGUAGE_STORAGE_KEY = "kortpris.language";
-
-// Words printed near the name that are never part of it.
-const NOT_NAME_WORDS = new Set([
-	"BASIC", "STAGE", "EVOLVES", "HP", "POKEMON", "POKÉMON", "TRAINER", "ITEM", "SUPPORTER",
-	"STADIUM", "TOOL", "LV", "LEVEL", "PUT", "THIS", "CARD", "ON", "THE", "OF", "AND",
-	"ABILITY", "POWER", "WEAKNESS", "RESISTANCE", "RETREAT", "COST", "ILLUS", "NO",
-]);
 
 // TCGplayer splits prices by print version: [its name for the version, our text key].
 const TCGPLAYER_VARIANTS = [
@@ -87,7 +65,6 @@ let selectedCardId = null;        // the card whose prices are open
 // its answer is thrown away so it can't overwrite the newer one.
 let latestScanId = 0;
 let latestSearchId = 0;
-let ocrWorkerPromise = null;
 let photoUrl = null;
 
 applyLanguage();
@@ -191,14 +168,23 @@ async function scanPhoto(imageFile) {
 	clearResults();
 	nameInput.value = "";
 	numberInput.value = "";
-	setStatus("readerStarting");
-	showProgress(null);
 	searchButton.disabled = true;
 
 	let reading = { name: "", number: "" };
 	try {
-		const canvas = await photoToCanvas(imageFile);
-		reading = await readCardText(canvas);
+		reading = await readCardPhoto(imageFile, (stage, fraction) => {
+			if (scanId !== latestScanId) return;
+			if (stage === "reading") {
+				setStatus("reading");
+				showProgress(fraction);
+			} else if (stage === "loading") {
+				setStatus("readerStartingSlow");
+				showProgress(null);
+			} else {
+				setStatus("readerStarting");
+				showProgress(null);
+			}
+		});
 	} catch (error) {
 		console.error(error);
 	}
@@ -223,121 +209,11 @@ function showPhoto(imageFile) {
 	scanRow.classList.remove("no-photo");
 }
 
-async function photoToCanvas(imageFile) {
-	// createImageBitmap also turns sideways phone photos the right way up.
-	const bitmap = await createImageBitmap(imageFile);
-	const scale = OCR_TARGET_SIDE_PX / Math.max(bitmap.width, bitmap.height);
-	const canvas = document.createElement("canvas");
-	canvas.width = Math.round(bitmap.width * scale);
-	canvas.height = Math.round(bitmap.height * scale);
-	canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-	bitmap.close();
-	return canvas;
-}
-
-function getOcrWorker() {
-	// The text reader downloads a few megabytes the first time, so it is created once and reused.
-	if (!ocrWorkerPromise) {
-		ocrWorkerPromise = Tesseract.createWorker("eng", 1, { logger: showOcrProgress });
-		ocrWorkerPromise.catch(() => { ocrWorkerPromise = null; });   // allow a fresh try next photo
-	}
-	return ocrWorkerPromise;
-}
-
-function showOcrProgress(message) {
-	// Tesseract reports what it is doing, plus how far along it is from 0 to 1.
-	if (message.status === "recognizing text") {
-		setStatus("reading");
-		showProgress(message.progress);
-	} else {
-		setStatus("readerStartingSlow");
-	}
-}
-
-async function readCardText(canvas) {
-	const worker = await getOcrWorker();
-	// "blocks" gives every word with its size and position, which is how we find the name.
-	const result = await worker.recognize(canvas, {}, { text: true, blocks: true });
-	return {
-		name: guessCardName(result.data.blocks || []),
-		number: guessCardNumber(result.data.text || ""),
-	};
-}
-
-function guessCardName(blocks) {
-	// The name is the biggest text on a card, so pick the line with the tallest real words.
-	let bestName = "";
-	let bestHeight = 0;
-	for (const line of allLines(blocks)) {
-		const words = nameWordsOnLine(line);
-		if (words.length === 0) continue;
-		const tallest = Math.max(...words.map((word) => word.height));
-		const nameWords = words.filter((word) => word.height >= tallest * NAME_SIZE_RATIO);
-		const name = nameWords.map((word) => word.text).join(" ");
-		if (name.replace(/[^\p{L}]/gu, "").length < 3) continue;
-		if (tallest > bestHeight) {
-			bestHeight = tallest;
-			bestName = name;
-		}
-	}
-	return bestName;
-}
-
-function allLines(blocks) {
-	const lines = [];
-	for (const block of blocks) {
-		for (const paragraph of block.paragraphs || []) {
-			lines.push(...(paragraph.lines || []));
-		}
-	}
-	return lines;
-}
-
-function nameWordsOnLine(line) {
-	const kept = [];
-	let skipNext = false;
-	for (const word of line.words || []) {
-		const text = cleanWord(word.text);
-		const upper = text.toUpperCase();
-		if (skipNext) {
-			skipNext = false;
-			continue;
-		}
-		// "Evolves from Charmeleon": the word after "from" is the previous Pokémon, not this one.
-		if (upper === "FROM") {
-			skipNext = true;
-			continue;
-		}
-		if (!text || word.confidence < MIN_WORD_CONFIDENCE || NOT_NAME_WORDS.has(upper)) continue;
-		kept.push({ text: text, height: word.bbox.y1 - word.bbox.y0 });
-	}
-	return kept;
-}
-
-function cleanWord(rawWord) {
-	// Trim stray symbols from the edges, keeping the few that real names use:
-	// Mr. Mime, Farfetch'd, Porygon-Z.
-	const trimmed = rawWord.replace(/^[^\p{L}]+/u, "").replace(/[^\p{L}.']+$/u, "");
-	if (!/^\p{L}[\p{L}.'’-]*$/u.test(trimmed)) return "";   // digits or odd symbols: not a name
-	if (trimmed.replace(/[^\p{L}]/gu, "").length < 2) return "";
-	return trimmed;
-}
-
-function guessCardNumber(text) {
-	// OCR often reads a zero as the letter O, so "4/1O2" is fixed to "4/102" first.
-	const fixed = text.replace(/(?<=\d)[oO]|[oO](?=\d)/g, "0");
-	// Collector numbers look like "4/102", "006/198" or "TG05/TG30".
-	const match = fixed.match(/([A-Z]{0,3}\d{1,3})\s*\/\s*([A-Z]{0,3}\d{2,3})/);
-	return match ? match[1] + "/" + match[2] : "";
-}
-
 // ---------- Step 2: find the card in the price database ----------
 
 async function searchForCard() {
 	const searchId = ++latestSearchId;
-	const nameWord = longestWord(nameInput.value);
-	const { number, total } = parseCollectorNumber(numberInput.value);
-	if (!nameWord && !number) {
+	if (!canSearch(nameInput.value, numberInput.value)) {
 		hideProgress();
 		setStatus("needNameOrNumber", {}, "error");
 		return;
@@ -348,20 +224,16 @@ async function searchForCard() {
 	showProgress(null);
 	searchButton.disabled = true;
 	try {
-		// Try the most exact search first, then looser ones in case the photo was misread.
-		for (const attempt of buildSearchAttempts(nameWord, number, total)) {
-			const cards = await fetchCards(attempt.query);
-			if (searchId !== latestSearchId) return;
-			if (cards.length > 0) {
-				hideProgress();
-				if (cards.length === 1) setStatus("foundOne");
-				else setStatus("foundMany", { count: cards.length });
-				showResults(cards, attempt.description);
-				return;
-			}
-		}
+		const found = await findCards(nameInput.value, numberInput.value);
+		if (searchId !== latestSearchId) return;   // a newer photo or search took over
 		hideProgress();
-		setStatus("noMatch", {}, "error");
+		if (found.cards.length === 0) {
+			setStatus("noMatch", {}, "error");
+		} else {
+			if (found.cards.length === 1) setStatus("foundOne");
+			else setStatus("foundMany", { count: found.cards.length });
+			showResults(found.cards, found.description);
+		}
 	} catch (error) {
 		console.error(error);
 		if (searchId !== latestSearchId) return;
@@ -370,93 +242,6 @@ async function searchForCard() {
 	} finally {
 		if (searchId === latestSearchId) searchButton.disabled = false;
 	}
-}
-
-function longestWord(name) {
-	// Search on the longest word only: "Charizard ex" then also finds "Charizard EX",
-	// and a misread short word can't spoil the search.
-	let longest = "";
-	for (const word of name.split(/\s+/)) {
-		const safe = word.replace(/[^\p{L}.'’-]/gu, "");
-		if (safe.length > longest.length) longest = safe;
-	}
-	return longest;
-}
-
-function parseCollectorNumber(text) {
-	// "4/102" becomes number "4" and total "102". Plain digits lose their leading
-	// zeros ("006" -> "6") because the database stores them that way.
-	const [numberPart = "", totalPart = ""] = text.toUpperCase().replace(/\s+/g, "").split("/");
-	const number = /^\d+$/.test(numberPart) ? String(Number(numberPart)) : numberPart.replace(/[^A-Z0-9]/g, "");
-	const total = /^\d+$/.test(totalPart) ? String(Number(totalPart)) : "";
-	return { number, total };
-}
-
-function buildSearchAttempts(nameWord, number, total) {
-	// Each attempt is a database query plus the text explaining what it found.
-	const nameQuery = 'name:"' + nameWord + '*"';
-	const shownNumber = total ? number + "/" + total : number;
-	const attempts = [];
-	if (nameWord && number && total) {
-		attempts.push({
-			query: nameQuery + " number:" + number + " set.printedTotal:" + total,
-			description: { key: "matchExact", values: { name: nameWord, number: shownNumber } },
-		});
-	}
-	if (nameWord && number) {
-		attempts.push({
-			query: nameQuery + " number:" + number,
-			description: { key: "matchAnySet", values: { name: nameWord, number: number } },
-		});
-	}
-	if (number && total) {
-		attempts.push({
-			query: "number:" + number + " set.printedTotal:" + total,
-			description: nameWord
-				? { key: "matchNumberNameMissed", values: { name: nameWord, number: shownNumber } }
-				: { key: "matchNumberOnly", values: { number: shownNumber } },
-		});
-	}
-	if (nameWord) {
-		attempts.push({
-			query: nameQuery,
-			description: { key: "matchNameOnly", values: { name: nameWord } },
-		});
-	}
-	if (!nameWord && number && !total) {
-		attempts.push({
-			query: "number:" + number,
-			description: { key: "matchNumberNoTotal", values: { number: number } },
-		});
-	}
-	return attempts;
-}
-
-async function fetchCards(query) {
-	const url = API_URL
-		+ "?q=" + encodeURIComponent(query)
-		+ "&orderBy=-set.releaseDate"
-		+ "&pageSize=" + RESULTS_PAGE_SIZE
-		+ "&select=" + CARD_FIELDS;
-	let lastProblem = null;
-	for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
-		try {
-			const response = await fetch(url);
-			if (response.ok) {
-				const body = await response.json();
-				return body.data || [];
-			}
-			lastProblem = new Error("Price database answered " + response.status);
-		} catch (error) {
-			lastProblem = error;   // no answer at all, e.g. a dropped connection
-		}
-		await wait(RETRY_DELAY_MS * attempt);   // wait a little longer after each failure
-	}
-	throw lastProblem;
-}
-
-function wait(ms) {
-	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ---------- Step 3: show the matches and the prices ----------
