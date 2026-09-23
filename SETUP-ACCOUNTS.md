@@ -2,7 +2,10 @@
 
 About 10 minutes, once. Kortpris keeps accounts in a free **Firebase** project (Google's)
 that you own. You create the project; the app only needs its settings. Firebase's free
-plan needs no credit card and covers a family easily.
+plan ("Spark") needs no credit card and covers a family easily.
+
+Firebase moves its menus around now and then. If something below isn't where the guide
+says, type its name into **Search for products** at the top left of the Firebase page.
 
 ## 1. Create the project
 
@@ -14,7 +17,8 @@ plan needs no credit card and covers a family easily.
 
 ## 2. Register the web app and send the settings
 
-1. On the project's front page, click the **`</>`** button (Web).
+1. On the project's front page, click **+ Add app** (just under the project name),
+   then pick the **`</>`** icon (Web).
 2. App nickname: `Kortpris`. Leave **Firebase Hosting** unticked. Click **Register app**.
 3. You'll see code that starts with `const firebaseConfig = {` and has six lines:
    `apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`.
@@ -24,7 +28,7 @@ plan needs no credit card and covers a family easily.
 
 ## 3. Switch on username-and-password sign-in
 
-1. Left menu: **Build → Authentication**, then **Get started**.
+1. Left menu: **Security → Authentication**, then **Get started**.
 2. **Sign-in method** tab → **Email/Password** → switch on the first toggle only
    ("Email/Password", not "Email link") → **Save**.
 
@@ -40,7 +44,7 @@ so no emails are ever sent.
 
 ## 5. Create the database for the cards
 
-1. Left menu: **Build → Firestore Database** → **Create database**.
+1. Left menu: **Databases and storage → Firestore** → **Create database**.
 2. If asked for an edition, pick **Standard**.
 3. Location: pick one in Europe, such as **eur3 (Europe)** or **europe-north1 (Finland)**.
    It can't be changed later.
