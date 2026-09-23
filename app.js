@@ -50,6 +50,12 @@ const libraryButton = document.getElementById("library-button");
 const cameraInput = document.getElementById("camera-input");
 const libraryInput = document.getElementById("library-input");
 const languageButtons = document.querySelectorAll("[data-language]");
+const viewButtons = document.querySelectorAll("[data-view]");
+const scanView = document.getElementById("scan-view");
+const collectionView = document.getElementById("collection-view");
+const collectionCount = document.getElementById("collection-count");
+const collectionSummary = document.getElementById("collection-summary");
+const collectionList = document.getElementById("collection-list");
 
 // ---------- What is on screen right now ----------
 // Kept as plain data so everything can be redrawn when the language changes.
@@ -61,6 +67,9 @@ let shownCards = [];              // the cards from the latest search
 let shownDescription = null;      // which kind of search found them: { key, values }
 let selectedCardId = null;        // the card whose prices are open
 let bestMatchId = null;           // the card that looks most like the photo
+let saveFailed = false;           // the browser refused to save "My cards"
+let refreshingPrices = false;     // "Update prices" is busy
+let refreshMessage = null;        // what the last price update said: a text key, or null
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
@@ -112,6 +121,7 @@ function applyLanguage() {
 	// Text the app wrote itself is drawn again from the data it came from.
 	showStatus();
 	renderResults();
+	renderCollection();
 }
 
 for (const button of languageButtons) {
@@ -124,8 +134,14 @@ for (const button of languageButtons) {
 
 // ---------- Buttons ----------
 
-cameraButton.addEventListener("click", () => cameraInput.click());
-libraryButton.addEventListener("click", () => libraryInput.click());
+cameraButton.addEventListener("click", () => {
+	showView("scan");
+	cameraInput.click();
+});
+libraryButton.addEventListener("click", () => {
+	showView("scan");
+	libraryInput.click();
+});
 cameraInput.addEventListener("change", () => takeFileFrom(cameraInput));
 libraryInput.addEventListener("change", () => takeFileFrom(libraryInput));
 
@@ -154,6 +170,43 @@ resultsGrid.addEventListener("click", (event) => {
 	selectedCardId = button.dataset.cardId;
 	renderResults();
 	scrollToDetail();
+});
+
+detail.addEventListener("click", (event) => {
+	if (!event.target.closest("[data-action='add-to-collection']")) return;
+	const card = shownCards.find((shown) => shown.id === selectedCardId);
+	if (!card) return;
+	saveFailed = !addToCollection(card);
+	renderResults();
+	renderCollection();
+});
+
+for (const button of viewButtons) {
+	button.addEventListener("click", () => showView(button.dataset.view));
+}
+
+collectionList.addEventListener("click", (event) => {
+	const button = event.target.closest("[data-action]");
+	if (!button) return;
+	changeSavedCount(button.dataset.cardId, button.dataset.action === "more" ? 1 : -1);
+	renderCollection();
+	renderResults();   // the open card's "You have 2" line may have changed
+});
+
+collectionSummary.addEventListener("click", async (event) => {
+	if (!event.target.closest("[data-action='refresh']") || refreshingPrices) return;
+	refreshingPrices = true;
+	refreshMessage = null;
+	renderCollection();
+	try {
+		await refreshCollectionPrices();
+		refreshMessage = "pricesUpdated";
+	} catch (error) {
+		console.error(error);
+		refreshMessage = "refreshFailed";
+	}
+	refreshingPrices = false;
+	renderCollection();
 });
 
 function takeFileFrom(input) {
@@ -331,6 +384,18 @@ function cardDetailHtml(card) {
 	const noPrices = worth === "" ? `<p class="note">${t("noPrices")}</p>` : "";
 	const notYours = shownCards.length === 1 ? `<p class="fineprint">${t("notYours")}</p>` : "";
 
+	const owned = savedCount(card.id);
+	const ownedNote = owned > 0 ? `<p class="own-note">${t("inCollection", { count: owned })}</p>` : "";
+	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
+	const own = `
+		<div class="own">
+			<button type="button" class="button secondary" data-action="add-to-collection">
+				${t(owned > 0 ? "addAnother" : "addToCollection")}
+			</button>
+			${ownedNote}
+			${saveProblem}
+		</div>`;
+
 	return `
 		<div class="detail-head">
 			<img class="card-image" src="${escapeHtml(readablePictureUrl(card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
@@ -340,6 +405,7 @@ function cardDetailHtml(card) {
 			</div>
 		</div>
 		${worth ? `<div class="worth">${worth}</div>` : noPrices}
+		${own}
 		${cardmarketTableHtml(card.cardmarket)}
 		${tcgplayerTableHtml(card.tcgplayer)}
 		<p class="fineprint">${t("ungraded")}</p>
@@ -398,7 +464,7 @@ function tcgplayerVariants(tcgplayer) {
 	const variants = [];
 	for (const [apiName, textKey] of TCGPLAYER_VARIANTS) {
 		const price = prices[apiName];
-		if (price && (price.market > 0 || price.low > 0)) variants.push({ label: t(textKey), price });
+		if (price && (price.market > 0 || price.low > 0)) variants.push({ label: t(textKey), textKey, price });
 	}
 	return variants;
 }
@@ -457,6 +523,73 @@ function storeLinkHtml(url, text) {
 	return `<a class="store-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">${text} ↗</a>`;
 }
 
+// ---------- My cards ----------
+
+function showView(view) {
+	scanView.hidden = view !== "scan";
+	collectionView.hidden = view !== "collection";
+	for (const button of viewButtons) button.setAttribute("aria-pressed", String(button.dataset.view === view));
+	if (view === "collection") renderCollection();
+}
+
+function renderCollection() {
+	const totals = collectionTotals();
+	collectionCount.textContent = totals.cards > 0 ? totals.cards : "";
+	collectionSummary.innerHTML = collectionSummaryHtml(totals);
+	// Most valuable first; cards without a Cardmarket price at the end.
+	const sorted = [...collection].sort((a, b) => savedValue(b) - savedValue(a));
+	collectionList.innerHTML = sorted.map(savedCardHtml).join("");
+}
+
+function savedValue(entry) {
+	return entry.priceEur > 0 ? entry.count * entry.priceEur * DKK_PER_EUR : -1;
+}
+
+function collectionSummaryHtml(totals) {
+	if (totals.cards === 0) return `<p class="note">${t("collectionEmpty")}</p>`;
+	const countText = totals.cards === 1 ? t("cardCountOne") : t("cardCount", { count: totals.cards });
+	const unpriced = totals.unpriced > 0 ? `<p class="fineprint">${t("notInTotal", { count: totals.unpriced })}</p>` : "";
+	const message = refreshMessage
+		? `<span class="${refreshMessage === "refreshFailed" ? "status error" : "note"}">${t(refreshMessage)}</span>`
+		: "";
+	return `
+		<span class="stat-label">${t("totalValue")}</span>
+		<span class="total-value">${money.kroner.format(totals.kroner)}</span>
+		<span class="stat-sub">${countText} · ${t("valueBasis")}</span>
+		${updatedHtml(totals.oldestUpdate)}
+		${unpriced}
+		<div class="refresh-row">
+			<button type="button" class="button secondary" data-action="refresh" ${refreshingPrices ? "disabled" : ""}>
+				${t(refreshingPrices ? "updatingPrices" : "updatePrices")}
+			</button>
+			${message}
+		</div>`;
+}
+
+function savedCardHtml(entry) {
+	let each = t("noPrice");
+	if (entry.priceEur > 0) each = money.kroner.format(entry.priceEur * DKK_PER_EUR);
+	else if (entry.priceUsd > 0) each = money.dollars.format(entry.priceUsd) + " (TCGplayer)";
+	const lineTotal = entry.priceEur > 0 && entry.count > 1
+		? " · " + t("allOfThem", { price: money.kroner.format(savedValue(entry)) })
+		: "";
+	const id = escapeHtml(entry.id);
+	return `
+		<li class="saved-card">
+			<img class="card-image" src="${escapeHtml(readablePictureUrl(entry.image))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
+			<div class="saved-info">
+				<span class="saved-name">${escapeHtml(entry.name)}</span>
+				<span class="saved-meta">${escapeHtml(entry.setName)} · <span class="mono">${escapeHtml(entry.number)}</span></span>
+				<span class="saved-price">${t("each", { price: each })}${lineTotal}</span>
+			</div>
+			<div class="stepper">
+				<button type="button" data-action="fewer" data-card-id="${id}" aria-label="${t("oneFewer")}">−</button>
+				<span class="stepper-count">${entry.count}</span>
+				<button type="button" data-action="more" data-card-id="${id}" aria-label="${t("oneMore")}">+</button>
+			</div>
+		</li>`;
+}
+
 // ---------- Small helpers ----------
 
 function setStatus(key, values = {}, tone = "") {
@@ -478,23 +611,6 @@ function showProgress(fraction) {
 
 function hideProgress() {
 	progress.hidden = true;
-}
-
-function readStorage(key) {
-	// Private browsing can block storage; the app then simply forgets between visits.
-	try {
-		return localStorage.getItem(key);
-	} catch (error) {
-		return null;
-	}
-}
-
-function writeStorage(key, value) {
-	try {
-		localStorage.setItem(key, value);
-	} catch (error) {
-		// Not saved - fine, it only matters on the next visit.
-	}
 }
 
 function escapeHtml(text) {

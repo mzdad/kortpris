@@ -29,44 +29,59 @@
 		<p class="tagline" data-text="tagline"></p>
 	</header>
 
-	<section id="intro" class="intro" data-label="howItWorks">
-		<ol class="steps">
-			<li><span><strong data-text="step1Verb"></strong><span data-text="step1Rest"></span></span></li>
-			<li><span><strong data-text="step2Verb"></strong><span data-text="step2Rest"></span></span></li>
-			<li><span><strong data-text="step3Verb"></strong><span data-text="step3Rest"></span></span></li>
-		</ol>
-		<button id="example-button" class="text-button" type="button" data-text="tryExample"></button>
-	</section>
+	<div class="view-switch" role="group" data-label="views">
+		<button type="button" data-view="scan" aria-pressed="true" data-text="viewScan"></button>
+		<button type="button" data-view="collection" aria-pressed="false">
+			<span data-text="viewCollection"></span> <span id="collection-count" class="count"></span>
+		</button>
+	</div>
 
-	<section class="panel lookup" data-label="yourCard">
-		<div id="scan-row" class="scan-row no-photo">
-			<img id="photo-thumb" class="photo-thumb" data-alt="yourPhoto" alt="" hidden>
-			<div>
-				<p id="status" class="status" role="status" aria-live="polite"></p>
-				<div id="progress" class="progress" hidden><div id="progress-bar" class="progress-bar"></div></div>
-			</div>
-		</div>
-		<form id="search-form" class="fields" autocomplete="off">
-			<div class="field">
-				<label for="name-input" data-text="nameLabel"></label>
-				<input id="name-input" type="text" autocapitalize="words" spellcheck="false" enterkeyhint="search" data-placeholder="namePlaceholder">
-			</div>
-			<div class="field-row">
-				<div class="field">
-					<label for="number-input" data-text="numberLabel"></label>
-					<input id="number-input" type="text" autocapitalize="characters" spellcheck="false" enterkeyhint="search" data-placeholder="numberPlaceholder">
+	<div id="scan-view" class="view">
+		<section id="intro" class="intro" data-label="howItWorks">
+			<ol class="steps">
+				<li><span><strong data-text="step1Verb"></strong><span data-text="step1Rest"></span></span></li>
+				<li><span><strong data-text="step2Verb"></strong><span data-text="step2Rest"></span></span></li>
+				<li><span><strong data-text="step3Verb"></strong><span data-text="step3Rest"></span></span></li>
+			</ol>
+			<button id="example-button" class="text-button" type="button" data-text="tryExample"></button>
+		</section>
+
+		<section class="panel lookup" data-label="yourCard">
+			<div id="scan-row" class="scan-row no-photo">
+				<img id="photo-thumb" class="photo-thumb" data-alt="yourPhoto" alt="" hidden>
+				<div>
+					<p id="status" class="status" role="status" aria-live="polite"></p>
+					<div id="progress" class="progress" hidden><div id="progress-bar" class="progress-bar"></div></div>
 				</div>
-				<button id="search-button" class="button secondary" type="submit" data-text="search"></button>
 			</div>
-		</form>
-	</section>
+			<form id="search-form" class="fields" autocomplete="off">
+				<div class="field">
+					<label for="name-input" data-text="nameLabel"></label>
+					<input id="name-input" type="text" autocapitalize="words" spellcheck="false" enterkeyhint="search" data-placeholder="namePlaceholder">
+				</div>
+				<div class="field-row">
+					<div class="field">
+						<label for="number-input" data-text="numberLabel"></label>
+						<input id="number-input" type="text" autocapitalize="characters" spellcheck="false" enterkeyhint="search" data-placeholder="numberPlaceholder">
+					</div>
+					<button id="search-button" class="button secondary" type="submit" data-text="search"></button>
+				</div>
+			</form>
+		</section>
 
-	<section id="detail" class="panel detail" aria-live="polite" hidden></section>
+		<section id="detail" class="panel detail" aria-live="polite" hidden></section>
 
-	<section id="results" class="results" hidden>
-		<h2 class="section-title" data-text="resultsTitle"></h2>
-		<p id="results-note" class="note"></p>
-		<div id="results-grid" class="grid"></div>
+		<section id="results" class="results" hidden>
+			<h2 class="section-title" data-text="resultsTitle"></h2>
+			<p id="results-note" class="note"></p>
+			<div id="results-grid" class="grid"></div>
+		</section>
+	</div>
+
+	<section id="collection-view" class="view" data-label="viewCollection" hidden>
+		<div id="collection-summary" class="panel collection-summary"></div>
+		<ul id="collection-list" class="collection-list"></ul>
+		<p class="fineprint" data-text="savedOnPhone"></p>
 	</section>
 
 	<footer>
@@ -88,9 +103,11 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
 <script src="strings.js"></script>
 <script src="pokemon-names.js"></script>
+<script src="storage.js"></script>
 <script src="reader.js"></script>
 <script src="cards.js"></script>
 <script src="matcher.js"></script>
+<script src="collection.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

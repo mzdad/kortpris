@@ -16,6 +16,8 @@ A web page with nothing to install. What happens to a photo:
    winner opens by itself. The fields stay editable, so a card can also be typed in.
 3. **Card → prices.** Prices from **Cardmarket** (Europe, euros, also shown in kroner)
    and **TCGplayer** (USA, dollars), with links to both shops.
+4. **My cards.** Cards can be saved with how many of each, and the list shows the total
+   value in kroner. It is kept in the phone's browser only, never sent anywhere.
 
 ## Files
 
@@ -28,6 +30,8 @@ A web page with nothing to install. What happens to a photo:
 | `reader.js` | Photo → name and number |
 | `cards.js` | Searches the price database |
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
+| `collection.js` | "My cards": saved cards, how many of each, total value |
+| `storage.js` | Saves things on the phone (language, My cards) |
 | `app.js` | The screen: buttons, results, prices |
 | `dev_reading_test.html` | Development tool, not part of the app (see below) |
 
