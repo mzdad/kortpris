@@ -1,20 +1,33 @@
 "use strict";
 
 // Puts search results in order of how much each card's picture looks like the photo.
-// This settles it when the text on the photo fits several cards, like the many Pikachus.
+// This settles it when the text on the photo fits several cards, like the 200-odd Pikachus.
 //
-// How: the card in the photo and each candidate's picture are both shrunk to a tiny grid
-// of average colours - a very blurry thumbnail - and the grids are compared cell by cell.
+// How: the artwork window of the card in the photo, and of each candidate's picture, are both
+// shrunk to a small grid of average colours - a blurry thumbnail - and compared cell by cell.
+// The artwork is what tells same-named cards apart: the text and frame around it look alike
+// on every card of an era. (Tested on a reverse holo Pikachu: comparing the whole card put the
+// right one 51st of 213; comparing the artwork put it 2nd, behind the Jungle Pikachu that
+// Legendary Collection reprinted with the very same artwork.)
 
-// Size of the blurry thumbnail, in cells.
-const LOOK_COLUMNS = 12;
-const LOOK_ROWS = 16;
+// Size of the blurry thumbnail of the artwork, in cells. The artwork is wider than tall.
+const LOOK_COLUMNS = 24;
+const LOOK_ROWS = 14;
+// Where the artwork window sits on a card, as shares of the card's width and height.
+// Full-art cards simply have more artwork around it.
+const ART_LEFT = 0.12;
+const ART_RIGHT = 0.88;
+const ART_TOP = 0.14;
+const ART_BOTTOM = 0.47;
 // A card is 63 mm wide and 88 mm tall.
 const CARD_ASPECT = 63 / 88;
-// Where the card sits in the photo is only estimated from its text, so each estimate is
-// also tried a little shifted, bigger and smaller. The best fit counts.
-const LOOK_SHIFTS = [-0.03, 0, 0.03];
-const LOOK_SCALES = [0.95, 1, 1.05];
+// The card's place in the photo is never exact, so the artwork is also tried a little shifted,
+// bigger and smaller, and the best fit counts. With the card found by its yellow border, small
+// nudges are enough; when its place is only estimated from its text, a wider search is needed.
+const FOUND_SHIFTS = [-0.02, 0, 0.02];
+const FOUND_SCALES = [0.96, 1, 1.04];
+const ESTIMATED_SHIFTS = [-0.04, -0.02, 0, 0.02, 0.04];
+const ESTIMATED_SCALES = [0.92, 0.96, 1, 1.04, 1.08];
 // How far a card's edges are from the box around its text, as a share of that box.
 const CARD_MARGIN_X = 0.09;
 const CARD_MARGIN_TOP = 0.04;
@@ -24,38 +37,57 @@ const ASPECT_TOLERANCE = 0.15;
 // Without any text to go on, try the card filling this much of the photo's height.
 const WHOLE_PHOTO_HEIGHTS = [0.6, 0.75, 0.9];
 // The best-looking card counts as a clear winner when the runner-up is at least this many
-// times further from the photo. In dev_reading_test.html, right picks scored 2.4 and 5.4
-// and wrong picks never more than 1.7.
+// times further from the photo. In dev_reading_test.html (artwork comparison, version 1.9.0),
+// right picks scored 2.1 to 12.9 and wrong picks never more than 1.13.
 const CLEAR_WINNER_GAP = 2;
 
 // Returns [{ card, distance }] sorted with the closest look first. Smaller distance = more alike.
 // cardBox is where the card is in the photo when its yellow border showed it (reader.js);
-// without it, the card's place is estimated from its text.
-async function rankByLook(photo, textArea, cards, cardBox = null) {
+// without it, the card's place is estimated from its text. onProgress(done, total) is told
+// after each candidate's picture: with a few hundred of them, this takes a while.
+async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = () => {}) {
+	const shifts = cardBox ? FOUND_SHIFTS : ESTIMATED_SHIFTS;
+	const scales = cardBox ? FOUND_SCALES : ESTIMATED_SCALES;
 	const photoGrids = [];
-	const boxes = cardBox ? [cardBox] : possibleCardBoxes(photo, textArea);
-	for (const box of boxes) {
-		for (const shiftX of LOOK_SHIFTS) {
-			for (const shiftY of LOOK_SHIFTS) {
-				for (const scale of LOOK_SCALES) {
-					photoGrids.push(colourGrid(photo, moveBox(box, shiftX, shiftY, scale)));
+	for (const box of cardBox ? [cardBox] : possibleCardBoxes(photo, textArea)) {
+		const artwork = artworkOf(box);
+		for (const shiftX of shifts) {
+			for (const shiftY of shifts) {
+				for (const scale of scales) {
+					photoGrids.push(colourGrid(photo, moveBox(artwork, shiftX, shiftY, scale)));
 				}
 			}
 		}
 	}
 
+	let done = 0;
 	const ranked = await Promise.all(cards.map(async (card) => {
+		let distance = Infinity;   // a picture that doesn't load goes last
 		try {
 			const picture = await loadPicture(card.images.small);
-			const cardGrid = colourGrid(picture, { x0: 0, y0: 0, x1: picture.width, y1: picture.height });
-			const distance = Math.min(...photoGrids.map((grid) => gridDistance(grid, cardGrid)));
-			return { card, distance };
+			const cardGrid = colourGrid(picture, artworkOf({ x0: 0, y0: 0, x1: picture.width, y1: picture.height }));
+			distance = Math.min(...photoGrids.map((grid) => gridDistance(grid, cardGrid)));
 		} catch (error) {
-			return { card, distance: Infinity };   // its picture didn't load: put it last
+			console.error(error);
 		}
+		done++;
+		onProgress(done, cards.length);
+		return { card, distance };
 	}));
 	ranked.sort((a, b) => a.distance - b.distance);
 	return ranked;
+}
+
+function artworkOf(cardBox) {
+	// The artwork window inside a card's box.
+	const width = cardBox.x1 - cardBox.x0;
+	const height = cardBox.y1 - cardBox.y0;
+	return {
+		x0: cardBox.x0 + width * ART_LEFT,
+		x1: cardBox.x0 + width * ART_RIGHT,
+		y0: cardBox.y0 + height * ART_TOP,
+		y1: cardBox.y0 + height * ART_BOTTOM,
+	};
 }
 
 // True when the first card in a rankByLook list is so much closer than the second

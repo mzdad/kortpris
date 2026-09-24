@@ -602,7 +602,11 @@ async function searchForCard() {
 		} else {
 			// Several cards fit the text: let the photo pick the one that looks most like it.
 			setStatus("comparingPictures");
-			const ranked = await rankByLook(lastPhoto.picture, lastPhoto.textArea, found.cards, lastPhoto.cardBox);
+			const ranked = await rankByLook(lastPhoto.picture, lastPhoto.textArea, found.cards, lastPhoto.cardBox, (done, total) => {
+				if (searchId !== latestSearchId) return;
+				setStatus("comparingProgress", { done: done, total: total });
+				showProgress(done / total);
+			});
 			if (searchId !== latestSearchId) return;
 			hideProgress();
 			let cards = ranked.map((entry) => entry.card);

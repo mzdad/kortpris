@@ -6,9 +6,10 @@ const API_URL = "https://api.pokemontcg.io/v2/cards";
 // Only ask for the fields we show, so answers arrive faster on mobile data.
 const CARD_FIELDS = "id,name,number,rarity,set,images,tcgplayer,cardmarket";
 const RESULTS_PAGE_SIZE = 24;
-// With a photo to compare against, a search on the name alone fetches this many cards:
-// "Charizard" alone fits over a hundred, and the right one may be an old one.
-const WIDE_PAGE_SIZE = 48;
+// With a photo to compare against, a search on the name alone fetches every card with that name
+// (250 is the most the database gives at once): "Pikachu" alone fits over 200, and the right one
+// may be an old one. The artwork comparison (matcher.js) then finds it among them.
+const WIDE_PAGE_SIZE = 250;
 // The free price database fails about half of its requests on the first try
 // (measured September 2026), so every lookup is sent twice at once and retried a few times.
 const MAX_API_ATTEMPTS = 6;
