@@ -22,7 +22,9 @@ const RETRY_DELAY_MS = 400;
 // number matched a card exactly. No match gives an empty list.
 // Throws an error when the database doesn't answer at all.
 // withPhoto = true means a photo can pick among many cards by their looks (see matcher.js).
-async function findCards(name, numberText, withPhoto = false) {
+// numberGuesses are other numbers the reader thought possible (reader.js), tried in turn;
+// the one that turned out right comes back as matchedNumber.
+async function findCards(name, numberText, withPhoto = false, numberGuesses = []) {
 	const nameWord = longestWord(name);
 	const { number, total } = parseCollectorNumber(numberText);
 	const attempts = buildSearchAttempts(nameWord, number, total);
@@ -43,11 +45,39 @@ async function findCards(name, numberText, withPhoto = false) {
 		return { cards: [], description: null, totalCount: 0, exactFound: false };
 	}
 
-	// With a photo: an exact match on name and number still wins straight away.
-	if (attempts.length > 0 && attempts[0].exact) {
-		const page = await fetchCardPage(attempts[0].query, RESULTS_PAGE_SIZE);
-		if (page.cards.length > 0) {
-			return { cards: page.cards, description: attempts[0].description, totalCount: page.totalCount, exactFound: true };
+	// With a photo: try each number the reader thought possible. An exact match on name and
+	// number settles it - and shows which guess was right.
+	const guesses = [...new Set([numberText, ...numberGuesses].map((guess) => guess.trim()).filter(Boolean))];
+	if (nameWord) {
+		for (const guess of guesses) {
+			const parsed = parseCollectorNumber(guess);
+			if (!parsed.number || !parsed.total) continue;
+			const query = nameQueryFor(nameWord) + " number:" + parsed.number + " set.printedTotal:" + parsed.total;
+			const page = await fetchCardPage(query, RESULTS_PAGE_SIZE);
+			if (page.cards.length > 0) {
+				return {
+					cards: page.cards,
+					description: { key: "matchExact", values: { name: nameWord, number: parsed.number + "/" + parsed.total } },
+					totalCount: page.totalCount,
+					exactFound: true,
+					matchedNumber: guess,
+				};
+			}
+		}
+		// The set's size is often read right even when the card's own number isn't. If just one
+		// card with this name comes from a set of that size, it is the one.
+		const setSizes = [...new Set(guesses.map((guess) => parseCollectorNumber(guess).total).filter(Boolean))];
+		for (const setSize of setSizes) {
+			const page = await fetchCardPage(nameQueryFor(nameWord) + " set.printedTotal:" + setSize, RESULTS_PAGE_SIZE);
+			if (page.cards.length === 1) {
+				return {
+					cards: page.cards,
+					description: { key: "matchNameTotal", values: { name: nameWord, total: setSize } },
+					totalCount: 1,
+					exactFound: false,
+					setSizeFound: true,
+				};
+			}
 		}
 	}
 	// Otherwise part of the text was misread, and nobody knows which part. So every looser
@@ -95,9 +125,14 @@ function parseCollectorNumber(text) {
 	return { number, total };
 }
 
+function nameQueryFor(nameWord) {
+	// The * lets "Charizard" also find "Charizard ex", "Charizard VMAX" and "Blaine's Charizard".
+	return 'name:"' + nameWord + '*"';
+}
+
 function buildSearchAttempts(nameWord, number, total) {
 	// Each attempt is a database query plus the text explaining what it found.
-	const nameQuery = 'name:"' + nameWord + '*"';
+	const nameQuery = nameQueryFor(nameWord);
 	const shownNumber = total ? number + "/" + total : number;
 	const attempts = [];
 	if (nameWord && number && total) {

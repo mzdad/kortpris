@@ -123,6 +123,8 @@ let photoUrl = null;
 // The latest photo (shrunk) and where its text was, for comparing cards' looks.
 // Stays null until a photo is taken, so typed searches work as they always did.
 let lastPhoto = null;
+// The number the reader put in the box, and every other number it thought possible.
+let scannedNumbers = { shown: "", guesses: [] };
 
 applyLanguage();
 
@@ -454,6 +456,7 @@ async function scanPhoto(imageFile) {
 	intro.hidden = true;
 	showPhoto(imageFile);
 	lastPhoto = null;
+	scannedNumbers = { shown: "", guesses: [] };
 	clearResults();
 	nameInput.value = "";
 	numberInput.value = "";
@@ -495,10 +498,16 @@ async function scanPhoto(imageFile) {
 
 	searchButton.disabled = false;
 	if (reading.photo) {
-		lastPhoto = { picture: reading.photo, textArea: reading.textArea, setName: reading.setName || "" };
+		lastPhoto = {
+			picture: reading.photo,
+			textArea: reading.textArea,
+			cardBox: reading.cardBox || null,
+			setName: reading.setName || "",
+		};
 	}
 	nameInput.value = reading.name;
 	numberInput.value = reading.number;
+	scannedNumbers = { shown: reading.number, guesses: reading.numberGuesses || [] };
 	if (!reading.name && !reading.number) {
 		hideProgress();
 		setStatus("readFailed", {}, "error");
@@ -568,8 +577,16 @@ async function searchForCard() {
 	showProgress(null);
 	searchButton.disabled = true;
 	try {
-		const found = await findCards(nameInput.value, numberInput.value, lastPhoto !== null);
+		// The reader's other number guesses only count while the number box still shows its reading:
+		// once the viewer types their own number, that is the one to use.
+		const guesses = numberInput.value.trim() === scannedNumbers.shown ? scannedNumbers.guesses : [];
+		const found = await findCards(nameInput.value, numberInput.value, lastPhoto !== null, guesses);
 		if (searchId !== latestSearchId) return;   // a newer photo or search took over
+		// Another of the guesses was the right number: show that one.
+		if (found.matchedNumber && found.matchedNumber !== numberInput.value.trim()) {
+			numberInput.value = found.matchedNumber;
+			scannedNumbers.shown = found.matchedNumber;
+		}
 		showNumberHint(found);
 		if (found.cards.length === 0) {
 			hideProgress();
@@ -585,12 +602,13 @@ async function searchForCard() {
 		} else {
 			// Several cards fit the text: let the photo pick the one that looks most like it.
 			setStatus("comparingPictures");
-			const ranked = await rankByLook(lastPhoto.picture, lastPhoto.textArea, found.cards);
+			const ranked = await rankByLook(lastPhoto.picture, lastPhoto.textArea, found.cards, lastPhoto.cardBox);
 			if (searchId !== latestSearchId) return;
 			hideProgress();
 			let cards = ranked.map((entry) => entry.card);
 			// Only trust looks alone when the reader also found where the card sits in the photo.
-			let clear = lastPhoto.textArea !== null && isClearWinner(ranked);
+			const cardLocated = lastPhoto.cardBox !== null || lastPhoto.textArea !== null;
+			let clear = cardLocated && isClearWinner(ranked);
 			// Claude also names the set. If exactly one candidate is from that set, that settles it.
 			const fromSet = cards.filter((card) => sameSetName(card.set.name, lastPhoto.setName));
 			if (fromSet.length === 1) {
@@ -621,7 +639,8 @@ function showNumberHint(found) {
 	// The collector number is what tells apart the many cards with the same name.
 	const name = longestWord(nameInput.value);
 	const { number } = parseCollectorNumber(numberInput.value);
-	if (!name || found.cards.length === 0) return;
+	// Found by the set's size alone: one card fits, so there is nothing to fix.
+	if (!name || found.cards.length === 0 || found.setSizeFound) return;
 	let hint = null;
 	if (number && !found.exactFound) {
 		hint = { key: "numberNotFound", values: { name: name, number: numberInput.value.trim() } };

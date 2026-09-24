@@ -29,9 +29,12 @@ const WHOLE_PHOTO_HEIGHTS = [0.6, 0.75, 0.9];
 const CLEAR_WINNER_GAP = 2;
 
 // Returns [{ card, distance }] sorted with the closest look first. Smaller distance = more alike.
-async function rankByLook(photo, textArea, cards) {
+// cardBox is where the card is in the photo when its yellow border showed it (reader.js);
+// without it, the card's place is estimated from its text.
+async function rankByLook(photo, textArea, cards, cardBox = null) {
 	const photoGrids = [];
-	for (const box of possibleCardBoxes(photo, textArea)) {
+	const boxes = cardBox ? [cardBox] : possibleCardBoxes(photo, textArea);
+	for (const box of boxes) {
 		for (const shiftX of LOOK_SHIFTS) {
 			for (const shiftY of LOOK_SHIFTS) {
 				for (const scale of LOOK_SCALES) {

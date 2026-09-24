@@ -55,6 +55,7 @@ Anthropic.
 | `SETUP-ACCOUNTS.md` | Click-steps for creating the Firebase project |
 | `app.js` | The screen: buttons, results, prices |
 | `dev_reading_test.html` | Development tool, not part of the app (see below) |
+| `dev_real_photos_test.html` | Development tool: runs real photos from the private `dev-local/` folder |
 
 ## Publishing a change
 
@@ -97,7 +98,11 @@ real cards (tilted, badly lit, blurred), runs them through the app and scores th
 The photos are the same every run, so run it before and after changing `reader.js` or
 `matcher.js`.
 
-The number scores there are pessimistic: the fakes are made from 1024-pixel card
+Real photos matter more. Put them in `dev-local/` (never published) and list them, with the
+right answers, in `dev-local/real-photos.json`; then open
+<http://localhost:8765/dev_real_photos_test.html>.
+
+The number scores in the fake-photo test are pessimistic: the fakes are made from 1024-pixel card
 pictures, so their tiny print has far less detail than a real phone photo.
 
 ## Things to know

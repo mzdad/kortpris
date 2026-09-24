@@ -34,6 +34,22 @@ const MAX_NUMBER_OVER_TOTAL = 1.6;
 // For sparkly foil cards: pixels lighter than this (0 = black, 255 = white) are wiped out,
 // leaving only the near-black printed ink. Found on a reverse holo Pikachu (Legendary Collection).
 const INK_CUTOFF = 90;
+// Finding the card: most cards (1999 to 2024) have a bright yellow border, and tables, cloths,
+// sleeves and toploaders don't. The photo is shrunk to this width to count yellow pixels...
+const CARD_FINDER_WIDTH = 300;
+// ...and a row or column counts as border when at least this share of it is yellow.
+// Tuned on real photos of cards in toploaders on a patterned cloth.
+const BORDER_YELLOW_SHARE = 0.4;
+// A card is 63 x 88 mm. A found box further than this from that shape is not a card.
+const CARD_SHAPE = 63 / 88;
+const CARD_SHAPE_TOLERANCE = 0.08;
+// The card is read with this much of the photo around it (share of its size), so nothing
+// printed right at its edge is cut off.
+const CARD_CROP_MARGIN = 0.02;
+// The collector number is printed in this bottom share of the card.
+const NUMBER_STRIP_SHARE = 0.13;
+// At most this many possible numbers are handed on to the search.
+const MAX_NUMBER_GUESSES = 5;
 
 // Ways of telling Tesseract to read. tessedit_pageseg_mode picks how it looks for text:
 // "11" = scattered bits anywhere (suits a card: text between pictures), "6" = one block,
@@ -46,6 +62,9 @@ const READING_MODES = {
 	line: { tessedit_pageseg_mode: "7", thresholding_method: "0" },
 	// For the ink-only copy of a foil card (see inkOnly).
 	ink: { tessedit_pageseg_mode: "6", thresholding_method: "0" },
+	// For the card's bottom strip. Neither way reads every card, so both are used.
+	numberBlock: { tessedit_pageseg_mode: "6", thresholding_method: "0" },
+	numberScattered: { tessedit_pageseg_mode: "11", thresholding_method: "0" },
 };
 
 // Words printed near the name that are never part of it.
@@ -64,9 +83,11 @@ let reportProgress = () => {};
 
 // Reads a photo. onProgress(stage, fraction) is told "starting" first, "loading" while the
 // reader downloads (first time only), then "reading" with a fraction from 0 to 1.
-// Returns { name, nameSure, number, photo, textArea }. nameSure means the name is a known Pokémon.
-// photo is the resized picture and textArea the box around the card's text in it, both used
-// later to compare the card's looks.
+// Returns { name, nameSure, number, numberGuesses, photo, textArea, cardBox }:
+// - nameSure means the name is a known Pokémon.
+// - number is the likeliest collector number; numberGuesses all possible ones, likeliest first.
+// - photo is the resized picture. textArea (around the card's text) and cardBox (the card, found
+//   by its yellow border, or null) are boxes in it, used later to compare the card's looks.
 async function readCardPhoto(imageFile, onProgress = () => {}) {
 	reportProgress = onProgress;
 	onProgress("starting", null);
@@ -75,11 +96,16 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 	const photo = shrinkPhoto(original);
 	const worker = await getOcrWorker();
 
-	const firstRead = await readPage(worker, photo, "scattered");
+	// When the card's yellow border shows where it is, only the card is read - not the table,
+	// cloth or toploader around it, whose patterns look like made-up letters.
+	const cardBox = findYellowCard(photo);
+	const view = cardBox ? cardView(photo, cardBox) : { picture: photo, x0: 0, y0: 0, zoom: 1 };
+
+	const firstRead = await readPage(worker, view.picture, "scattered");
 	let name = guessCardName(firstRead.lines, firstRead.textArea);
-	// No known Pokémon found: read the photo a second time, the other way.
+	// No known Pokémon found: read it a second time, the other way.
 	if (!name.sure) {
-		const secondRead = await readPage(worker, photo, "block");
+		const secondRead = await readPage(worker, view.picture, "block");
 		const secondName = guessCardName(secondRead.lines, secondRead.textArea);
 		if (secondName.sure || !name.text) name = secondName;
 	}
@@ -87,19 +113,117 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 	// Read a copy with only the dark ink left. Glitter can still fake a close-enough name
 	// ("Seel"), so only an exact Pokémon name counts from this read.
 	if (!name.sure) {
-		const inkRead = await readPage(worker, inkOnly(photo), "ink");
+		const inkRead = await readPage(worker, inkOnly(view.picture), "ink");
 		const inkName = guessCardName(inkRead.lines, inkRead.textArea, 0);
 		if (inkName.sure) name = inkName;
 	}
 
-	const number = await readCollectorNumber(worker, original, photo, firstRead);
+	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead);
 	original.close();   // the full-size photo takes a lot of memory; it isn't needed any more
 	return {
 		name: name.text,
 		nameSure: name.sure,
-		number: number,
+		number: numberGuesses[0] || "",
+		numberGuesses: numberGuesses,
 		photo: photo,
-		textArea: firstRead.textArea,
+		textArea: boxInPhoto(firstRead.textArea, view),
+		cardBox: cardBox,
+	};
+}
+
+// ---------- Where the card is ----------
+
+function findYellowCard(photo) {
+	// The card's left and right edges are yellow almost all the way down, and its top and
+	// bottom edges almost all the way across - which no picture on a card is. So the card is
+	// the box between the outermost rows and columns that are mostly yellow.
+	const width = CARD_FINDER_WIDTH;
+	const height = Math.round(photo.height * width / photo.width);
+	const small = document.createElement("canvas");
+	small.width = width;
+	small.height = height;
+	const ctx = small.getContext("2d", { willReadFrequently: true });
+	ctx.drawImage(photo, 0, 0, width, height);
+	const pixels = ctx.getImageData(0, 0, width, height).data;
+	const yellowInColumn = new Array(width).fill(0);
+	const yellowInRow = new Array(height).fill(0);
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const i = (y * width + x) * 4;
+			if (isYellow(pixels[i], pixels[i + 1], pixels[i + 2])) {
+				yellowInColumn[x]++;
+				yellowInRow[y]++;
+			}
+		}
+	}
+	const columns = borderLines(yellowInColumn, height * BORDER_YELLOW_SHARE);
+	const rows = borderLines(yellowInRow, width * BORDER_YELLOW_SHARE);
+	if (columns.length < 2 || rows.length < 2) return null;
+	const scale = photo.width / width;
+	const box = {
+		x0: columns[0] * scale,
+		x1: (columns[columns.length - 1] + 1) * scale,
+		y0: rows[0] * scale,
+		y1: (rows[rows.length - 1] + 1) * scale,
+	};
+	// Not the shape of a card: something else yellow, or a card without a yellow border.
+	const shape = (box.x1 - box.x0) / (box.y1 - box.y0);
+	return Math.abs(shape - CARD_SHAPE) <= CARD_SHAPE_TOLERANCE ? box : null;
+}
+
+function borderLines(yellowCounts, minimum) {
+	// The rows (or columns) that are mostly yellow. A single one on its own is ignored:
+	// a real border is at least two pixels thick at this size.
+	const lines = [];
+	for (let i = 0; i < yellowCounts.length; i++) {
+		const neighbourToo = yellowCounts[i - 1] >= minimum || yellowCounts[i + 1] >= minimum;
+		if (yellowCounts[i] >= minimum && neighbourToo) lines.push(i);
+	}
+	return lines;
+}
+
+function isYellow(red, green, blue) {
+	const brightest = Math.max(red, green, blue);
+	const dimmest = Math.min(red, green, blue);
+	if (brightest < 120 || brightest - dimmest < 70) return false;   // too dark, or too grey
+	// Yellow: a colour between orange and lime on the colour wheel (hue 36 to 68 degrees).
+	const hue = hueOf(red, green, blue, brightest, dimmest);
+	return hue >= 36 && hue <= 68;
+}
+
+function hueOf(red, green, blue, brightest, dimmest) {
+	// Where a colour sits on the colour wheel, 0-360 degrees: red 0, yellow 60, green 120...
+	const range = brightest - dimmest;
+	let sixths;
+	if (brightest === red) sixths = ((green - blue) / range) % 6;
+	else if (brightest === green) sixths = (blue - red) / range + 2;
+	else sixths = (red - green) / range + 4;
+	const hue = sixths * 60;
+	return hue < 0 ? hue + 360 : hue;
+}
+
+function cardView(photo, cardBox) {
+	// The card cut out of the photo, with a little margin, enlarged to the usual reading size.
+	const marginX = (cardBox.x1 - cardBox.x0) * CARD_CROP_MARGIN;
+	const marginY = (cardBox.y1 - cardBox.y0) * CARD_CROP_MARGIN;
+	const area = {
+		x0: Math.max(0, cardBox.x0 - marginX),
+		y0: Math.max(0, cardBox.y0 - marginY),
+		x1: Math.min(photo.width, cardBox.x1 + marginX),
+		y1: Math.min(photo.height, cardBox.y1 + marginY),
+	};
+	const zoom = OCR_TARGET_SIDE_PX / Math.max(area.x1 - area.x0, area.y1 - area.y0);
+	return { picture: cropAndZoom(photo, area, zoom), x0: area.x0, y0: area.y0, zoom: zoom };
+}
+
+function boxInPhoto(box, view) {
+	// A box found in the cut-out card, moved back to where it is in the whole photo.
+	if (!box) return null;
+	return {
+		x0: view.x0 + box.x0 / view.zoom,
+		y0: view.y0 + box.y0 / view.zoom,
+		x1: view.x0 + box.x1 / view.zoom,
+		y1: view.y0 + box.y1 / view.zoom,
 	};
 }
 
@@ -334,28 +458,49 @@ function lettersOnly(text) {
 
 // ---------- The collector number ----------
 
-async function readCollectorNumber(worker, original, photo, page) {
-	// The number is tiny print on one of the card's bottom lines, too small to read in the
-	// whole photo. So each of the lowest lines is read again on its own, enlarged - cut from
-	// the full-size original, which has far more detail than the smaller copy.
+async function readCollectorNumbers(worker, original, photo, cardBox, page) {
+	// The number is tiny print along the card's bottom edge, too small to read in the whole
+	// photo, so that part is read again, enlarged - cut from the full-size original, which has
+	// far more detail. Tiny print is often misread, so this returns every number that seems
+	// possible, likeliest first: the search tries them in turn, and the card database says
+	// which one exists.
 	const toOriginal = original.width / photo.width;
-	if (page.textArea) {
-		for (const band of numberLineBands(page.lines, page.textArea)) {
-			const bandInOriginal = {
-				x0: band.x0 * toOriginal,
-				x1: band.x1 * toOriginal,
-				y0: band.y0 * toOriginal,
-				y1: band.y1 * toOriginal,
-			};
-			await worker.setParameters(READING_MODES.line);
-			const closeUp = cropAndZoom(original, bandInOriginal, NUMBER_ZOOM / toOriginal);
+	// With the card found, its bottom strip is read two ways. Without it, the lowest lines of
+	// text are read one at a time (page.lines are in the photo's own measurements then).
+	let strips = [];
+	let modes = ["line"];
+	if (cardBox) {
+		const height = cardBox.y1 - cardBox.y0;
+		strips = [{ x0: cardBox.x0, x1: cardBox.x1, y0: cardBox.y1 - height * NUMBER_STRIP_SHARE, y1: cardBox.y1 }];
+		modes = ["numberBlock", "numberScattered"];
+	} else if (page.textArea) {
+		strips = numberLineBands(page.lines, page.textArea);
+	}
+
+	const guesses = [];
+	for (const strip of strips) {
+		const stripInOriginal = {
+			x0: strip.x0 * toOriginal,
+			x1: strip.x1 * toOriginal,
+			y0: strip.y0 * toOriginal,
+			y1: strip.y1 * toOriginal,
+		};
+		const closeUp = cropAndZoom(original, stripInOriginal, NUMBER_ZOOM / toOriginal);
+		for (const mode of modes) {
+			await worker.setParameters(READING_MODES[mode]);
 			const result = await worker.recognize(closeUp);
-			const number = findCollectorNumber(result.data.text || "", true);
-			if (number) return number;
+			guesses.push(...numberCandidates(result.data.text || ""));
 		}
 	}
-	// Nothing up close: use whatever the whole-photo read saw, if it had a clear "/" in it.
-	return findCollectorNumber(page.text, false);
+	// Also whatever the first read of the card saw, when it clearly had a "/" in it.
+	guesses.push(...numberCandidates(page.text).filter((guess) => guess.sawSlash));
+
+	// Numbers read with their "/" first, then the ones pieced together from digits; each once.
+	const ordered = [
+		...guesses.filter((guess) => guess.sawSlash),
+		...guesses.filter((guess) => !guess.sawSlash),
+	].map((guess) => guess.number);
+	return [...new Set(ordered)].slice(0, MAX_NUMBER_GUESSES);
 }
 
 function numberLineBands(lines, area) {
@@ -384,38 +529,52 @@ function numberLineBands(lines, area) {
 	return bands;
 }
 
-function findCollectorNumber(text, allowWithoutSlash) {
+// Returns [{ number, sawSlash }]: every collector number that text could hold, like "10/130".
+// sawSlash means a "/" was actually read, which makes it far more trustworthy.
+function numberCandidates(text) {
 	// OCR often reads a zero as the letter O: "4/1O2" -> "4/102".
-	const fixed = text.replace(/(?<=\d)[oO]|[oO](?=\d)/g, "0");
-	// Collector numbers look like "4/102", "006/198" or "TG05/TG30".
-	const withSlash = fixed.match(/([A-Z]{0,3}\d{1,3})\s*\/\s*([A-Z]{0,3}\d{2,3})/);
-	if (withSlash) return withSlash[1] + "/" + withSlash[2];
-	if (!allowWithoutSlash) return "";
-	// Tiny print often loses its "/": "4102" is really "4/102". Only runs of 3 to 6 digits
-	// standing on their own count, so years and long copyright lines are skipped.
-	for (const digits of fixed.match(/(?<!\d)\d{3,6}(?!\d)/g) || []) {
-		const split = splitNumberAndTotal(digits);
-		if (split) return split;
+	let cleaned = text.replace(/(?<=\d)[oO]|[oO](?=\d)/g, "0");
+	// Numbers printed near the collector number that are never it: Pokédex numbers ("#157",
+	// "No. 157"), levels ("LV. 57") and years ("©1995-2000").
+	cleaned = cleaned
+		.replace(/(#|No\.?\s*|LV\.?\s*)\d+/gi, " ")
+		.replace(/(?<!\d)(19|20)\d\d(?!\d)/g, " ");
+
+	const found = [];
+	// "4/102", "006/198", "TG05/TG30". Tiny print can turn the "/" into "|" or "\".
+	for (const match of cleaned.matchAll(/([A-Z]{0,3}\d{1,3})\s*[\/|\\]\s*([A-Z]{0,3}\d{2,3})(?!\d)/g)) {
+		found.push({ number: match[1] + "/" + match[2], sawSlash: true });
 	}
-	return "";
+	// The "/" can also vanish altogether ("4102") or turn into a digit ("107130").
+	for (const digits of cleaned.match(/(?<!\d)\d{4,6}(?!\d)/g) || []) {
+		for (const number of splitNumberAndTotal(digits)) found.push({ number: number, sawSlash: false });
+	}
+	return found;
 }
 
 function splitNumberAndTotal(digits) {
-	// A copyright year like "1999" or "2023" is not a card number.
-	if (/^(19|20)\d\d$/.test(digits)) return "";
+	// Every way a run of digits could be "number/total", likeliest first.
 	// Newer cards pad both halves to three digits: "001132" is "001/132".
-	if (digits.length === 6 && digits.startsWith("0")) return digits.slice(0, 3) + "/" + digits.slice(3);
+	if (digits.length === 6 && digits.startsWith("0")) return [digits.slice(0, 3) + "/" + digits.slice(3)];
 	// Any other leading zero is noise, like "©2025" read as "02025".
-	if (digits.startsWith("0")) return "";
-	// Try "4/102" before "41/02": a set's total is usually three digits.
-	for (const totalLength of [3, 2]) {
-		const number = digits.slice(0, -totalLength);
-		const total = digits.slice(-totalLength);
-		if (number.length < 1 || number.length > 3 || total.startsWith("0")) continue;
-		if (Number(number) === 0 || Number(number) > Number(total) * MAX_NUMBER_OVER_TOTAL) continue;
-		return number + "/" + total;
+	if (digits.startsWith("0")) return [];
+	const splits = [];
+	// The "/" simply lost: "4102" is "4/102". A set's total is usually three digits.
+	addSplit(splits, digits.slice(0, -3), digits.slice(-3));
+	addSplit(splits, digits.slice(0, -2), digits.slice(-2));
+	// The "/" misread as a 7 or a 1 - both look a lot like it: "107130" is "10/130".
+	for (let i = 1; i < digits.length - 1; i++) {
+		if (digits[i] === "7" || digits[i] === "1") addSplit(splits, digits.slice(0, i), digits.slice(i + 1));
 	}
-	return "";
+	return splits;
+}
+
+function addSplit(splits, number, total) {
+	if (number.length < 1 || number.length > 3 || total.length < 2 || total.length > 3) return;
+	if (total.startsWith("0") || Number(number) === 0) return;
+	if (Number(number) > Number(total) * MAX_NUMBER_OVER_TOTAL) return;
+	const text = number + "/" + total;
+	if (!splits.includes(text)) splits.push(text);
 }
 
 function cropAndZoom(picture, box, zoom) {

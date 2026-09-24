@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kortpris real photo test</title>
+<style>
+	body { font: 14px/1.45 system-ui, sans-serif; margin: 0; padding: 16px; background: #EDF0F5; color: #141C28; }
+	h1 { font-size: 1.3rem; margin: 0 0 4px; }
+	p { margin: 0 0 12px; max-width: 75ch; }
+	#summary { font-weight: 700; font-size: 1.05rem; }
+	.table-wrap { overflow-x: auto; }
+	table { border-collapse: collapse; background: #fff; }
+	th, td { padding: 6px 10px; border-bottom: 1px solid #D6DCE6; text-align: left; vertical-align: top; }
+	th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #586579; }
+	td img { width: 90px; display: block; }
+	.pass { color: #1E7A4C; font-weight: 700; }
+	.fail { color: #B3261E; font-weight: 700; }
+	code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Kortpris real photo test</h1>
+<p>Development tool, not part of the app. Runs real phone photos through the app's reader and search.
+The photos live in <code>dev-local/</code>, which is never published, listed with the right answers in
+<code>dev-local/real-photos.json</code>. The last column shows where the card was found and every number the reader thought
+possible.</p>
+<p id="summary">Running…</p>
+<div class="table-wrap">
+	<table>
+		<thead><tr><th>Photo</th><th>Card</th><th>Name read</th><th>Number read</th><th>Found</th><th>Seconds</th><th>Card box · number guesses</th></tr></thead>
+		<tbody id="rows"></tbody>
+	</table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
+<script src="pokemon-names.js?v=1.8.0"></script>
+<script src="reader.js?v=1.8.0"></script>
+<script src="cards.js?v=1.8.0"></script>
+<script src="matcher.js?v=1.8.0"></script>
+<script>
+"use strict";
+
+const PHOTO_LIST_URL = "dev-local/real-photos.json";
+
+const rows = document.getElementById("rows");
+const summary = document.getElementById("summary");
+
+runAllPhotos();
+
+async function runAllPhotos() {
+	let photos;
+	try {
+		photos = await fetch(PHOTO_LIST_URL, { cache: "no-store" }).then((response) => response.json());
+	} catch (error) {
+		summary.textContent = "No private photos found: add them to dev-local/ and list them in " + PHOTO_LIST_URL;
+		return;
+	}
+	const scores = { total: 0, name: 0, number: 0, found: 0 };
+	for (const photo of photos) {
+		const file = await fetch("dev-local/" + photo.file, { cache: "no-store" }).then((response) => response.blob());
+		const started = performance.now();
+		const reading = await readCardPhoto(file);
+		const nameOk = longestWord(reading.name).toLowerCase() === longestWord(photo.name).toLowerCase();
+		const numberOk = sameNumber(reading.number, photo.number);
+		let foundAt = -1;
+		let matched = "";
+		try {
+			const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
+			const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
+			foundAt = ranked.findIndex((entry) => entry.card.id === photo.id);
+			if (found.matchedNumber) matched = "database confirmed " + found.matchedNumber;
+			if (found.setSizeFound) matched = "found by name + set size";
+		} catch (error) {
+			console.error(error);
+		}
+		const seconds = (performance.now() - started) / 1000;
+		const box = reading.cardBox;
+		const lines = [
+			box ? "yellow border " + [box.x0, box.x1, box.y0, box.y1].map(Math.round).join(", ") : "no yellow border",
+			"guesses: " + (reading.numberGuesses.join(", ") || "(none)"),
+		];
+		if (matched) lines.push(matched);
+		const strips = lines.join("\n");
+		scores.total++;
+		if (nameOk) scores.name++;
+		if (numberOk) scores.number++;
+		if (foundAt === 0) scores.found++;
+		addRow(file, photo, reading, nameOk, numberOk, foundAt, seconds, strips);
+		summary.textContent = "Running… " + scores.total + " of " + photos.length;
+	}
+	const line = "Name read " + scores.name + "/" + scores.total
+		+ " · number read " + scores.number + "/" + scores.total
+		+ " · right card shown first " + scores.found + "/" + scores.total;
+	summary.textContent = line;
+	console.log("REAL PHOTO TEST: " + line);
+	window.testScores = scores;   // lets a script read the result
+}
+
+function sameNumber(read, expected) {
+	const a = parseCollectorNumber(read);
+	const b = parseCollectorNumber(expected);
+	return a.number !== "" && a.number === b.number && a.total === b.total;
+}
+
+function addRow(file, photo, reading, nameOk, numberOk, foundAt, seconds, strips) {
+	const tr = document.createElement("tr");
+	const thumb = document.createElement("img");
+	thumb.src = URL.createObjectURL(file);
+	const cells = [
+		thumb,
+		photo.id + " · " + photo.name + " " + photo.number,
+		mark(nameOk, reading.name || "(nothing)"),
+		mark(numberOk, reading.number || "(nothing)"),
+		mark(foundAt === 0, foundAt >= 0 ? "position " + (foundAt + 1) : "not found"),
+		seconds.toFixed(1),
+		"<code>" + escapeText(strips) + "</code>",
+	];
+	for (const content of cells) {
+		const td = document.createElement("td");
+		if (content instanceof Node) td.append(content);
+		else td.innerHTML = content;
+		tr.append(td);
+	}
+	rows.append(tr);
+}
+
+function mark(ok, text) {
+	return `<span class="${ok ? "pass" : "fail"}">${ok ? "PASS" : "FAIL"}</span> <code>${escapeText(text)}</code>`;
+}
+
+function escapeText(text) {
+	return String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+}
+</script>
+</body>
+</html>
