@@ -717,11 +717,13 @@ function fixMisreadName(card, guesses) {
 	// A card was opened although the name and number read didn't both fit it, so one of them was
 	// misread. If the card has one of the numbers the reader saw, the number was right and the
 	// name was wrong (a glittery "Pikachu" read as "Pokéman"): show the card's real name and
-	// number, and take back the hint to check the number.
-	const numberRead = [numberInput.value, ...guesses].find((text) => sameCollectorNumber(card, text));
+	// number, and take back the hint to check the number. The same goes when only the set size
+	// could be read ("?/110") and the card is from a set of that size.
+	const numberRead = [numberInput.value, ...guesses].find((text) => sameCollectorNumber(card, text))
+		|| [numberInput.value, ...guesses].find((text) => onlySetSizeFits(card, text));
 	if (!numberRead) return;
 	nameInput.value = card.name;
-	numberInput.value = numberRead.trim();
+	numberInput.value = sameCollectorNumber(card, numberRead) ? numberRead.trim() : card.number + "/" + card.set.printedTotal;
 	scannedNumbers.shown = numberInput.value;
 	setNotice(null);
 	numberInput.classList.remove("needs-attention");
@@ -731,6 +733,12 @@ function sameCollectorNumber(card, numberText) {
 	const read = parseCollectorNumber(numberText);
 	const printed = parseCollectorNumber(card.number + "/" + card.set.printedTotal);
 	return read.number !== "" && read.number === printed.number && read.total === printed.total;
+}
+
+function onlySetSizeFits(card, numberText) {
+	// "?/110": the card's own number couldn't be read, but its set size could.
+	const read = parseCollectorNumber(numberText);
+	return read.number === "" && read.total !== "" && read.total === String(card.set.printedTotal);
 }
 
 function showNumberHint(found) {

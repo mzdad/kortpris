@@ -228,7 +228,8 @@ function shrink(source, box, width, height) {
 		const half = document.createElement("canvas");
 		half.width = Math.round(boxWidth / 2);
 		half.height = Math.round(boxHeight / 2);
-		half.getContext("2d").drawImage(current, x, y, boxWidth, boxHeight, 0, 0, half.width, half.height);
+		// Drawn by the processor, so every PC gets the same pixels (see shrinkPhoto in reader.js).
+		half.getContext("2d", { willReadFrequently: true }).drawImage(current, x, y, boxWidth, boxHeight, 0, 0, half.width, half.height);
 		current = half;
 		x = 0;
 		y = 0;

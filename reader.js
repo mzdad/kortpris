@@ -67,6 +67,8 @@ const INK_HARD_CUTOFF = 0.72;
 const INK_BACKGROUND_BLUR = 1 / 25;
 // At most this many possible numbers are handed on to the search.
 const MAX_NUMBER_GUESSES = 5;
+// Stands in for a card's own number when only the set size after the "/" could be read: "?/110".
+const UNREAD_NUMBER = "?";
 
 // Ways of telling Tesseract to read. tessedit_pageseg_mode picks how it looks for text:
 // "11" = scattered bits anywhere (suits a card: text between pictures), "6" = one block,
@@ -204,7 +206,13 @@ function shrinkPhoto(original) {
 	const canvas = document.createElement("canvas");
 	canvas.width = Math.round(original.width * scale);
 	canvas.height = Math.round(original.height * scale);
-	canvas.getContext("2d").drawImage(original, 0, 0, canvas.width, canvas.height);
+	// willReadFrequently makes the browser draw with the processor instead of the graphics card.
+	// Graphics cards resize pictures a tiny bit differently from PC to PC, and a tiny difference
+	// can turn "86/110" into "0/110" - drawn this way, the same photo reads the same everywhere.
+	const ctx = canvas.getContext("2d", { willReadFrequently: true });
+	// "high" blends neighbouring pixels smoothly: a tiny scan enlarged this way still reads.
+	ctx.imageSmoothingQuality = "high";
+	ctx.drawImage(original, 0, 0, canvas.width, canvas.height);
 	return canvas;
 }
 
@@ -418,7 +426,7 @@ async function readCollectorNumbers(worker, original, photo, cardBox, page, view
 	if (cardBox) {
 		guesses = await readNumberPlaces(worker, original, scaleBox(cardBox, toOriginal));
 	}
-	if (!guesses.some((guess) => guess.sawSlash) && page.textArea) {
+	if (!sawWholeNumber(guesses) && page.textArea) {
 		// Without the card's outline, or when the number wasn't where the outline says, the
 		// lowest lines of text are read one at a time instead. (page was read from view, the
 		// card cut out of the photo, so its lines are moved back to where they are in the photo.)
@@ -457,7 +465,7 @@ async function readNumberPlaces(worker, original, card) {
 			guesses.push(...oncePerNumber(numberCandidates(result.data.text || "")));
 		}
 		const agreed = likeliestVotes(guesses)[0];
-		if (agreed && agreed.sawSlash && agreed.votes >= 2) break;
+		if (agreed && agreed.sawSlash && isWholeNumber(agreed.number) && agreed.votes >= 2) break;
 	}
 	return guesses;
 }
@@ -477,8 +485,9 @@ function likeliestNumbers(guesses) {
 }
 
 function likeliestVotes(guesses) {
-	// Each number once, with how many reads found it. Numbers read with their "/" come first,
-	// then the ones more reads agreed on, then the ones found earliest.
+	// Each number once, with how many reads found it. Numbers read with their "/" come first
+	// (whole ones before "?/110", which only has the set size), then the ones more reads agreed
+	// on, then the ones found earliest.
 	const tally = new Map();
 	guesses.forEach((guess, order) => {
 		if (!tally.has(guess.number)) tally.set(guess.number, { number: guess.number, sawSlash: false, votes: 0, order: order });
@@ -487,7 +496,19 @@ function likeliestVotes(guesses) {
 		if (guess.sawSlash) entry.sawSlash = true;
 	});
 	return [...tally.values()].sort((a, b) =>
-		Number(b.sawSlash) - Number(a.sawSlash) || b.votes - a.votes || a.order - b.order);
+		Number(b.sawSlash) - Number(a.sawSlash)
+		|| Number(isWholeNumber(b.number)) - Number(isWholeNumber(a.number))
+		|| b.votes - a.votes
+		|| a.order - b.order);
+}
+
+function isWholeNumber(number) {
+	// "86/110" is whole; "?/110" lost its own number and only tells the set size.
+	return !number.startsWith(UNREAD_NUMBER);
+}
+
+function sawWholeNumber(guesses) {
+	return guesses.some((guess) => guess.sawSlash && isWholeNumber(guess.number));
 }
 
 function scaleBox(box, scale) {
@@ -622,7 +643,10 @@ function numberCandidates(text) {
 	// "4/102", "006/198", "TG05/TG30". Tiny print can turn the "/" into "|" or "\".
 	for (const match of cleaned.matchAll(/([A-Z]{0,3}\d{1,3})\s*[\/|\\]\s*([A-Z]{0,3}\d{2,3})(?!\d)/g)) {
 		if (Number(match[2]) > MAX_SET_SIZE) continue;   // plain digits only; "TG30" gives NaN
-		found.push({ number: match[1] + "/" + match[2], sawSlash: true });
+		// No card is number 0, so "0/110" is a misread number - but the set size after the "/"
+		// is still worth keeping: the search can compare the photo with every card of that size.
+		const number = /^0+$/.test(match[1]) ? UNREAD_NUMBER : match[1];
+		found.push({ number: number + "/" + match[2], sawSlash: true });
 	}
 	// The "/" can also vanish altogether ("4102") or turn into a digit ("107130").
 	for (const digits of cleaned.match(/(?<!\d)\d{4,6}(?!\d)/g) || []) {
@@ -685,7 +709,7 @@ function cropAndZoom(picture, box, zoom) {
 	const result = document.createElement("canvas");
 	result.width = Math.max(1, Math.round((x1 - x0) * zoom));
 	result.height = Math.max(1, Math.round((y1 - y0) * zoom));
-	const ctx = result.getContext("2d");
+	const ctx = result.getContext("2d", { willReadFrequently: true });   // same on every PC (see shrinkPhoto)
 	ctx.imageSmoothingQuality = "high";
 	ctx.drawImage(picture, x0, y0, x1 - x0, y1 - y0, 0, 0, result.width, result.height);
 	return result;

@@ -17,8 +17,15 @@ A web page with nothing to install. What happens to a photo:
    [Pokémon TCG API](https://pokemontcg.io); every number the reader thought possible is
    tried, and the database says which one exists. A right number also finds a card whose
    name was misread, and the name is then corrected. If no number fits, the candidates are sorted by
-   how much their picture looks like the photo, and a clear winner opens by itself. The
+   how much their picture looks like the photo, and a clear winner opens by itself. When
+   both the name and the card's own number are unreadable but the set size isn't (shown as
+   `?/110`), the photo is compared with every card from a set of that size. The
    fields stay editable, so a card can also be typed in.
+
+   All drawing on canvases uses the processor (`willReadFrequently`), not the graphics card:
+   graphics cards resize pictures slightly differently from PC to PC, and tiny print on foil
+   cards reads differently after even a tiny change (one PC read `86/110`, another `0/110`,
+   from the same photo).
 3. **Card → prices.** Prices from **Cardmarket** (Europe, euros, also shown in kroner)
    and **TCGplayer** (USA, dollars), with links to both shops.
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total

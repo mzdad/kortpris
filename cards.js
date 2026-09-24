@@ -73,28 +73,48 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 	// search goes into one pile, and the pictures decide - helped by the set sizes read, which
 	// are often right even when the card's own number isn't (see pickBestMatch in matcher.js).
 	// The set size alone doesn't settle it: a misread size can fit one card by pure chance.
+	const looserAttempts = attempts.filter((attempt) => !attempt.exact);
+	// The other numbers read are searched without the name too: a glittery "Pikachu" read as
+	// "Pokéman" means the name is the misread part.
+	for (const guess of guesses) {
+		const parsed = parseCollectorNumber(guess);
+		const alreadyInAttempts = parsed.number === number && parsed.total === total;
+		if (!parsed.number || !parsed.total || alreadyInAttempts) continue;
+		looserAttempts.push({ query: "number:" + parsed.number + " set.printedTotal:" + parsed.total });
+	}
 	const pile = new Map();
 	let totalCount = 0;
-	for (const attempt of attempts) {
-		if (attempt.exact) continue;
+	for (const attempt of looserAttempts) {
 		const pageSize = attempt.loose ? WIDE_PAGE_SIZE : RESULTS_PAGE_SIZE;
 		const page = await fetchCardPage(attempt.query, pageSize);
 		for (const card of page.cards) pile.set(card.id, card);
 		totalCount = Math.max(totalCount, page.totalCount);
 	}
+	// None of those cards is from a set of the size read ("?/110" - the number itself was
+	// unreadable): then the name was misread as well. Compare the photo with every card from a
+	// set of that size - the set size is the one thing the reader saw for sure.
+	let description = { key: "matchByLook", values: {} };
+	const likeliestSize = parseCollectorNumber(guesses[0] || "").total;
+	const pileHasSize = [...pile.values()].some((card) => String(card.set.printedTotal) === likeliestSize);
+	if (likeliestSize && !pileHasSize) {
+		const page = await fetchCardPage("set.printedTotal:" + likeliestSize, WIDE_PAGE_SIZE);
+		for (const card of page.cards) pile.set(card.id, card);
+		if (page.cards.length > 0) description = { key: "matchSetSizeLook", values: { total: likeliestSize } };
+	}
 	const cards = [...pile.values()];
 	return {
 		cards: cards,
-		description: cards.length > 0 ? { key: "matchByLook", values: {} } : null,
+		description: cards.length > 0 ? description : null,
 		totalCount: Math.max(totalCount, cards.length),
 		exactFound: false,
 		setSizes: setSizes,
 	};
 }
 
-// True when there is enough to search on: a name or a number.
+// True when there is enough to search on: a name, a number, or at least a set size ("?/110").
 function canSearch(name, numberText) {
-	return longestWord(name) !== "" || parseCollectorNumber(numberText).number !== "";
+	const { number, total } = parseCollectorNumber(numberText);
+	return longestWord(name) !== "" || number !== "" || total !== "";
 }
 
 function longestWord(name) {
