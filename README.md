@@ -9,12 +9,14 @@ A web page with nothing to install. What happens to a photo:
 1. **Photo → text.** [Tesseract.js](https://github.com/naptha/tesseract.js) reads the
    card's name and collector number (like `4/102`) on the phone itself. The name is
    checked against all 1025 Pokémon names, so small misreads get corrected. The card is
-   found in the photo by its yellow border, and the number is then read again from the
-   full-size photo, in the two small corners where it is printed, several different ways
-   (one of them with only the black ink kept, which hides coloured backgrounds and glitter).
+   found in the photo by its yellow border, or, for silver-bordered and foil cards, by its
+   shape (`card-finder.js`). The number is then read again from the full-size photo, in the
+   two small corners where it is printed, several different ways (one of them with only the
+   black ink kept, which hides coloured backgrounds and glitter).
 2. **Text → card.** The name and number are looked up in the free
    [Pokémon TCG API](https://pokemontcg.io); every number the reader thought possible is
-   tried, and the database says which one exists. If none does, the candidates are sorted by
+   tried, and the database says which one exists. A right number also finds a card whose
+   name was misread, and the name is then corrected. If no number fits, the candidates are sorted by
    how much their picture looks like the photo, and a clear winner opens by itself. The
    fields stay editable, so a card can also be typed in.
 3. **Card → prices.** Prices from **Cardmarket** (Europe, euros, also shown in kroner)
@@ -43,6 +45,7 @@ Anthropic.
 | `style.css` | Colours, fonts, spacing |
 | `strings.js` | Every text in English and Danish - edit wordings here |
 | `pokemon-names.js` | All Pokémon names, used to correct misreads |
+| `card-finder.js` | Finds where the card is in the photo (yellow border, or shape) |
 | `reader.js` | Photo → name and number |
 | `cards.js` | Searches the price database |
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |

@@ -34,10 +34,11 @@ possible.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.10.0"></script>
-<script src="reader.js?v=1.10.0"></script>
-<script src="cards.js?v=1.10.0"></script>
-<script src="matcher.js?v=1.10.0"></script>
+<script src="pokemon-names.js?v=1.11.0"></script>
+<script src="card-finder.js?v=1.11.0"></script>
+<script src="reader.js?v=1.11.0"></script>
+<script src="cards.js?v=1.11.0"></script>
+<script src="matcher.js?v=1.11.0"></script>
 <script>
 "use strict";
 
@@ -56,6 +57,9 @@ async function runAllPhotos() {
 		summary.textContent = "No private photos found: add them to dev-local/ and list them in " + PHOTO_LIST_URL;
 		return;
 	}
+	// ?only=IMG_1988,IMG_1990 runs just the photos whose file names contain one of those.
+	const only = new URLSearchParams(location.search).get("only");
+	if (only) photos = photos.filter((photo) => only.split(",").some((part) => photo.file.includes(part)));
 	const scores = { total: 0, name: 0, number: 0, found: 0, openedRight: 0, openedWrong: 0 };
 	for (const photo of photos) {
 		const file = await fetch("dev-local/" + photo.file, { cache: "no-store" }).then((response) => response.blob());
@@ -89,7 +93,7 @@ async function runAllPhotos() {
 		const seconds = (performance.now() - started) / 1000;
 		const box = reading.cardBox;
 		const lines = [
-			box ? "yellow border " + [box.x0, box.x1, box.y0, box.y1].map(Math.round).join(", ") : "no yellow border",
+			box ? "card found by " + box.foundBy + ": " + [box.x0, box.x1, box.y0, box.y1].map(Math.round).join(", ") : "card not found in the photo",
 			"guesses: " + (reading.numberGuesses.join(", ") || "(none)"),
 		];
 		if (matched) lines.push(matched);

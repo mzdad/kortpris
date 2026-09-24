@@ -22,7 +22,7 @@ const ART_BOTTOM = 0.47;
 // A card is 63 mm wide and 88 mm tall.
 const CARD_ASPECT = 63 / 88;
 // The card's place in the photo is never exact, so the artwork is also tried a little shifted,
-// bigger and smaller, and the best fit counts. With the card found by its yellow border, small
+// bigger and smaller, and the best fit counts. With the card found by its border or shape, small
 // nudges are enough; when its place is only estimated from its text, a wider search is needed.
 const FOUND_SHIFTS = [-0.02, 0, 0.02];
 const FOUND_SCALES = [0.96, 1, 1.04];
@@ -46,7 +46,7 @@ const CLEAR_WINNER_GAP = 2;
 const SET_SIZE_LOOK_SLACK = 1.5;
 
 // Returns [{ card, distance }] sorted with the closest look first. Smaller distance = more alike.
-// cardBox is where the card is in the photo when its yellow border showed it (reader.js);
+// cardBox is where the card is in the photo, when card-finder.js found it;
 // without it, the card's place is estimated from its text. onProgress(done, total) is told
 // after each candidate's picture: with a few hundred of them, this takes a while.
 async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = () => {}) {

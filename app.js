@@ -594,6 +594,7 @@ async function searchForCard() {
 		} else if (found.cards.length === 1) {
 			hideProgress();
 			setStatus("foundOne");
+			if (!found.exactFound) fixMisreadName(found.cards[0], guesses);
 			showResults(found.cards, found.description, found.cards[0].id, null);
 		} else if (!lastPhoto) {
 			hideProgress();
@@ -616,6 +617,7 @@ async function searchForCard() {
 			const best = cards[0].id;
 			if (pick.clear) {
 				setStatus("bestMatchOpened");
+				fixMisreadName(cards[0], guesses);
 				showResults(cards, found.description, best, best);
 			} else {
 				setStatus("foundManyByLook", { count: cards.length });
@@ -630,6 +632,26 @@ async function searchForCard() {
 	} finally {
 		if (searchId === latestSearchId) searchButton.disabled = false;
 	}
+}
+
+function fixMisreadName(card, guesses) {
+	// A card was opened although the name and number read didn't both fit it, so one of them was
+	// misread. If the card has one of the numbers the reader saw, the number was right and the
+	// name was wrong (a glittery "Pikachu" read as "Pokéman"): show the card's real name and
+	// number, and take back the hint to check the number.
+	const numberRead = [numberInput.value, ...guesses].find((text) => sameCollectorNumber(card, text));
+	if (!numberRead) return;
+	nameInput.value = card.name;
+	numberInput.value = numberRead.trim();
+	scannedNumbers.shown = numberInput.value;
+	setNotice(null);
+	numberInput.classList.remove("needs-attention");
+}
+
+function sameCollectorNumber(card, numberText) {
+	const read = parseCollectorNumber(numberText);
+	const printed = parseCollectorNumber(card.number + "/" + card.set.printedTotal);
+	return read.number !== "" && read.number === printed.number && read.total === printed.total;
 }
 
 function showNumberHint(found) {

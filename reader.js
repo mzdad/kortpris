@@ -36,15 +36,6 @@ const MAX_SET_SIZE = 400;
 // For sparkly foil cards: pixels lighter than this (0 = black, 255 = white) are wiped out,
 // leaving only the near-black printed ink. Found on a reverse holo Pikachu (Legendary Collection).
 const INK_CUTOFF = 90;
-// Finding the card: most cards (1999 to 2024) have a bright yellow border, and tables, cloths,
-// sleeves and toploaders don't. The photo is shrunk to this width to count yellow pixels...
-const CARD_FINDER_WIDTH = 300;
-// ...and a row or column counts as border when at least this share of it is yellow.
-// Tuned on real photos of cards in toploaders on a patterned cloth.
-const BORDER_YELLOW_SHARE = 0.4;
-// A card is 63 x 88 mm. A found box further than this from that shape is not a card.
-const CARD_SHAPE = 63 / 88;
-const CARD_SHAPE_TOLERANCE = 0.08;
 // The card is read with this much of the photo around it (share of its size), so nothing
 // printed right at its edge is cut off.
 const CARD_CROP_MARGIN = 0.02;
@@ -113,7 +104,8 @@ let reportProgress = () => {};
 // - nameSure means the name is a known Pokémon.
 // - number is the likeliest collector number; numberGuesses all possible ones, likeliest first.
 // - photo is the resized picture. textArea (around the card's text) and cardBox (the card, found
-//   by its yellow border, or null) are boxes in it, used later to compare the card's looks.
+//   by its border or shape, or null - see card-finder.js) are boxes in it, used later to
+//   compare the card's looks.
 async function readCardPhoto(imageFile, onProgress = () => {}) {
 	reportProgress = onProgress;
 	onProgress("starting", null);
@@ -122,9 +114,9 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 	const photo = shrinkPhoto(original);
 	const worker = await getOcrWorker();
 
-	// When the card's yellow border shows where it is, only the card is read - not the table,
-	// cloth or toploader around it, whose patterns look like made-up letters.
-	const cardBox = findYellowCard(photo);
+	// When it is clear where the card is, only the card is read - not the table, cloth or
+	// toploader around it, whose patterns look like made-up letters.
+	const cardBox = findYellowCard(photo) || findCardByShape(photo);
 	const view = cardBox ? cardView(photo, cardBox) : { picture: photo, x0: 0, y0: 0, zoom: 1 };
 
 	const firstRead = await readPage(worker, view.picture, "scattered");
@@ -144,7 +136,7 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 		if (inkName.sure) name = inkName;
 	}
 
-	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead);
+	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead, view);
 	original.close();   // the full-size photo takes a lot of memory; it isn't needed any more
 	return {
 		name: name.text,
@@ -157,77 +149,7 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 	};
 }
 
-// ---------- Where the card is ----------
-
-function findYellowCard(photo) {
-	// The card's left and right edges are yellow almost all the way down, and its top and
-	// bottom edges almost all the way across - which no picture on a card is. So the card is
-	// the box between the outermost rows and columns that are mostly yellow.
-	const width = CARD_FINDER_WIDTH;
-	const height = Math.round(photo.height * width / photo.width);
-	const small = document.createElement("canvas");
-	small.width = width;
-	small.height = height;
-	const ctx = small.getContext("2d", { willReadFrequently: true });
-	ctx.drawImage(photo, 0, 0, width, height);
-	const pixels = ctx.getImageData(0, 0, width, height).data;
-	const yellowInColumn = new Array(width).fill(0);
-	const yellowInRow = new Array(height).fill(0);
-	for (let y = 0; y < height; y++) {
-		for (let x = 0; x < width; x++) {
-			const i = (y * width + x) * 4;
-			if (isYellow(pixels[i], pixels[i + 1], pixels[i + 2])) {
-				yellowInColumn[x]++;
-				yellowInRow[y]++;
-			}
-		}
-	}
-	const columns = borderLines(yellowInColumn, height * BORDER_YELLOW_SHARE);
-	const rows = borderLines(yellowInRow, width * BORDER_YELLOW_SHARE);
-	if (columns.length < 2 || rows.length < 2) return null;
-	const scale = photo.width / width;
-	const box = {
-		x0: columns[0] * scale,
-		x1: (columns[columns.length - 1] + 1) * scale,
-		y0: rows[0] * scale,
-		y1: (rows[rows.length - 1] + 1) * scale,
-	};
-	// Not the shape of a card: something else yellow, or a card without a yellow border.
-	const shape = (box.x1 - box.x0) / (box.y1 - box.y0);
-	return Math.abs(shape - CARD_SHAPE) <= CARD_SHAPE_TOLERANCE ? box : null;
-}
-
-function borderLines(yellowCounts, minimum) {
-	// The rows (or columns) that are mostly yellow. A single one on its own is ignored:
-	// a real border is at least two pixels thick at this size.
-	const lines = [];
-	for (let i = 0; i < yellowCounts.length; i++) {
-		const neighbourToo = yellowCounts[i - 1] >= minimum || yellowCounts[i + 1] >= minimum;
-		if (yellowCounts[i] >= minimum && neighbourToo) lines.push(i);
-	}
-	return lines;
-}
-
-function isYellow(red, green, blue) {
-	const brightest = Math.max(red, green, blue);
-	const dimmest = Math.min(red, green, blue);
-	if (brightest < 120 || brightest - dimmest < 70) return false;   // too dark, or too grey
-	// Yellow: a colour between orange and lime on the colour wheel (hue 28 to 68 degrees).
-	// Warm indoor light makes a yellow border look orange to the camera, down to about 31.
-	const hue = hueOf(red, green, blue, brightest, dimmest);
-	return hue >= 28 && hue <= 68;
-}
-
-function hueOf(red, green, blue, brightest, dimmest) {
-	// Where a colour sits on the colour wheel, 0-360 degrees: red 0, yellow 60, green 120...
-	const range = brightest - dimmest;
-	let sixths;
-	if (brightest === red) sixths = ((green - blue) / range) % 6;
-	else if (brightest === green) sixths = (blue - red) / range + 2;
-	else sixths = (red - green) / range + 4;
-	const hue = sixths * 60;
-	return hue < 0 ? hue + 360 : hue;
-}
+// ---------- Where the card is (see card-finder.js for finding it) ----------
 
 function cardView(photo, cardBox) {
 	// The card cut out of the photo, with a little margin, enlarged to the usual reading size.
@@ -485,7 +407,7 @@ function lettersOnly(text) {
 
 // ---------- The collector number ----------
 
-async function readCollectorNumbers(worker, original, photo, cardBox, page) {
+async function readCollectorNumbers(worker, original, photo, cardBox, page, view) {
 	// The number is tiny print along the card's bottom edge, too small to read in the whole
 	// photo, so that part is read again, enlarged - cut from the full-size original, which has
 	// far more detail. Tiny print is often misread, so this returns every number that seems
@@ -495,12 +417,15 @@ async function readCollectorNumbers(worker, original, photo, cardBox, page) {
 	let guesses = [];
 	if (cardBox) {
 		guesses = await readNumberPlaces(worker, original, scaleBox(cardBox, toOriginal));
-	} else if (page.textArea) {
-		// Without the card's outline, the lowest lines of text are read one at a time instead
-		// (page.lines are in the photo's own measurements).
+	}
+	if (!guesses.some((guess) => guess.sawSlash) && page.textArea) {
+		// Without the card's outline, or when the number wasn't where the outline says, the
+		// lowest lines of text are read one at a time instead. (page was read from view, the
+		// card cut out of the photo, so its lines are moved back to where they are in the photo.)
 		await worker.setParameters(READING_MODES.line);
 		for (const strip of numberLineBands(page.lines, page.textArea)) {
-			const closeUp = cropAndZoom(original, scaleBox(strip, toOriginal), NUMBER_ZOOM / toOriginal);
+			const stripInPhoto = boxInPhoto(strip, view);
+			const closeUp = cropAndZoom(original, scaleBox(stripInPhoto, toOriginal), NUMBER_ZOOM / toOriginal);
 			const result = await worker.recognize(closeUp);
 			guesses.push(...oncePerNumber(numberCandidates(result.data.text || "")));
 		}
