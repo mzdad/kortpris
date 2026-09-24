@@ -415,6 +415,120 @@ footer p:empty { display: none; }
 }
 .actionbar-inner { max-width: 34rem; margin-inline: auto; display: grid; grid-template-columns: 1fr auto; gap: 10px; }
 
+/* ---------- Reading aloud ---------- */
+.name-row { display: flex; align-items: flex-start; gap: 10px; }
+.name-row .detail-name { flex: 1; }
+.total-row { display: flex; align-items: center; gap: 12px; }
+.read-aloud {
+	flex: none;
+	width: 48px; height: 48px;
+	font-size: 1.4rem; line-height: 1;
+	border-radius: 50%; border: 1px solid var(--line);
+	background: var(--surface-2); color: var(--ink);
+	cursor: pointer;
+}
+.read-aloud:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+
+/* ---------- Kids mode: big pictures, few words (switched on by the class on <body>) ---------- */
+.kids-button {
+	font: inherit; font-size: 0.85rem; font-weight: 700;
+	min-height: 36px; padding: 0 12px;
+	border-radius: 999px; border: 1px solid var(--line);
+	background: var(--surface); color: var(--ink);
+	cursor: pointer;
+}
+.kids-button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent-edge); }
+.kids-button:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; }
+
+/* The grown-up parts: typing, settings, price tables and small print. */
+body.kids .tagline,
+body.kids .steps,
+body.kids #example-button,
+body.kids #search-form,
+body.kids #claude-settings,
+body.kids #notice,
+body.kids #results-note,
+body.kids .result-set,
+body.kids .badge,
+body.kids .currency-select,
+body.kids .collection-summary .stat-sub,
+body.kids .collection-summary .updated,
+body.kids .collection-summary .fineprint,
+body.kids .refresh-row,
+body.kids .saved-meta,
+body.kids #collection-where,
+body.kids #account-panel,
+body.kids footer p:not(.app-version),
+body.kids .button-words { display: none; }
+/* Before the first photo, the big start picture says it all. */
+body.kids .lookup:has(.scan-row.no-photo) { display: none; }
+
+body.kids { --bar-height: 100px; }
+body.kids .status { font-size: 1.25rem; font-weight: 700; }
+body.kids .actionbar .button { min-height: 68px; font-size: 1.3rem; }
+body.kids .actionbar .icon { font-size: 1.6rem; }
+body.kids .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+body.kids .result-name { font-size: 1rem; }
+
+.kid-start { display: none; }
+body.kids .kid-start {
+	display: grid; justify-items: center; gap: 14px;
+	width: 100%; padding: 26px 16px;
+	font: inherit; font-size: 1.4rem; font-weight: 800; color: var(--ink);
+	background: var(--surface);
+	border: 3px dashed var(--accent-edge); border-radius: var(--radius);
+	cursor: pointer;
+}
+body.kids .kid-start:focus-visible { outline: 3px solid var(--link); outline-offset: 3px; }
+.kid-start-picture { width: 160px; height: 160px; }
+.kid-start-picture .viewfinder { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; }
+.kid-start-picture .card-edge { fill: var(--accent); }
+.kid-start-picture .card-body { fill: var(--surface-2); }
+.kid-start-picture .card-art { fill: #7FA7E0; }
+.kid-start-picture .card-line { fill: var(--muted); opacity: 0.5; }
+
+.kid-card { display: grid; gap: 16px; justify-items: center; text-align: center; }
+.kid-card-image { width: min(64vw, 240px); }
+.kid-card .name-row { align-items: center; justify-content: center; }
+.kid-card .detail-name { flex: none; font-size: 2.3rem; }
+.kid-worth { display: grid; gap: 8px; justify-items: center; }
+.kid-price { margin: 0; font-size: 2.1rem; font-weight: 800; font-stretch: 85%; line-height: 1.1; }
+.kid-save { width: 100%; min-height: 64px; font-size: 1.3rem; }
+
+/* How valuable a card is, as 1 to 5 gold coins. */
+.coins { display: flex; gap: 6px; }
+.coin { width: 32px; height: 32px; border-radius: 50%; border: 3px dashed var(--line); }
+.coin.filled {
+	border: 2px solid #A67C00;
+	background: radial-gradient(circle at 35% 35%, #FFEB99, #F5C518 55%, #C99A00);
+	box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+.saved-info .coins { gap: 3px; margin: 2px 0; }
+.saved-info .coin { width: 16px; height: 16px; border-width: 2px; }
+
+/* The versions of a card, each with a little picture of where it glitters. */
+.kid-versions { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.kid-version {
+	font: inherit; color: inherit;
+	display: grid; justify-items: center; gap: 4px;
+	padding: 12px;
+	background: var(--surface-2);
+	border: 3px solid transparent; border-radius: 14px;
+	cursor: pointer;
+}
+.kid-version[aria-pressed="true"] { border-color: var(--accent-edge); }
+.kid-version:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+.kid-version-name { font-weight: 700; }
+.kid-version-price { font-size: 1.15rem; font-weight: 800; }
+.version-picture { width: 48px; height: 67px; }
+.version-picture .card-edge { fill: var(--accent); }
+.version-picture .card-body { fill: var(--surface); }
+.version-picture .card-art { fill: #7FA7E0; }
+.version-picture .card-line { fill: var(--muted); opacity: 0.5; }
+.version-picture .shine { fill: url(#shine); }
+.version-picture .stamp { fill: var(--ink); }
+.version-picture .sparkle { fill: #FFFFFF; }
+
 @media (prefers-reduced-motion: reduce) {
 	.progress.indeterminate .progress-bar { animation: none; width: 100%; opacity: 0.5; }
 	.progress-bar { transition: none; }

@@ -13,6 +13,46 @@ const EXAMPLE_CARD_IMAGE = "https://images.pokemontcg.io/base1/4_hires.png";
 const LANGUAGE_STORAGE_KEY = "kortpris.language";
 // Claude's word for a card's finish, and the version (price) that goes with it.
 const CLAUDE_FINISH_VERSIONS = { holo: "holofoil", reverse_holo: "reverseHolofoil", normal: "normal" };
+// Where the phone remembers whether kids mode is on.
+const KIDS_MODE_STORAGE_KEY = "kortpris.kidsMode";
+// Kids mode shows a card's value as 1 to 5 coins: one more coin from each of these prices, in
+// euros (about 4, 22, 110 and 520 kroner). Five coins also gets a "Wow!".
+const COIN_STEPS_EUR = [0.5, 3, 15, 70];
+const MOST_COINS = 5;
+// In kids mode every status message is swapped for a short one...
+const KID_STATUS = {
+	statusIdle: "kidIdle",
+	readerStarting: "kidBusy",
+	readerStartingSlow: "kidBusy",
+	reading: "kidBusy",
+	claudeReading: "kidBusy",
+	downloadingExample: "kidBusy",
+	lookingUp: "kidBusy",
+	comparingPictures: "kidBusy",
+	comparingProgress: "kidBusy",
+	foundOne: "kidFound",
+	bestMatchOpened: "kidFound",
+	foundMany: "kidPickOne",
+	foundManyByLook: "kidPickOne",
+	noMatch: "kidNotFound",
+	readFailed: "kidNotFound",
+	unsureName: "kidNotFound",
+	needNameOrNumber: "kidNotFound",
+	claudeNotACard: "kidNotFound",
+	apiDown: "kidTryLater",
+	exampleFailed: "kidTryLater",
+};
+// ...with a picture, so it can be understood without reading...
+const KID_STATUS_ICONS = {
+	kidIdle: "📷", kidBusy: "🔎", kidFound: "🎉", kidPickOne: "👇", kidNotFound: "🤔", kidTryLater: "⏳",
+};
+// ...and these are also said out loud. (A found card is said with its name and value instead.)
+const KID_SPOKEN = {
+	kidBusy: "sayLooking",
+	kidPickOne: "sayPickOne",
+	kidNotFound: "sayNotFound",
+	kidTryLater: "sayTryLater",
+};
 
 // TCGplayer splits prices by print version: [its name for the version, our text key].
 const TCGPLAYER_VARIANTS = [
@@ -89,11 +129,14 @@ const phoneCardsOffer = document.getElementById("phone-cards-offer");
 const phoneCardsText = document.getElementById("phone-cards-text");
 const moveCardsButton = document.getElementById("move-cards");
 const accountMessageText = document.getElementById("account-message");
+const kidsButton = document.getElementById("kids-button");
+const kidStartButton = document.getElementById("kid-start");
 
 // ---------- What is on screen right now ----------
 // Kept as plain data so everything can be redrawn when the language changes.
 
 let language = startLanguage();
+let kidsMode = readStorage(KIDS_MODE_STORAGE_KEY) === "on";   // big pictures, few words, read aloud
 let currency = startCurrency();   // the currency picked in the menu (currency.js)
 let money = makeMoneyFormats(language, shownCurrency());
 let statusMessage = { key: "statusIdle", values: {}, tone: "" };
@@ -179,6 +222,13 @@ function makeMoneyFormats(lang, code) {
 			minimumFractionDigits: decimals,
 			maximumFractionDigits: decimals,
 		}),
+		// Rounded prices for kids mode: "33 kr." rather than "32,89 kr.".
+		whole: new Intl.NumberFormat(locale, {
+			style: "currency",
+			currency: code,
+			minimumFractionDigits: 0,
+			maximumFractionDigits: 0,
+		}),
 	};
 }
 
@@ -197,6 +247,9 @@ function localPrice(eur, usd) {
 
 function applyLanguage() {
 	document.documentElement.lang = language;
+	// Kids mode is mostly style.css hiding the grown-up parts, keyed on this class.
+	document.body.classList.toggle("kids", kidsMode);
+	kidsButton.setAttribute("aria-pressed", String(kidsMode));
 	money = makeMoneyFormats(language, shownCurrency());
 	currencySelect.value = currency;
 
@@ -249,13 +302,28 @@ for (const button of languageButtons) {
 
 // ---------- Buttons ----------
 
-cameraButton.addEventListener("click", () => {
-	showView("scan");
-	cameraInput.click();
-});
+cameraButton.addEventListener("click", openCamera);
+kidStartButton.addEventListener("click", openCamera);
 libraryButton.addEventListener("click", () => {
 	showView("scan");
+	if (kidsMode) say(t("sayChoosePhoto"));
 	libraryInput.click();
+});
+
+function openCamera() {
+	showView("scan");
+	// Said from the button press on purpose: iPhones only let a page start speaking from a tap,
+	// and after this first time it may also speak by itself when the card is found.
+	if (kidsMode) say(t("sayTakePhoto"));
+	cameraInput.click();
+}
+
+kidsButton.addEventListener("click", () => {
+	kidsMode = !kidsMode;
+	writeStorage(KIDS_MODE_STORAGE_KEY, kidsMode ? "on" : "off");
+	applyLanguage();
+	if (kidsMode) say(t("sayKidsModeOn"));
+	else stopSpeaking();
 });
 cameraInput.addEventListener("change", () => takeFileFrom(cameraInput));
 libraryInput.addEventListener("change", () => takeFileFrom(libraryInput));
@@ -286,6 +354,7 @@ resultsGrid.addEventListener("click", (event) => {
 	chosenVersion = null;
 	renderResults();
 	scrollToDetail();
+	if (kidsMode) sayCard(shownCards.find((card) => card.id === selectedCardId));
 });
 
 detail.addEventListener("click", (event) => {
@@ -295,12 +364,18 @@ detail.addEventListener("click", (event) => {
 	if (versionButton) {
 		chosenVersion = versionButton.dataset.version;
 		renderResults();
+		if (kidsMode) sayCard(card);
+		return;
+	}
+	if (event.target.closest("[data-action='read-aloud']")) {
+		sayCard(card);
 		return;
 	}
 	if (!event.target.closest("[data-action='add-to-collection']") || !collectionReady()) return;
 	saveFailed = !addToCollection(card, versionOf(card).key);
 	renderResults();
 	renderCollection();
+	if (kidsMode && !saveFailed) say(t("saySaved"));
 });
 
 for (const button of viewButtons) {
@@ -427,6 +502,10 @@ collectionList.addEventListener("click", (event) => {
 });
 
 collectionSummary.addEventListener("click", async (event) => {
+	if (event.target.closest("[data-action='read-aloud']")) {
+		sayCollection();
+		return;
+	}
 	if (!event.target.closest("[data-action='refresh']") || refreshingPrices) return;
 	refreshingPrices = true;
 	refreshMessage = null;
@@ -682,6 +761,8 @@ function showResults(cards, description, openId, bestId) {
 	selectedCardId = openId;
 	bestMatchId = bestId;
 	renderResults();
+	const opened = cards.find((card) => card.id === openId);
+	if (kidsMode && opened) sayCard(opened);
 }
 
 function clearResults() {
@@ -696,7 +777,9 @@ function renderResults() {
 	// Draws the grid of matches and the open card's prices from the data above.
 	const selectedCard = shownCards.find((card) => card.id === selectedCardId);
 	detail.hidden = !selectedCard;
-	detail.innerHTML = selectedCard ? cardDetailHtml(selectedCard) : "";
+	let detailHtml = "";
+	if (selectedCard) detailHtml = kidsMode ? kidCardDetailHtml(selectedCard) : cardDetailHtml(selectedCard);
+	detail.innerHTML = detailHtml;
 
 	results.hidden = shownCards.length < 2;
 	if (shownCards.length < 2) {
@@ -755,7 +838,10 @@ function cardDetailHtml(card) {
 		<div class="detail-head">
 			<img class="card-image" src="${escapeHtml(readablePictureUrl(card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
 			<div>
-				<h2 class="detail-name">${escapeHtml(card.name)}</h2>
+				<div class="name-row">
+					<h2 class="detail-name">${escapeHtml(card.name)}</h2>
+					${readAloudButtonHtml()}
+				</div>
 				<p class="detail-meta">${meta.join(" · ")}</p>
 			</div>
 		</div>
@@ -817,10 +903,12 @@ function findOrAddVersion(versions, keys, newKey) {
 	return version;
 }
 
-// The version the viewer picked, or else the card's main one (the first with a Cardmarket price).
+// The version the viewer picked, or else the card's main one: the first with a Cardmarket price,
+// and not the reverse holo if there is another, because most copies of a card are the regular print.
 function versionOf(card, pickedKey = chosenVersion || versionHint) {
 	const versions = cardVersions(card);
 	return versions.find((version) => version.key === pickedKey)
+		|| versions.find((version) => version.eur !== null && version.key !== "reverseHolofoil")
 		|| versions.find((version) => version.eur !== null)
 		|| versions[0]
 		|| { key: "normal", eur: null, usd: null };
@@ -958,6 +1046,159 @@ function storeLinkHtml(url, text) {
 	return `<a class="store-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">${text} ↗</a>`;
 }
 
+// ---------- Kids mode and reading aloud ----------
+// For children who can't read well yet: the card's picture and name, a row of coins for how
+// valuable it is, one rounded price and big buttons - and the phone says it out loud.
+
+function kidCardDetailHtml(card) {
+	const versions = cardVersions(card);
+	const version = versionOf(card);
+	const owned = savedCount(card.id, version.key);
+	const ownedNote = owned > 0 ? `<p class="own-note">${t("kidHave", { count: owned })}</p>` : "";
+	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
+	return `
+		<div class="kid-card">
+			<img class="card-image kid-card-image" src="${escapeHtml(readablePictureUrl(card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
+			<div class="name-row">
+				<h2 class="detail-name">${escapeHtml(card.name)}</h2>
+				${readAloudButtonHtml()}
+			</div>
+			${kidWorthHtml(version)}
+			${versions.length > 1 ? kidVersionsHtml(versions, version.key) : ""}
+			<button type="button" class="button primary kid-save" data-action="add-to-collection" ${collectionReady() ? "" : "disabled"}>
+				<span aria-hidden="true">⭐</span> ${t(owned > 0 ? "kidSaveAnother" : "kidSave")}
+			</button>
+			${ownedNote}
+			${saveProblem}
+		</div>`;
+}
+
+function kidWorthHtml(version) {
+	const local = localPrice(version.eur, version.usd);
+	if (local === null) return `<p class="kid-price">${t("noPrice")}</p>`;
+	return `
+		<div class="kid-worth">
+			${coinsHtml(coinCount(version.eur, version.usd))}
+			<p class="kid-price">${kidPriceText(local)}</p>
+		</div>`;
+}
+
+function kidVersionsHtml(versions, chosenKey) {
+	// The versions as big buttons, each with a little picture of where that card glitters.
+	const buttons = versions.map((version) => {
+		const local = localPrice(version.eur, version.usd);
+		return `
+			<button type="button" class="kid-version" data-version="${version.key}" aria-pressed="${version.key === chosenKey}">
+				${versionPictureHtml(version.key)}
+				<span class="kid-version-name">${t(version.key)}</span>
+				<span class="kid-version-price">${local === null ? t("noPrice") : kidPriceText(local)}</span>
+			</button>`;
+	});
+	return `<div class="kid-versions">${buttons.join("")}</div>`;
+}
+
+function versionPictureHtml(key) {
+	// A little card showing where this version glitters: on the picture (holo), everywhere but
+	// the picture (reverse holo), or nowhere. 1st edition cards also get their round stamp.
+	const shinyPicture = ["holofoil", "firstEditionHolofoil", "unlimitedHolofoil"].includes(key);
+	const shinyCard = key === "reverseHolofoil";
+	let sparkles = "";
+	if (shinyPicture) sparkles = sparkleHtml(10, 10) + sparkleHtml(20, 16);
+	if (shinyCard) sparkles = sparkleHtml(7, 25) + sparkleHtml(23, 27) + sparkleHtml(21, 36);
+	const stamp = key.startsWith("firstEdition") ? `<circle class="stamp" cx="8" cy="24" r="2.6"/>` : "";
+	return `
+		<svg class="version-picture" viewBox="0 0 30 42" aria-hidden="true">
+			<rect class="card-edge" x="0" y="0" width="30" height="42" rx="3"/>
+			<rect class="${shinyCard ? "shine" : "card-body"}" x="2.5" y="2.5" width="25" height="37" rx="1.5"/>
+			<rect class="${shinyPicture ? "shine" : "card-art"}" x="5" y="6" width="20" height="14" rx="1"/>
+			<rect class="card-line" x="5" y="29" width="16" height="2" rx="1"/>
+			<rect class="card-line" x="5" y="33" width="11" height="2" rx="1"/>
+			${stamp}
+			${sparkles}
+		</svg>`;
+}
+
+function sparkleHtml(x, y) {
+	// A small four-pointed star.
+	return `<path class="sparkle" d="M${x} ${y - 2.4}L${x + 0.7} ${y - 0.7}L${x + 2.4} ${y}L${x + 0.7} ${y + 0.7}L${x} ${y + 2.4}L${x - 0.7} ${y + 0.7}L${x - 2.4} ${y}L${x - 0.7} ${y - 0.7}Z"/>`;
+}
+
+function coinsHtml(count) {
+	const coins = [];
+	for (let coin = 1; coin <= MOST_COINS; coin++) {
+		coins.push(`<span class="coin${coin <= count ? " filled" : ""}"></span>`);
+	}
+	return `<div class="coins" role="img" aria-label="${t("coins", { count: count })}">${coins.join("")}</div>`;
+}
+
+function coinCount(eur, usd) {
+	// 1 to 5 coins (see COIN_STEPS_EUR), or 0 when the price isn't known.
+	let value = null;
+	if (eur > 0) value = eur;
+	else if (usd > 0) value = fromDollars(usd, "EUR");
+	if (value === null) return 0;
+	return 1 + COIN_STEPS_EUR.filter((step) => value >= step).length;
+}
+
+function friendlyAmount(value) {
+	// A price rounded the way people say it - 33, 230, 1500 - or null for less than 1.
+	if (value < 1) return null;
+	if (value < 100) return Math.round(value);
+	const step = 10 ** (Math.floor(Math.log10(value)) - 1);   // keeps the first two digits
+	return Math.round(value / step) * step;
+}
+
+function kidPriceText(local) {
+	const rounded = friendlyAmount(local);
+	if (rounded === null) return t("kidPriceUnder", { price: money.whole.format(1) });
+	return t("kidPriceAbout", { price: money.whole.format(rounded) });
+}
+
+function readAloudButtonHtml() {
+	if (!canSpeak()) return "";
+	return `<button type="button" class="read-aloud" data-action="read-aloud" aria-label="${t("readAloud")}" title="${t("readAloud")}">🔊</button>`;
+}
+
+function say(text) {
+	speak(text, language);
+}
+
+function stopSpeaking() {
+	if (canSpeak()) speechSynthesis.cancel();
+}
+
+function sayCard(card) {
+	if (card) say(cardSentence(card));
+}
+
+function cardSentence(card) {
+	// "Pikachu, Reverse holo. It's worth about 1500 kroner." The version is only named when the
+	// card comes in more than one.
+	const version = versionOf(card);
+	const local = localPrice(version.eur, version.usd);
+	if (local === null) return t("sayNoPrice", { name: card.name });
+	const values = { name: card.name, version: t(version.key), price: spokenMoney(local) };
+	const sentence = cardVersions(card).length > 1 ? t("sayWorthVersion", values) : t("sayWorth", values);
+	return coinCount(version.eur, version.usd) === MOST_COINS ? t("sayWow", { sentence: sentence }) : sentence;
+}
+
+function spokenMoney(amount) {
+	const rounded = friendlyAmount(amount);
+	if (rounded === null) return t("spokenUnder", { amount: moneyWords(1) });
+	return t("spokenAbout", { amount: moneyWords(rounded) });
+}
+
+function moneyWords(amount) {
+	// Plain digits ("1500 kroner") are read out better than money formatting ("1.500,00 kr.").
+	return amount + " " + t((amount === 1 ? "unitOne" : "unitMany") + money.code);
+}
+
+function sayCollection() {
+	const totals = collectionTotals();
+	if (totals.cards === 0) say(t("sayCollectionEmpty"));
+	else say(t("sayCollection", { price: spokenMoney(totals.value) }));
+}
+
 // ---------- My cards ----------
 
 function showView(view) {
@@ -999,7 +1240,10 @@ function collectionSummaryHtml(totals) {
 		: "";
 	return `
 		<span class="stat-label">${t("totalValue")}</span>
-		<span class="total-value">${money.local.format(totals.value)}</span>
+		<span class="total-row">
+			<span class="total-value">${money.local.format(totals.value)}</span>
+			${readAloudButtonHtml()}
+		</span>
 		<span class="stat-sub">${countText} · ${t("valueBasis")}</span>
 		${updatedHtml(totals.oldestUpdate)}
 		${unpriced}
@@ -1022,11 +1266,14 @@ function savedCardHtml(entry) {
 	const id = escapeHtml(entry.id);
 	const version = entry.version ? escapeHtml(entry.version) : "";
 	const versionName = entry.version ? " · " + t(entry.version) : "";
+	const coins = coinCount(entry.priceEur, entry.priceUsd);
+	const kidCoins = kidsMode && coins > 0 ? coinsHtml(coins) : "";
 	return `
 		<li class="saved-card">
 			<img class="card-image" src="${escapeHtml(readablePictureUrl(entry.image))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
 			<div class="saved-info">
 				<span class="saved-name">${escapeHtml(entry.name)}</span>
+				${kidCoins}
 				<span class="saved-meta">${escapeHtml(entry.setName)} · <span class="mono">${escapeHtml(entry.number)}</span>${versionName}</span>
 				<span class="saved-price">${t("each", { price: each })}${lineTotal}</span>
 			</div>
@@ -1156,12 +1403,19 @@ function showNotice() {
 // ---------- Small helpers ----------
 
 function setStatus(key, values = {}, tone = "") {
+	const kidKeyBefore = KID_STATUS[statusMessage.key];
 	statusMessage = { key, values, tone };
 	showStatus();
+	// In kids mode each new kind of message is also said out loud: once, not at every step.
+	const kidKey = KID_STATUS[key];
+	if (kidsMode && kidKey !== kidKeyBefore && KID_SPOKEN[kidKey]) say(t(KID_SPOKEN[kidKey]));
 }
 
 function showStatus() {
-	statusText.textContent = t(statusMessage.key, statusMessage.values);
+	const kidKey = kidsMode ? KID_STATUS[statusMessage.key] : null;
+	statusText.textContent = kidKey
+		? KID_STATUS_ICONS[kidKey] + " " + t(kidKey)
+		: t(statusMessage.key, statusMessage.values);
 	statusText.classList.toggle("error", statusMessage.tone === "error");
 }
 

@@ -24,6 +24,15 @@ A web page with nothing to install. What happens to a photo:
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
    value in kroner. Without an account it is kept in the phone's browser only.
 
+**Kids mode.** The 🧒 button at the top switches on a mode for children who can't read well
+yet: one big picture to tap for the camera, the card with 1 to 5 gold coins for how valuable
+it is, one rounded price, versions as little pictures of where the card glitters, and a big
+Save button. Typing, settings, price tables and accounts are hidden (sign a child in first,
+in normal mode). The phone also says everything out loud in Danish or English ("Pikachu. It's
+worth about 33 kroner."), with its own built-in voice (`speech.js`): free, and nothing is sent
+anywhere. The 🔊 buttons read aloud in normal mode too. iPhones only let a page speak after a
+tap, so the first words come from pressing the camera button.
+
 **Accounts.** Each person can have a username and password, and their My cards is then kept
 online and shows up on every phone they sign in on. Passwords must be at least 10
 characters and pass the [zxcvbn](https://github.com/dropbox/zxcvbn) guessability check.
@@ -44,6 +53,7 @@ Anthropic.
 | `index.html` | The page layout |
 | `style.css` | Colours, fonts, spacing |
 | `strings.js` | Every text in English and Danish - edit wordings here |
+| `speech.js` | Reads text aloud with the phone's own voice |
 | `pokemon-names.js` | All Pokémon names, used to correct misreads |
 | `card-finder.js` | Finds where the card is in the photo (yellow border, or shape) |
 | `reader.js` | Photo → name and number |

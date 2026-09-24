@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="style.css?v=1.11.0">
+<link rel="stylesheet" href="style.css?v=1.12.0">
 </head>
 <body>
 
@@ -23,6 +23,9 @@
 		</svg>
 		<h1 class="brand">Kortpris</h1>
 		<div class="header-controls">
+			<button type="button" id="kids-button" class="kids-button" aria-pressed="false" data-label="kidsModeLabel">
+				<span aria-hidden="true">🧒</span> <span data-text="kidsMode"></span>
+			</button>
 			<div class="language-switch" role="group" data-label="languageSwitch">
 				<button type="button" data-language="da" lang="da" aria-pressed="false">DA</button>
 				<button type="button" data-language="en" lang="en" aria-pressed="false">EN</button>
@@ -39,9 +42,11 @@
 	</header>
 
 	<div class="view-switch" role="group" data-label="views">
-		<button type="button" data-view="scan" aria-pressed="true" data-text="viewScan"></button>
+		<button type="button" data-view="scan" aria-pressed="true">
+			<span class="icon" aria-hidden="true">📷</span> <span data-text="viewScan"></span>
+		</button>
 		<button type="button" data-view="collection" aria-pressed="false">
-			<span data-text="viewCollection"></span> <span id="collection-count" class="count"></span>
+			<span class="icon" aria-hidden="true">⭐</span> <span data-text="viewCollection"></span> <span id="collection-count" class="count"></span>
 		</button>
 	</div>
 
@@ -53,6 +58,18 @@
 				<li><span><strong data-text="step3Verb"></strong><span data-text="step3Rest"></span></span></li>
 			</ol>
 			<button id="example-button" class="text-button" type="button" data-text="tryExample"></button>
+			<!-- Kids mode only: a big picture to tap instead of reading the steps above. -->
+			<button id="kid-start" class="kid-start" type="button">
+				<svg class="kid-start-picture" viewBox="0 0 120 120" aria-hidden="true">
+					<path class="viewfinder" d="M8 30V14a6 6 0 0 1 6-6h16M90 8h16a6 6 0 0 1 6 6v16M112 90v16a6 6 0 0 1-6 6H90M30 112H14a6 6 0 0 1-6-6V90"/>
+					<rect class="card-edge" x="35" y="20" width="50" height="70" rx="4"/>
+					<rect class="card-body" x="39" y="24" width="42" height="62" rx="2"/>
+					<rect class="card-art" x="43" y="31" width="34" height="24" rx="1.5"/>
+					<rect class="card-line" x="43" y="61" width="30" height="4" rx="2"/>
+					<rect class="card-line" x="43" y="69" width="22" height="4" rx="2"/>
+				</svg>
+				<span class="kid-start-text"><span aria-hidden="true">📷</span> <span data-text="kidIdle"></span></span>
+			</button>
 		</section>
 
 		<section class="panel lookup" data-label="yourCard">
@@ -172,33 +189,50 @@
 	</footer>
 </main>
 
+<!-- The rainbow glitter on the little version pictures in kids mode (see versionPictureHtml in app.js). -->
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+	<defs>
+		<linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+			<stop offset="0" stop-color="#FF8FD8"/>
+			<stop offset="0.35" stop-color="#8FD3FF"/>
+			<stop offset="0.65" stop-color="#B8FF9F"/>
+			<stop offset="1" stop-color="#FFE38F"/>
+		</linearGradient>
+	</defs>
+</svg>
+
 <nav class="actionbar" data-label="scanBar">
 	<div class="actionbar-inner">
-		<button id="camera-button" class="button primary" type="button" data-text="takePhoto"></button>
-		<button id="library-button" class="button secondary" type="button" data-text="choosePhoto"></button>
+		<button id="camera-button" class="button primary" type="button">
+			<span class="icon" aria-hidden="true">📷</span> <span data-text="takePhoto"></span>
+		</button>
+		<button id="library-button" class="button secondary" type="button" data-label="choosePhoto">
+			<span class="icon" aria-hidden="true">🖼️</span> <span class="button-words" data-text="choosePhoto"></span>
+		</button>
 	</div>
 	<!-- capture="environment" opens the back camera directly; the second input opens the photo library -->
 	<input id="camera-input" class="visually-hidden" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
 	<input id="library-input" class="visually-hidden" type="file" accept="image/*" tabindex="-1" aria-hidden="true">
 </nav>
 
-<!-- Our own files (these, and style.css at the top) end in ?v=1.11.0. Change it on every
+<!-- Our own files (these, and style.css at the top) end in ?v=1.12.0. Change it on every
      release (see README), so phones never mix new and old files from their cache. -->
 <!-- Tesseract reads text out of pictures (OCR = optical character recognition). -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="strings.js?v=1.11.0"></script>
-<script src="pokemon-names.js?v=1.11.0"></script>
-<script src="storage.js?v=1.11.0"></script>
-<script src="currency.js?v=1.11.0"></script>
-<script src="firebase-config.js?v=1.11.0"></script>
-<script src="password.js?v=1.11.0"></script>
-<script src="account.js?v=1.11.0"></script>
-<script src="card-finder.js?v=1.11.0"></script>
-<script src="reader.js?v=1.11.0"></script>
-<script src="cards.js?v=1.11.0"></script>
-<script src="matcher.js?v=1.11.0"></script>
-<script src="collection.js?v=1.11.0"></script>
-<script src="claude.js?v=1.11.0"></script>
-<script src="app.js?v=1.11.0"></script>
+<script src="strings.js?v=1.12.0"></script>
+<script src="pokemon-names.js?v=1.12.0"></script>
+<script src="storage.js?v=1.12.0"></script>
+<script src="currency.js?v=1.12.0"></script>
+<script src="firebase-config.js?v=1.12.0"></script>
+<script src="password.js?v=1.12.0"></script>
+<script src="account.js?v=1.12.0"></script>
+<script src="speech.js?v=1.12.0"></script>
+<script src="card-finder.js?v=1.12.0"></script>
+<script src="reader.js?v=1.12.0"></script>
+<script src="cards.js?v=1.12.0"></script>
+<script src="matcher.js?v=1.12.0"></script>
+<script src="collection.js?v=1.12.0"></script>
+<script src="claude.js?v=1.12.0"></script>
+<script src="app.js?v=1.12.0"></script>
 </body>
 </html>
