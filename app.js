@@ -609,19 +609,12 @@ async function searchForCard() {
 			});
 			if (searchId !== latestSearchId) return;
 			hideProgress();
-			let cards = ranked.map((entry) => entry.card);
-			// Only trust looks alone when the reader also found where the card sits in the photo.
+			// Only trust looks when the reader also found where the card sits in the photo.
 			const cardLocated = lastPhoto.cardBox !== null || lastPhoto.textArea !== null;
-			let clear = cardLocated && isClearWinner(ranked);
-			// Claude also names the set. If exactly one candidate is from that set, that settles it.
-			const fromSet = cards.filter((card) => sameSetName(card.set.name, lastPhoto.setName));
-			if (fromSet.length === 1) {
-				cards = [fromSet[0], ...cards.filter((card) => card !== fromSet[0])];
-				clear = true;
-			}
-			cards = cards.slice(0, RESULTS_PAGE_SIZE);
+			const pick = pickBestMatch(ranked, cardLocated, found.setSizes, lastPhoto.setName);
+			const cards = pick.cards.slice(0, RESULTS_PAGE_SIZE);
 			const best = cards[0].id;
-			if (clear) {
+			if (pick.clear) {
 				setStatus("bestMatchOpened");
 				showResults(cards, found.description, best, best);
 			} else {
@@ -643,8 +636,7 @@ function showNumberHint(found) {
 	// The collector number is what tells apart the many cards with the same name.
 	const name = longestWord(nameInput.value);
 	const { number } = parseCollectorNumber(numberInput.value);
-	// Found by the set's size alone: one card fits, so there is nothing to fix.
-	if (!name || found.cards.length === 0 || found.setSizeFound) return;
+	if (!name || found.cards.length === 0) return;
 	let hint = null;
 	if (number && !found.exactFound) {
 		hint = { key: "numberNotFound", values: { name: name, number: numberInput.value.trim() } };
@@ -1127,10 +1119,6 @@ function renderClaudeSettings() {
 	claudeRemoveButton.hidden = !on;
 	claudeMessage.textContent = claudeMessageKey ? t(claudeMessageKey) : "";
 	claudeMessage.classList.toggle("error", claudeMessageKey === "claudeKeyShape" || claudeMessageKey === "claudeSaveFailed");
-}
-
-function sameSetName(a, b) {
-	return lettersOnly(a || "") !== "" && lettersOnly(a || "") === lettersOnly(b || "");
 }
 
 function setNotice(key, values = {}) {

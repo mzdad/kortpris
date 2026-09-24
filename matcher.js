@@ -40,6 +40,10 @@ const WHOLE_PHOTO_HEIGHTS = [0.6, 0.75, 0.9];
 // times further from the photo. In dev_reading_test.html (artwork comparison, version 1.9.0),
 // right picks scored 2.1 to 12.9 and wrong picks never more than 1.13.
 const CLEAR_WINNER_GAP = 2;
+// A card from a set of the size the reader saw beats the best-looking card when it looks
+// nearly as alike: at most this many times further from the photo. Cards with the very same
+// artwork score within about 1.13 of each other; a different card at least twice as far.
+const SET_SIZE_LOOK_SLACK = 1.5;
 
 // Returns [{ card, distance }] sorted with the closest look first. Smaller distance = more alike.
 // cardBox is where the card is in the photo when its yellow border showed it (reader.js);
@@ -98,6 +102,39 @@ function isClearWinner(ranked) {
 	// A picture that failed to load scores Infinity; that proves nothing either way.
 	if (!Number.isFinite(ranked[0].distance) || !Number.isFinite(ranked[1].distance)) return false;
 	return ranked[1].distance >= ranked[0].distance * CLEAR_WINNER_GAP;
+}
+
+// Decides what to show after rankByLook. Returns { cards, clear }: the cards in order, best
+// first, and whether the first is sure enough to open without asking.
+// - located: the reader found where the card sits in the photo, so its looks can be trusted.
+// - setSizes: set sizes the reader saw ("102" of 8/102). They are often right even when the
+//   card's own number isn't - but not always, so the picture has to agree.
+// - setName: the set's name, when Claude read the card.
+function pickBestMatch(ranked, located, setSizes = [], setName = "") {
+	if (ranked.length === 0) return { cards: [], clear: false };
+	const cards = ranked.map((entry) => entry.card);
+	// Claude names the set. If exactly one candidate is from that set, that settles it.
+	const fromSet = cards.filter((card) => sameSetName(card.set.name, setName));
+	if (fromSet.length === 1) return { cards: moveToFront(cards, fromSet[0]), clear: true };
+	if (!located) return { cards: cards, clear: false };
+
+	// Among the cards that look nearly as much like the photo as the best one, exactly one
+	// comes from a set of a size the reader saw: that is the one.
+	const best = ranked[0].distance;
+	const lookAlikes = ranked.filter((entry) =>
+		Number.isFinite(entry.distance) && entry.distance <= best * SET_SIZE_LOOK_SLACK);
+	const fromSetSize = lookAlikes.filter((entry) => setSizes.includes(String(entry.card.set.printedTotal)));
+	if (fromSetSize.length === 1) return { cards: moveToFront(cards, fromSetSize[0].card), clear: true };
+
+	return { cards: cards, clear: isClearWinner(ranked) };
+}
+
+function moveToFront(cards, card) {
+	return [card, ...cards.filter((other) => other !== card)];
+}
+
+function sameSetName(a, b) {
+	return lettersOnly(a || "") !== "" && lettersOnly(a || "") === lettersOnly(b || "");
 }
 
 function possibleCardBoxes(photo, textArea) {

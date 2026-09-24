@@ -31,6 +31,8 @@ const NUMBER_ZOOM = 3;
 const NUMBER_LINE_PADDING = 0.9;
 // Even secret rares (like 215/203) have a number at most this many times the set's total.
 const MAX_NUMBER_OVER_TOTAL = 1.6;
+// No set is bigger than this: the biggest English sets have about 260 cards (Fusion Strike, 2021).
+const MAX_SET_SIZE = 400;
 // For sparkly foil cards: pixels lighter than this (0 = black, 255 = white) are wiped out,
 // leaving only the near-black printed ink. Found on a reverse holo Pikachu (Legendary Collection).
 const INK_CUTOFF = 90;
@@ -46,8 +48,32 @@ const CARD_SHAPE_TOLERANCE = 0.08;
 // The card is read with this much of the photo around it (share of its size), so nothing
 // printed right at its edge is cut off.
 const CARD_CROP_MARGIN = 0.02;
-// The collector number is printed in this bottom share of the card.
-const NUMBER_STRIP_SHARE = 0.13;
+// Where the collector number is printed, as shares of the card's width and height: bottom
+// right on cards up to 2016, bottom left from 2017 on. Only these small windows are read,
+// because the text, lines and glitter around them make Tesseract misread the number.
+const NUMBER_PLACES = [
+	{ x0: 0.66, x1: 0.97, y0: 0.885, y1: 0.985 },   // bottom right
+	{ x0: 0.03, x1: 0.40, y0: 0.885, y1: 0.985 },   // bottom left
+];
+// Each window is read in these ways, most useful first, until two reads agree on a number.
+// Tesseract misreads tiny print differently each way, so together they read far more numbers
+// than any one way alone: on 12 real photos 11, against at most 7 (version 1.10.0).
+// cardWidth: how wide the whole card would be at that enlargement, in pixels.
+// ink: "soft" or "hard" for a black-ink-only copy (see inkAgainstBackground), "" for the photo itself.
+const NUMBER_READS = [
+	{ cardWidth: 3750, ink: "soft", mode: "numberScattered" },
+	{ cardWidth: 3000, ink: "", mode: "numberBlock" },
+	{ cardWidth: 3750, ink: "soft", mode: "numberBlock" },
+	{ cardWidth: 2400, ink: "hard", mode: "numberScattered" },
+];
+// Black-ink-only copies: a pixel this dark compared to the background around it (or darker)
+// turns black, and this light turns white; "hard" copies cut at one point instead.
+const INK_BLACK_AT = 0.45;
+const INK_WHITE_AT = 0.95;
+const INK_HARD_CUTOFF = 0.72;
+// The background around a pixel is a smooth blur of this size (share of the window's width):
+// much wider than a letter, so the letters hardly darken it.
+const INK_BACKGROUND_BLUR = 1 / 25;
 // At most this many possible numbers are handed on to the search.
 const MAX_NUMBER_GUESSES = 5;
 
@@ -62,8 +88,8 @@ const READING_MODES = {
 	line: { tessedit_pageseg_mode: "7", thresholding_method: "0" },
 	// For the ink-only copy of a foil card (see inkOnly).
 	ink: { tessedit_pageseg_mode: "6", thresholding_method: "0" },
-	// For the card's bottom strip. Neither way reads every card, so both are used.
-	numberBlock: { tessedit_pageseg_mode: "6", thresholding_method: "0" },
+	// For the windows around the collector number (see NUMBER_READS).
+	numberBlock: { tessedit_pageseg_mode: "6", thresholding_method: "2" },
 	numberScattered: { tessedit_pageseg_mode: "11", thresholding_method: "0" },
 };
 
@@ -186,9 +212,10 @@ function isYellow(red, green, blue) {
 	const brightest = Math.max(red, green, blue);
 	const dimmest = Math.min(red, green, blue);
 	if (brightest < 120 || brightest - dimmest < 70) return false;   // too dark, or too grey
-	// Yellow: a colour between orange and lime on the colour wheel (hue 36 to 68 degrees).
+	// Yellow: a colour between orange and lime on the colour wheel (hue 28 to 68 degrees).
+	// Warm indoor light makes a yellow border look orange to the camera, down to about 31.
 	const hue = hueOf(red, green, blue, brightest, dimmest);
-	return hue >= 36 && hue <= 68;
+	return hue >= 28 && hue <= 68;
 }
 
 function hueOf(red, green, blue, brightest, dimmest) {
@@ -465,42 +492,164 @@ async function readCollectorNumbers(worker, original, photo, cardBox, page) {
 	// possible, likeliest first: the search tries them in turn, and the card database says
 	// which one exists.
 	const toOriginal = original.width / photo.width;
-	// With the card found, its bottom strip is read two ways. Without it, the lowest lines of
-	// text are read one at a time (page.lines are in the photo's own measurements then).
-	let strips = [];
-	let modes = ["line"];
+	let guesses = [];
 	if (cardBox) {
-		const height = cardBox.y1 - cardBox.y0;
-		strips = [{ x0: cardBox.x0, x1: cardBox.x1, y0: cardBox.y1 - height * NUMBER_STRIP_SHARE, y1: cardBox.y1 }];
-		modes = ["numberBlock", "numberScattered"];
+		guesses = await readNumberPlaces(worker, original, scaleBox(cardBox, toOriginal));
 	} else if (page.textArea) {
-		strips = numberLineBands(page.lines, page.textArea);
-	}
-
-	const guesses = [];
-	for (const strip of strips) {
-		const stripInOriginal = {
-			x0: strip.x0 * toOriginal,
-			x1: strip.x1 * toOriginal,
-			y0: strip.y0 * toOriginal,
-			y1: strip.y1 * toOriginal,
-		};
-		const closeUp = cropAndZoom(original, stripInOriginal, NUMBER_ZOOM / toOriginal);
-		for (const mode of modes) {
-			await worker.setParameters(READING_MODES[mode]);
+		// Without the card's outline, the lowest lines of text are read one at a time instead
+		// (page.lines are in the photo's own measurements).
+		await worker.setParameters(READING_MODES.line);
+		for (const strip of numberLineBands(page.lines, page.textArea)) {
+			const closeUp = cropAndZoom(original, scaleBox(strip, toOriginal), NUMBER_ZOOM / toOriginal);
 			const result = await worker.recognize(closeUp);
-			guesses.push(...numberCandidates(result.data.text || ""));
+			guesses.push(...oncePerNumber(numberCandidates(result.data.text || "")));
 		}
 	}
 	// Also whatever the first read of the card saw, when it clearly had a "/" in it.
-	guesses.push(...numberCandidates(page.text).filter((guess) => guess.sawSlash));
+	guesses.push(...oncePerNumber(numberCandidates(page.text).filter((guess) => guess.sawSlash)));
+	return likeliestNumbers(guesses).slice(0, MAX_NUMBER_GUESSES);
+}
 
-	// Numbers read with their "/" first, then the ones pieced together from digits; each once.
-	const ordered = [
-		...guesses.filter((guess) => guess.sawSlash),
-		...guesses.filter((guess) => !guess.sawSlash),
-	].map((guess) => guess.number);
-	return [...new Set(ordered)].slice(0, MAX_NUMBER_GUESSES);
+async function readNumberPlaces(worker, original, card) {
+	// Reads the windows where the number can be (card is the card's box in the original),
+	// in each of the ways in NUMBER_READS. When two reads agree on a number with its "/",
+	// that is as sure as reading gets, and the remaining ways are skipped to save time.
+	const guesses = [];
+	const cardWidth = card.x1 - card.x0;
+	const cardHeight = card.y1 - card.y0;
+	for (const way of NUMBER_READS) {
+		await worker.setParameters(READING_MODES[way.mode]);
+		for (const place of NUMBER_PLACES) {
+			const area = {
+				x0: card.x0 + cardWidth * place.x0,
+				x1: card.x0 + cardWidth * place.x1,
+				y0: card.y0 + cardHeight * place.y0,
+				y1: card.y0 + cardHeight * place.y1,
+			};
+			let closeUp = cropAndZoom(original, area, way.cardWidth / cardWidth);
+			if (way.ink) closeUp = inkAgainstBackground(closeUp, way.ink);
+			const result = await worker.recognize(closeUp);
+			guesses.push(...oncePerNumber(numberCandidates(result.data.text || "")));
+		}
+		const agreed = likeliestVotes(guesses)[0];
+		if (agreed && agreed.sawSlash && agreed.votes >= 2) break;
+	}
+	return guesses;
+}
+
+function oncePerNumber(guesses) {
+	// One read can hold the same number twice; it still counts as one vote.
+	const seen = new Set();
+	return guesses.filter((guess) => {
+		if (seen.has(guess.number)) return false;
+		seen.add(guess.number);
+		return true;
+	});
+}
+
+function likeliestNumbers(guesses) {
+	return likeliestVotes(guesses).map((entry) => entry.number);
+}
+
+function likeliestVotes(guesses) {
+	// Each number once, with how many reads found it. Numbers read with their "/" come first,
+	// then the ones more reads agreed on, then the ones found earliest.
+	const tally = new Map();
+	guesses.forEach((guess, order) => {
+		if (!tally.has(guess.number)) tally.set(guess.number, { number: guess.number, sawSlash: false, votes: 0, order: order });
+		const entry = tally.get(guess.number);
+		entry.votes++;
+		if (guess.sawSlash) entry.sawSlash = true;
+	});
+	return [...tally.values()].sort((a, b) =>
+		Number(b.sawSlash) - Number(a.sawSlash) || b.votes - a.votes || a.order - b.order);
+}
+
+function scaleBox(box, scale) {
+	return { x0: box.x0 * scale, x1: box.x1 * scale, y0: box.y0 * scale, y1: box.y1 * scale };
+}
+
+// A copy of a close-up with only the black printed ink left, for reading small print on a
+// coloured card. Black ink is dark in all three colours (red, green, blue), while every card
+// background - red, purple, green, yellow, even foil glitter - is bright in at least one. So
+// each pixel is judged by its brightest colour, compared with the average around it, which
+// also evens out shadows and glare. style "soft" keeps shades of grey at the edges of the
+// letters; "hard" is pure black and white.
+function inkAgainstBackground(picture, style) {
+	const width = picture.width;
+	const height = picture.height;
+	const copy = document.createElement("canvas");
+	copy.width = width;
+	copy.height = height;
+	const ctx = copy.getContext("2d", { willReadFrequently: true });
+	ctx.drawImage(picture, 0, 0);
+	const image = ctx.getImageData(0, 0, width, height);
+	const pixels = image.data;
+	const brightest = new Float32Array(width * height);
+	for (let i = 0; i < brightest.length; i++) {
+		brightest[i] = Math.max(pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2]);
+	}
+	const background = smoothBlur(brightest, width, height, Math.max(2, Math.round(width * INK_BACKGROUND_BLUR)));
+	for (let i = 0; i < brightest.length; i++) {
+		// 1 = as light as its surroundings, lower = darker than them.
+		const darkness = brightest[i] / Math.max(1, background[i]);
+		let value;
+		if (style === "hard") {
+			value = darkness < INK_HARD_CUTOFF ? 0 : 255;
+		} else {
+			const share = (darkness - INK_BLACK_AT) / (INK_WHITE_AT - INK_BLACK_AT);
+			value = Math.round(Math.max(0, Math.min(1, share)) * 255);
+		}
+		pixels[i * 4] = value;
+		pixels[i * 4 + 1] = value;
+		pixels[i * 4 + 2] = value;
+	}
+	ctx.putImageData(image, 0, 0);
+	return copy;
+}
+
+function smoothBlur(values, width, height, radius) {
+	// Three box blurs one after the other look just like a smooth (Gaussian) blur of about
+	// this radius. (A canvas blur filter does the same, but not every phone browser has one.)
+	let result = values;
+	for (let pass = 0; pass < 3; pass++) {
+		result = boxBlur(result, width, height, radius, true);
+		result = boxBlur(result, width, height, radius, false);
+	}
+	return result;
+}
+
+function boxBlur(values, width, height, radius, alongRows) {
+	// Each pixel becomes the average of the pixels up to radius away along its row (or column).
+	// Near the picture's edge, only the pixels that exist count.
+	const result = new Float32Array(values.length);
+	const lines = alongRows ? height : width;
+	const length = alongRows ? width : height;
+	const step = alongRows ? 1 : width;
+	for (let line = 0; line < lines; line++) {
+		const start = alongRows ? line * width : line;
+		let sum = 0;
+		let count = 0;
+		for (let i = 0; i <= Math.min(radius, length - 1); i++) {
+			sum += values[start + i * step];
+			count++;
+		}
+		for (let i = 0; i < length; i++) {
+			result[start + i * step] = sum / count;
+			// Slide the window on by one pixel: it gains one at the far end and loses one behind.
+			const gained = i + radius + 1;
+			const lost = i - radius;
+			if (gained < length) {
+				sum += values[start + gained * step];
+				count++;
+			}
+			if (lost >= 0) {
+				sum -= values[start + lost * step];
+				count--;
+			}
+		}
+	}
+	return result;
 }
 
 function numberLineBands(lines, area) {
@@ -534,6 +683,10 @@ function numberLineBands(lines, area) {
 function numberCandidates(text) {
 	// OCR often reads a zero as the letter O: "4/1O2" -> "4/102".
 	let cleaned = text.replace(/(?<=\d)[oO]|[oO](?=\d)/g, "0");
+	// A slash in tiny print can come out as an apostrophe: "13'64" is 13/64. Only straight
+	// between digits, so a height like "4' 11"" stays what it is.
+	cleaned = cleaned.replace(/(?<=\d)['’](?=\d)/g, "/");
+	cleaned = fixDigitLookalikes(cleaned);
 	// Numbers printed near the collector number that are never it: Pokédex numbers ("#157",
 	// "No. 157"), levels ("LV. 57") and years ("©1995-2000").
 	cleaned = cleaned
@@ -543,6 +696,7 @@ function numberCandidates(text) {
 	const found = [];
 	// "4/102", "006/198", "TG05/TG30". Tiny print can turn the "/" into "|" or "\".
 	for (const match of cleaned.matchAll(/([A-Z]{0,3}\d{1,3})\s*[\/|\\]\s*([A-Z]{0,3}\d{2,3})(?!\d)/g)) {
+		if (Number(match[2]) > MAX_SET_SIZE) continue;   // plain digits only; "TG30" gives NaN
 		found.push({ number: match[1] + "/" + match[2], sawSlash: true });
 	}
 	// The "/" can also vanish altogether ("4102") or turn into a digit ("107130").
@@ -550,6 +704,25 @@ function numberCandidates(text) {
 		for (const number of splitNumberAndTotal(digits)) found.push({ number: number, sawSlash: false });
 	}
 	return found;
+}
+
+// Letters that tiny digits are often misread as.
+const DIGIT_LOOKALIKES = {
+	B: "8", S: "5", s: "5", I: "1", l: "1", i: "1", "!": "1", Z: "2", z: "2",
+	G: "6", g: "9", T: "7", D: "0", Q: "0", O: "0", o: "0",
+};
+
+function fixDigitLookalikes(text) {
+	// Something shaped like a collector number with a letter or two in it: "B/102" is 8/102,
+	// "1S/64" is 15/64. At least two real digits are needed, so ordinary words stay words,
+	// and set codes like "TG05/TG30" are left alone because a letter comes right before them.
+	const numberShape = /(?<![A-Za-z0-9])([0-9BSsIli!ZzGgTDQOo]{1,3})\s*[\/|\\]\s*([0-9BSsIli!ZzGgTDQOo]{2,3})(?![A-Za-z0-9])/g;
+	return text.replace(numberShape, (whole, number, total) => {
+		const realDigits = (number + total).replace(/[^0-9]/g, "").length;
+		if (realDigits < 2) return whole;
+		const asDigits = (part) => part.split("").map((character) => DIGIT_LOOKALIKES[character] || character).join("");
+		return asDigits(number) + "/" + asDigits(total);
+	});
 }
 
 function splitNumberAndTotal(digits) {
@@ -571,7 +744,7 @@ function splitNumberAndTotal(digits) {
 
 function addSplit(splits, number, total) {
 	if (number.length < 1 || number.length > 3 || total.length < 2 || total.length > 3) return;
-	if (total.startsWith("0") || Number(number) === 0) return;
+	if (total.startsWith("0") || Number(number) === 0 || Number(total) > MAX_SET_SIZE) return;
 	if (Number(number) > Number(total) * MAX_NUMBER_OVER_TOTAL) return;
 	const text = number + "/" + total;
 	if (!splits.includes(text)) splits.push(text);

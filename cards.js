@@ -17,14 +17,15 @@ const RETRY_DELAY_MS = 400;
 
 // Searches for the card with this name and collector number ("4/102").
 // Tries the most exact search first, then looser ones in case the photo was misread.
-// Returns { cards, description, totalCount, exactFound }: description says which kind of search
-// found them, as a text key from strings.js plus the values to fill in. totalCount is how many
-// cards fit altogether (more than are returned for a common name). exactFound means name and
-// number matched a card exactly. No match gives an empty list.
+// Returns { cards, description, totalCount, exactFound, setSizes }: description says which kind
+// of search found them, as a text key from strings.js plus the values to fill in. totalCount is
+// how many cards fit altogether (more than are returned for a common name). exactFound means name
+// and number matched a card exactly. No match gives an empty list.
 // Throws an error when the database doesn't answer at all.
 // withPhoto = true means a photo can pick among many cards by their looks (see matcher.js).
 // numberGuesses are other numbers the reader thought possible (reader.js), tried in turn;
-// the one that turned out right comes back as matchedNumber.
+// the one that turned out right comes back as matchedNumber. setSizes are the set sizes in all
+// the numbers tried ("102" of 8/102), for pickBestMatch in matcher.js.
 async function findCards(name, numberText, withPhoto = false, numberGuesses = []) {
 	const nameWord = longestWord(name);
 	const { number, total } = parseCollectorNumber(numberText);
@@ -49,6 +50,7 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 	// With a photo: try each number the reader thought possible. An exact match on name and
 	// number settles it - and shows which guess was right.
 	const guesses = [...new Set([numberText, ...numberGuesses].map((guess) => guess.trim()).filter(Boolean))];
+	const setSizes = [...new Set(guesses.map((guess) => parseCollectorNumber(guess).total).filter(Boolean))];
 	if (nameWord) {
 		for (const guess of guesses) {
 			const parsed = parseCollectorNumber(guess);
@@ -62,27 +64,15 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 					totalCount: page.totalCount,
 					exactFound: true,
 					matchedNumber: guess,
-				};
-			}
-		}
-		// The set's size is often read right even when the card's own number isn't. If just one
-		// card with this name comes from a set of that size, it is the one.
-		const setSizes = [...new Set(guesses.map((guess) => parseCollectorNumber(guess).total).filter(Boolean))];
-		for (const setSize of setSizes) {
-			const page = await fetchCardPage(nameQueryFor(nameWord) + " set.printedTotal:" + setSize, RESULTS_PAGE_SIZE);
-			if (page.cards.length === 1) {
-				return {
-					cards: page.cards,
-					description: { key: "matchNameTotal", values: { name: nameWord, total: setSize } },
-					totalCount: 1,
-					exactFound: false,
-					setSizeFound: true,
+					setSizes: setSizes,
 				};
 			}
 		}
 	}
 	// Otherwise part of the text was misread, and nobody knows which part. So every looser
-	// search goes into one pile, and the pictures decide.
+	// search goes into one pile, and the pictures decide - helped by the set sizes read, which
+	// are often right even when the card's own number isn't (see pickBestMatch in matcher.js).
+	// The set size alone doesn't settle it: a misread size can fit one card by pure chance.
 	const pile = new Map();
 	let totalCount = 0;
 	for (const attempt of attempts) {
@@ -98,6 +88,7 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 		description: cards.length > 0 ? { key: "matchByLook", values: {} } : null,
 		totalCount: Math.max(totalCount, cards.length),
 		exactFound: false,
+		setSizes: setSizes,
 	};
 }
 

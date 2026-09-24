@@ -34,10 +34,10 @@ possible.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.9.0"></script>
-<script src="reader.js?v=1.9.0"></script>
-<script src="cards.js?v=1.9.0"></script>
-<script src="matcher.js?v=1.9.0"></script>
+<script src="pokemon-names.js?v=1.10.0"></script>
+<script src="reader.js?v=1.10.0"></script>
+<script src="cards.js?v=1.10.0"></script>
+<script src="matcher.js?v=1.10.0"></script>
 <script>
 "use strict";
 
@@ -56,7 +56,7 @@ async function runAllPhotos() {
 		summary.textContent = "No private photos found: add them to dev-local/ and list them in " + PHOTO_LIST_URL;
 		return;
 	}
-	const scores = { total: 0, name: 0, number: 0, found: 0 };
+	const scores = { total: 0, name: 0, number: 0, found: 0, openedRight: 0, openedWrong: 0 };
 	for (const photo of photos) {
 		const file = await fetch("dev-local/" + photo.file, { cache: "no-store" }).then((response) => response.blob());
 		const started = performance.now();
@@ -65,12 +65,24 @@ async function runAllPhotos() {
 		const numberOk = sameNumber(reading.number, photo.number);
 		let foundAt = -1;
 		let matched = "";
+		let looks = "";
+		let opened = "";
 		try {
+			// The same steps as the app (searchForCard in app.js), without the screen.
 			const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
 			const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
-			foundAt = ranked.findIndex((entry) => entry.card.id === photo.id);
+			const located = reading.cardBox !== null || reading.textArea !== null;
+			const pick = found.cards.length === 1
+				? { cards: found.cards, clear: true }
+				: pickBestMatch(ranked, located, found.setSizes, "");
+			foundAt = pick.cards.findIndex((card) => card.id === photo.id);
+			if (pick.clear) opened = foundAt === 0 ? "opened by itself: right" : "opened by itself: WRONG";
 			if (found.matchedNumber) matched = "database confirmed " + found.matchedNumber;
-			if (found.setSizeFound) matched = "found by name + set size";
+			// How alike the pictures are (0 = the same): the right card's, and the closest wrong one's.
+			const right = ranked.find((entry) => entry.card.id === photo.id);
+			const wrong = ranked.find((entry) => entry.card.id !== photo.id);
+			looks = "look: right " + (right ? right.distance.toFixed(2) : "-")
+				+ ", best wrong " + (wrong ? wrong.distance.toFixed(2) : "-");
 		} catch (error) {
 			console.error(error);
 		}
@@ -81,17 +93,22 @@ async function runAllPhotos() {
 			"guesses: " + (reading.numberGuesses.join(", ") || "(none)"),
 		];
 		if (matched) lines.push(matched);
+		if (looks) lines.push(looks);
+		if (opened) lines.push(opened);
 		const strips = lines.join("\n");
 		scores.total++;
 		if (nameOk) scores.name++;
 		if (numberOk) scores.number++;
 		if (foundAt === 0) scores.found++;
+		if (opened.endsWith("right")) scores.openedRight++;
+		if (opened.endsWith("WRONG")) scores.openedWrong++;
 		addRow(file, photo, reading, nameOk, numberOk, foundAt, seconds, strips);
 		summary.textContent = "Running… " + scores.total + " of " + photos.length;
 	}
 	const line = "Name read " + scores.name + "/" + scores.total
 		+ " · number read " + scores.number + "/" + scores.total
-		+ " · right card shown first " + scores.found + "/" + scores.total;
+		+ " · right card shown first " + scores.found + "/" + scores.total
+		+ " · opened by itself " + scores.openedRight + " right, " + scores.openedWrong + " wrong";
 	summary.textContent = line;
 	console.log("REAL PHOTO TEST: " + line);
 	window.testScores = scores;   // lets a script read the result

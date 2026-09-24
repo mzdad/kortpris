@@ -33,10 +33,10 @@ The fake photos are the same on every run, so scores can be compared before and 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.9.0"></script>
-<script src="reader.js?v=1.9.0"></script>
-<script src="cards.js?v=1.9.0"></script>
-<script src="matcher.js?v=1.9.0"></script>
+<script src="pokemon-names.js?v=1.10.0"></script>
+<script src="reader.js?v=1.10.0"></script>
+<script src="cards.js?v=1.10.0"></script>
+<script src="matcher.js?v=1.10.0"></script>
 <script>
 "use strict";
 
@@ -111,13 +111,18 @@ async function testOnePhoto(card, levelName, photo) {
 	let opened = false;   // would the app open a card's prices without asking?
 	let error = "";
 	try {
+		// The same steps as the app (searchForCard in app.js), without the screen.
 		const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
 		const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
-		foundAt = ranked.findIndex((entry) => entry.card.id === card.id);
+		const located = reading.cardBox !== null || reading.textArea !== null;
+		const pick = found.cards.length === 1
+			? { cards: found.cards, clear: true }
+			: pickBestMatch(ranked, located, found.setSizes, "");
+		foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
 		// How much further the runner-up is from the photo than the winner.
 		// A big gap means the winner is clear; the app uses this to open it straight away.
 		if (ranked.length >= 2) lookGap = ranked[1].distance / ranked[0].distance;
-		opened = ranked.length > 0 && isClearWinner(ranked);
+		opened = pick.cards.length > 0 && pick.clear;
 	} catch (problem) {
 		error = String(problem);
 	}

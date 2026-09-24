@@ -8,12 +8,15 @@ A web page with nothing to install. What happens to a photo:
 
 1. **Photo → text.** [Tesseract.js](https://github.com/naptha/tesseract.js) reads the
    card's name and collector number (like `4/102`) on the phone itself. The name is
-   checked against all 1025 Pokémon names, so small misreads get corrected. The number
-   is read a second time, zoomed in on the full-size photo.
+   checked against all 1025 Pokémon names, so small misreads get corrected. The card is
+   found in the photo by its yellow border, and the number is then read again from the
+   full-size photo, in the two small corners where it is printed, several different ways
+   (one of them with only the black ink kept, which hides coloured backgrounds and glitter).
 2. **Text → card.** The name and number are looked up in the free
-   [Pokémon TCG API](https://pokemontcg.io). If part of the text was misread, the
-   candidates are sorted by how much their picture looks like the photo, and a clear
-   winner opens by itself. The fields stay editable, so a card can also be typed in.
+   [Pokémon TCG API](https://pokemontcg.io); every number the reader thought possible is
+   tried, and the database says which one exists. If none does, the candidates are sorted by
+   how much their picture looks like the photo, and a clear winner opens by itself. The
+   fields stay editable, so a card can also be typed in.
 3. **Card → prices.** Prices from **Cardmarket** (Europe, euros, also shown in kroner)
    and **TCGplayer** (USA, dollars), with links to both shops.
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
@@ -60,13 +63,13 @@ Anthropic.
 ## Publishing a change
 
 Every push to `main` goes live within a minute or two. Before pushing, raise the version
-number `?v=...` on our own files in `index.html` (and in `dev_reading_test.html`), for example:
+number `?v=...` on our own files in `index.html` (and in the two `dev_` test pages), for example:
 
 ```bash
-sed -i 's/?v=1.7.0/?v=1.7.1/g' index.html dev_reading_test.html
+sed -i 's/?v=1.10.0/?v=1.10.1/g' index.html dev_reading_test.html dev_real_photos_test.html
 ```
 
-The page shows that number at the bottom ("Kortpris version 1.7.0"), so it's easy to check which
+The page shows that number at the bottom ("Kortpris version 1.10.0"), so it's easy to check which
 version a phone has. It also makes browsers fetch a matching set of files, instead of mixing
 new ones with old cached copies, which could break the app for up to ten minutes.
 
@@ -100,7 +103,8 @@ The photos are the same every run, so run it before and after changing `reader.j
 
 Real photos matter more. Put them in `dev-local/` (never published) and list them, with the
 right answers, in `dev-local/real-photos.json`; then open
-<http://localhost:8765/dev_real_photos_test.html>.
+<http://localhost:8765/dev_real_photos_test.html>. Use the phone's original files: photos
+sent through a chat app are shrunk to half the size or less on the way.
 
 The number scores in the fake-photo test are pessimistic: the fakes are made from 1024-pixel card
 pictures, so their tiny print has far less detail than a real phone photo.
@@ -108,7 +112,8 @@ pictures, so their tiny print has far less detail than a real phone photo.
 ## Things to know
 
 - **The free API is unreliable.** In September 2026, about half of all requests failed on
-  the first try. The page retries every lookup up to 8 times before giving up.
+  the first try. The page sends every lookup twice at once and tries up to 6 times before
+  giving up.
 - **Cardmarket prices can be weeks or months old** in this API. The page shows the date
   and labels anything older than two weeks.
 - **Prices are for ungraded cards.** Condition changes the value a lot.
