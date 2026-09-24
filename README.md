@@ -17,7 +17,9 @@ A web page with nothing to install. What happens to a photo:
    [Pokémon TCG API](https://pokemontcg.io); every number the reader thought possible is
    tried, and the database says which one exists. A right number also finds a card whose
    name was misread, and the name is then corrected. If no number fits, the candidates are sorted by
-   how much their picture looks like the photo, and a clear winner opens by itself. When
+   how much their picture looks like the photo, and a clear winner opens by itself. Cards
+   with the very same picture (a holo and its plain print) are told apart by the number:
+   a read "8/64" picks Mr. Mime 6/64, one digit away, over Mr. Mime 22/64. When
    both the name and the card's own number are unreadable but the set size isn't (shown as
    `?/110`), the photo is compared with every card from a set of that size. The
    fields stay editable, so a card can also be typed in.
@@ -29,7 +31,9 @@ A web page with nothing to install. What happens to a photo:
 3. **Card → prices.** Prices from **Cardmarket** (Europe, euros, also shown in kroner)
    and **TCGplayer** (USA, dollars), with links to both shops.
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
-   value in kroner. Without an account it is kept in the phone's browser only.
+   value in kroner. A search box narrows the list by name, set, number or version
+   ("jungle holo", "pika", "58") and says what the cards found are worth together.
+   Without an account it is kept in the phone's browser only.
 
 **Kids mode.** The 🧒 button at the top switches on a mode for children who can't read well
 yet: one big picture to tap for the camera, the card with 1 to 5 gold coins for how valuable

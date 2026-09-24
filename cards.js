@@ -25,7 +25,8 @@ const RETRY_DELAY_MS = 400;
 // withPhoto = true means a photo can pick among many cards by their looks (see matcher.js).
 // numberGuesses are other numbers the reader thought possible (reader.js), tried in turn;
 // the one that turned out right comes back as matchedNumber. setSizes are the set sizes in all
-// the numbers tried ("102" of 8/102), for pickBestMatch in matcher.js.
+// the numbers tried ("102" of 8/102), and numbersRead all those numbers, for pickBestMatch in
+// matcher.js.
 async function findCards(name, numberText, withPhoto = false, numberGuesses = []) {
 	const nameWord = longestWord(name);
 	const { number, total } = parseCollectorNumber(numberText);
@@ -65,6 +66,7 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 					exactFound: true,
 					matchedNumber: guess,
 					setSizes: setSizes,
+					numbersRead: guesses,
 				};
 			}
 		}
@@ -108,6 +110,7 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 		totalCount: Math.max(totalCount, cards.length),
 		exactFound: false,
 		setSizes: setSizes,
+		numbersRead: guesses,
 	};
 }
 

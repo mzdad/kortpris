@@ -164,7 +164,7 @@ a { color: var(--link); }
 .field { display: grid; gap: 4px; }
 .field label { font-size: 0.85rem; font-weight: 600; color: var(--muted); letter-spacing: 0.01em; }
 .field-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
-input[type="text"], input[type="password"] {
+input[type="text"], input[type="password"], input[type="search"] {
 	font: inherit; font-size: 16px;   /* 16px stops iPhones from zooming in on focus */
 	color: var(--ink);
 	background: var(--surface-2);
@@ -331,6 +331,7 @@ button.version { cursor: pointer; }
 	font-variant-numeric: tabular-nums;
 }
 .refresh-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 8px; }
+.collection-search .hint:empty { display: none; }
 .collection-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .saved-card {
 	display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center;
@@ -457,6 +458,7 @@ body.kids .collection-summary .fineprint,
 body.kids .refresh-row,
 body.kids .saved-meta,
 body.kids #collection-where,
+body.kids .collection-search,
 body.kids #account-panel,
 body.kids footer p:not(.app-version),
 body.kids .button-words { display: none; }

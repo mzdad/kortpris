@@ -156,12 +156,12 @@ async function refreshCollectionPrices() {
 	saveCollection();
 }
 
-function collectionTotals() {
+function collectionTotals(entries = collection) {
 	// The total is in the shown currency: each card's Cardmarket price, or TCGplayer's when
 	// Cardmarket has none (see localPrice in app.js). Cards with neither are counted separately
-	// rather than guessed.
+	// rather than guessed. entries can be part of the collection, like the cards a search found.
 	const totals = { value: 0, cards: 0, unpriced: 0, oldestUpdate: null };
-	for (const entry of collection) {
+	for (const entry of entries) {
 		totals.cards += entry.count;
 		const each = localPrice(entry.priceEur, entry.priceUsd);
 		if (each !== null) totals.value += entry.count * each;

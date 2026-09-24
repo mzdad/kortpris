@@ -110,7 +110,8 @@ function isClearWinner(ranked) {
 // - setSizes: set sizes the reader saw ("102" of 8/102). They are often right even when the
 //   card's own number isn't - but not always, so the picture has to agree.
 // - setName: the set's name, when Claude read the card.
-function pickBestMatch(ranked, located, setSizes = [], setName = "") {
+// - numbersRead: every collector number the reader thought possible ("8/64").
+function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead = []) {
 	if (ranked.length === 0) return { cards: [], clear: false };
 	const cards = ranked.map((entry) => entry.card);
 	// Claude names the set. If exactly one candidate is from that set, that settles it.
@@ -126,7 +127,29 @@ function pickBestMatch(ranked, located, setSizes = [], setName = "") {
 	const fromSetSize = lookAlikes.filter((entry) => setSizes.includes(String(entry.card.set.printedTotal)));
 	if (fromSetSize.length === 1) return { cards: moveToFront(cards, fromSetSize[0].card), clear: true };
 
+	// Among those look-alikes, exactly one has a number at most one digit away from a number
+	// read: tiny print turns a 6 into an 8, so "8/64" was Mr. Mime 6/64 - not the non-holo
+	// Mr. Mime 22/64 with the very same picture.
+	const nearNumber = lookAlikes.filter((entry) =>
+		numbersRead.some((read) => nearlySameNumber(read, entry.card.number + "/" + entry.card.set.printedTotal)));
+	if (nearNumber.length === 1) return { cards: moveToFront(cards, nearNumber[0].card), clear: true };
+
 	return { cards: cards, clear: isClearWinner(ranked) };
+}
+
+function nearlySameNumber(read, printed) {
+	// "8/64" and "6/64", or "48/61" and "48/62": the same length, and at most one digit different.
+	const a = parseCollectorNumber(read);
+	const b = parseCollectorNumber(printed);
+	if (a.number === "" || a.total === "" || b.total === "") return false;
+	const readText = a.number + "/" + a.total;
+	const printedText = b.number + "/" + b.total;
+	if (readText.length !== printedText.length) return false;
+	let differences = 0;
+	for (let i = 0; i < readText.length; i++) {
+		if (readText[i] !== printedText[i]) differences++;
+	}
+	return differences <= 1;
 }
 
 function moveToFront(cards, card) {

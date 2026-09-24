@@ -102,6 +102,9 @@ const collectionView = document.getElementById("collection-view");
 const collectionCount = document.getElementById("collection-count");
 const collectionSummary = document.getElementById("collection-summary");
 const collectionList = document.getElementById("collection-list");
+const collectionSearchRow = document.getElementById("collection-search-row");
+const collectionSearch = document.getElementById("collection-search");
+const collectionSearchNote = document.getElementById("collection-search-note");
 const notice = document.getElementById("notice");
 const claudeState = document.getElementById("claude-state");
 const claudeForm = document.getElementById("claude-form");
@@ -492,6 +495,13 @@ moveCardsButton.addEventListener("click", () => {
 	renderAccount();
 });
 
+// The list narrows down with every letter typed.
+collectionSearch.addEventListener("input", renderCollection);
+collectionSearch.addEventListener("keydown", (event) => {
+	// There is nothing to send, so Enter only puts the phone's keyboard away to show the cards.
+	if (event.key === "Enter") collectionSearch.blur();
+});
+
 collectionList.addEventListener("click", (event) => {
 	const button = event.target.closest("[data-action]");
 	if (!button || !collectionReady()) return;
@@ -691,7 +701,7 @@ async function searchForCard() {
 			hideProgress();
 			// Only trust looks when the reader also found where the card sits in the photo.
 			const cardLocated = lastPhoto.cardBox !== null || lastPhoto.textArea !== null;
-			const pick = pickBestMatch(ranked, cardLocated, found.setSizes, lastPhoto.setName);
+			const pick = pickBestMatch(ranked, cardLocated, found.setSizes, lastPhoto.setName, found.numbersRead);
 			const cards = pick.cards.slice(0, RESULTS_PAGE_SIZE);
 			const best = cards[0].id;
 			if (pick.clear) {
@@ -1231,7 +1241,35 @@ function renderCollection() {
 	collectionSummary.innerHTML = saveProblem + collectionSummaryHtml(totals);
 	// Most valuable first; cards without a Cardmarket price at the end.
 	const sorted = [...collection].sort((a, b) => savedValue(b) - savedValue(a));
-	collectionList.innerHTML = sorted.map(savedCardHtml).join("");
+	// Kids mode hides the search box, so a search typed earlier mustn't hide cards there.
+	const query = kidsMode ? "" : collectionSearch.value;
+	const shown = sorted.filter((entry) => matchesSearch(entry, query));
+	collectionSearchRow.hidden = collection.length === 0;
+	collectionSearchNote.textContent = searchNote(query, shown);
+	collectionList.innerHTML = shown.map(savedCardHtml).join("");
+}
+
+function matchesSearch(entry, query) {
+	// Every word typed must be somewhere in the card's name, set, number or version:
+	// "pika" finds every Pikachu, "jungle holo" the holo cards from Jungle, "58" card 58/102.
+	const words = searchableText(query).split(/\s+/).filter(Boolean);
+	const versionName = entry.version ? t(entry.version) : "";
+	const cardText = searchableText([entry.name, entry.setName, entry.number, versionName].join(" "));
+	return words.every((word) => cardText.includes(word));
+}
+
+function searchableText(text) {
+	// Capitals and accents don't matter: "pokemon" finds "Pokémon".
+	return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+function searchNote(query, shown) {
+	// Under the search box: how many cards were found, and what they are worth together.
+	if (query.trim() === "") return "";
+	if (shown.length === 0) return t("searchNothing", { query: query.trim() });
+	const found = collectionTotals(shown);
+	const countText = found.cards === 1 ? t("searchFoundOne") : t("searchFound", { count: found.cards });
+	return found.value > 0 ? countText + " · " + t("searchWorth", { price: money.local.format(found.value) }) : countText;
 }
 
 function savedValue(entry) {

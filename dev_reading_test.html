@@ -33,11 +33,11 @@ The fake photos are the same on every run, so scores can be compared before and 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.13.0"></script>
-<script src="card-finder.js?v=1.13.0"></script>
-<script src="reader.js?v=1.13.0"></script>
-<script src="cards.js?v=1.13.0"></script>
-<script src="matcher.js?v=1.13.0"></script>
+<script src="pokemon-names.js?v=1.14.0"></script>
+<script src="card-finder.js?v=1.14.0"></script>
+<script src="reader.js?v=1.14.0"></script>
+<script src="cards.js?v=1.14.0"></script>
+<script src="matcher.js?v=1.14.0"></script>
 <script>
 "use strict";
 
@@ -118,7 +118,7 @@ async function testOnePhoto(card, levelName, photo) {
 		const located = reading.cardBox !== null || reading.textArea !== null;
 		const pick = found.cards.length === 1
 			? { cards: found.cards, clear: true }
-			: pickBestMatch(ranked, located, found.setSizes, "");
+			: pickBestMatch(ranked, located, found.setSizes, "", found.numbersRead);
 		foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
 		// How much further the runner-up is from the photo than the winner.
 		// A big gap means the winner is clear; the app uses this to open it straight away.
