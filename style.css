@@ -221,7 +221,9 @@ input:focus-visible, a:focus-visible {
 .version {
 	font: inherit; color: inherit; text-align: left;
 	min-width: 0;
-	display: grid; gap: 2px; align-content: start;
+	/* Its name, price and small print share rows with the boxes beside it, so the prices line
+	   up even when one name takes two lines ("1st edition holo"). */
+	display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 2px; align-content: start;
 	padding: 12px 14px;
 	border-radius: 12px;
 	border: 2px solid transparent;
@@ -230,12 +232,21 @@ input:focus-visible, a:focus-visible {
 button.version { cursor: pointer; }
 .version[aria-pressed="true"] { border-color: var(--accent-edge); }
 .version:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
-.version-name { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.version-name { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); align-self: end; }
+/* The price's own box, as wide as the version box: the price sizes itself to it (cqi below).
+   (Not the version box itself: sizing to a box switches off its shared rows.) */
+.version-price-box { container-type: inline-size; }
 .version-price {
-	font-size: 1.6rem; line-height: 1.15;
+	/* Big, but smaller in a narrow box, so a price never runs into its edge. */
+	display: block;
+	font-size: clamp(1.25rem, 22cqi, 1.75rem); line-height: 1.15;
 	font-weight: 800; font-stretch: 80%;
 	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
 }
+/* six digits or more, like "DKK 123,456" */
+.version-price.long { font-size: clamp(1.05rem, 16cqi, 1.4rem); }
+.price-unit { font-size: 0.62em; font-weight: 700; color: var(--muted); }
 .version-sub { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* two boxes side by side on wide screens, stacked on phones so big prices never get cut off */

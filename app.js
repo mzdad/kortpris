@@ -15,6 +15,8 @@ const LANGUAGE_STORAGE_KEY = "kortpris.language";
 const CLAUDE_FINISH_VERSIONS = { holo: "holofoil", reverse_holo: "reverseHolofoil", normal: "normal" };
 // Where the phone remembers whether kids mode is on.
 const KIDS_MODE_STORAGE_KEY = "kortpris.kidsMode";
+// A version's big price from this amount up (six digits) gets a smaller size, so it fits its box.
+const LONG_PRICE_FROM = 100000;
 // Kids mode shows a card's value as 1 to 5 coins: one more coin from each of these prices, in
 // euros (about 4, 22, 110 and 520 kroner). Five coins also gets a "Wow!".
 const COIN_STEPS_EUR = [0.5, 3, 15, 70];
@@ -969,16 +971,24 @@ function versionsHtml(versions, chosenKey) {
 	if (versions.length === 0) return `<p class="note">${t("noPrices")}</p>`;
 	const choosing = versions.length > 1;
 	const tiles = versions.map((version) => {
+		// The big price in whole kroner (the exact amounts are in the small print below it).
 		const local = localPrice(version.eur, version.usd);
 		let main = t("noPrice");
-		if (local !== null) main = money.local.format(local);
-		else if (version.usd !== null) main = money.dollars.format(version.usd);
+		let amount = null;
+		if (local !== null) {
+			main = bigPriceHtml(money.whole, local);
+			amount = local;
+		} else if (version.usd !== null) {
+			main = bigPriceHtml(money.wholeDollars, version.usd);
+			amount = version.usd;
+		}
+		const long = amount !== null && Math.round(amount) >= LONG_PRICE_FROM ? " long" : "";
 		const sources = [];
 		if (version.eur !== null) sources.push(money.euros.format(version.eur) + " · Cardmarket");
 		if (version.usd !== null) sources.push(money.dollars.format(version.usd) + " · TCGplayer");
 		const inside = `
 			<span class="version-name">${t(version.key)}</span>
-			<span class="version-price">${main}</span>
+			<span class="version-price-box"><span class="version-price${long}">${main}</span></span>
 			<span class="version-sub">${sources.join("<br>")}</span>`;
 		// With one version there is nothing to pick, so it is shown as a plain box.
 		if (!choosing) return `<div class="version">${inside}</div>`;
@@ -987,6 +997,15 @@ function versionsHtml(versions, chosenKey) {
 	const question = choosing ? `<p class="versions-question">${t("whichVersion")}</p>` : "";
 	const hint = choosing ? `<p class="hint">${t("versionHint")}</p>` : "";
 	return `<div class="versions-block">${question}<div class="versions">${tiles.join("")}</div>${hint}</div>`;
+}
+
+function bigPriceHtml(format, amount) {
+	// A big price with its currency ("kr.", "DKK", "€") drawn smaller, so the number stands out.
+	return format.formatToParts(amount)
+		.map((part) => part.type === "currency"
+			? `<span class="price-unit">${escapeHtml(part.value)}</span>`
+			: escapeHtml(part.value))
+		.join("");
 }
 
 // Cardmarket is Europe's biggest card shop, priced in euros.
