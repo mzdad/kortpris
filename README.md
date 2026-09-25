@@ -32,7 +32,10 @@ A web page with nothing to install. What happens to a photo:
    cards reads differently after even a tiny change (one PC read `86/110`, another `0/110`,
    from the same photo).
 3. **Card → prices.** Prices from **Cardmarket** (Europe, euros, also shown in kroner)
-   and **TCGplayer** (USA, dollars), with links to both shops. **PSA prices** (what the card
+   and **TCGplayer** (USA, dollars), with links to both shops. A card whose background
+   glitters in the photo (below the picture, letters left out) opens on its **reverse holo**
+   price, which can be a hundred times the plain one (`sparkle.js`); that also picks the right
+   one of two cards with the same picture when only one was ever printed as a reverse holo. **PSA prices** (what the card
    sold for on eBay in each PSA grade) come from PokemonPriceTracker through a small relay on
    Cloudflare that keeps its key secret (`relay/`, see `relay/README.md`). They are only
    fetched while "Fetch PSA prices automatically" is ticked on the card page, because the free
@@ -81,6 +84,7 @@ Anthropic.
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
+| `sparkle.js` | Tells a reverse holo from the photo: glitter everywhere except the picture |
 | `graded.js` | PSA prices of a card, asked from the relay and kept on the phone for a day |
 | `relay/` | The PSA price relay that runs on Cloudflare, not in the page |
 | `storage.js` | Saves things on the phone (language, My cards) |

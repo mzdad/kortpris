@@ -102,12 +102,13 @@ let reportProgress = () => {};
 
 // Reads a photo. onProgress(stage, fraction) is told "starting" first, "loading" while the
 // reader downloads (first time only), then "reading" with a fraction from 0 to 1.
-// Returns { name, nameSure, number, numberGuesses, photo, textArea, cardBox }:
+// Returns { name, nameSure, number, numberGuesses, photo, textArea, cardBox, sparkle }:
 // - nameSure means the name is a known Pokémon.
 // - number is the likeliest collector number; numberGuesses all possible ones, likeliest first.
 // - photo is the resized picture. textArea (around the card's text) and cardBox (the card, found
 //   by its border or shape, or null - see card-finder.js) are boxes in it, used later to
 //   compare the card's looks.
+// - sparkle is { grain, reverseHolo } from sparkle.js, or null when that can't be told.
 async function readCardPhoto(imageFile, onProgress = () => {}) {
 	reportProgress = onProgress;
 	onProgress("starting", null);
@@ -140,14 +141,17 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 
 	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead, view);
 	original.close();   // the full-size photo takes a lot of memory; it isn't needed any more
+	const textArea = boxInPhoto(firstRead.textArea, view);
 	return {
 		name: name.text,
 		nameSure: name.sure,
 		number: numberGuesses[0] || "",
 		numberGuesses: numberGuesses,
 		photo: photo,
-		textArea: boxInPhoto(firstRead.textArea, view),
+		textArea: textArea,
 		cardBox: cardBox,
+		// Does it sparkle outside its picture - a reverse holo? (see sparkle.js)
+		sparkle: sparkleOf(photo, cardBox, textArea),
 	};
 }
 

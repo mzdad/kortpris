@@ -619,6 +619,9 @@ async function scanPhoto(imageFile) {
 	if (!reading) reading = await readWithBuiltInReader(imageFile, scanId);
 	if (scanId !== latestScanId) return;
 
+	// A card that sparkles outside its picture opens on its reverse holo price (see sparkle.js).
+	if (reading.sparkle && reading.sparkle.reverseHolo) versionHint = "reverseHolofoil";
+
 	searchButton.disabled = false;
 	if (reading.photo) {
 		lastPhoto = {
@@ -626,6 +629,7 @@ async function scanPhoto(imageFile) {
 			textArea: reading.textArea,
 			cardBox: reading.cardBox || null,
 			setName: reading.setName || "",
+			looksReverseHolo: versionHint === "reverseHolofoil",
 		};
 	}
 	nameInput.value = reading.name;
@@ -735,7 +739,7 @@ async function searchForCard() {
 			hideProgress();
 			// Only trust looks when the reader also found where the card sits in the photo.
 			const cardLocated = lastPhoto.cardBox !== null || lastPhoto.textArea !== null;
-			const pick = pickBestMatch(ranked, cardLocated, found.setSizes, lastPhoto.setName, found.numbersRead);
+			const pick = pickBestMatch(ranked, cardLocated, found.setSizes, lastPhoto.setName, found.numbersRead, lastPhoto.looksReverseHolo);
 			const cards = pick.cards.slice(0, RESULTS_PAGE_SIZE);
 			const best = cards[0].id;
 			if (pick.clear) {
@@ -995,7 +999,9 @@ function versionsHtml(versions, chosenKey) {
 		return `<button type="button" class="version" data-version="${version.key}" aria-pressed="${version.key === chosenKey}">${inside}</button>`;
 	});
 	const question = choosing ? `<p class="versions-question">${t("whichVersion")}</p>` : "";
-	const hint = choosing ? `<p class="hint">${t("versionHint")}</p>` : "";
+	// Say so when the photo picked the reverse holo (see sparkle.js), so a wrong guess is noticed.
+	const fromPhoto = choosing && !chosenVersion && versionHint === "reverseHolofoil" && chosenKey === "reverseHolofoil";
+	const hint = choosing ? `<p class="hint">${t(fromPhoto ? "versionFromPhoto" : "versionHint")}</p>` : "";
 	return `<div class="versions-block">${question}<div class="versions">${tiles.join("")}</div>${hint}</div>`;
 }
 

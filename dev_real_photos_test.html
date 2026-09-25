@@ -34,11 +34,12 @@ possible.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.21.2"></script>
-<script src="card-finder.js?v=1.21.2"></script>
-<script src="reader.js?v=1.21.2"></script>
-<script src="cards.js?v=1.21.2"></script>
-<script src="matcher.js?v=1.21.2"></script>
+<script src="pokemon-names.js?v=1.22.0"></script>
+<script src="card-finder.js?v=1.22.0"></script>
+<script src="sparkle.js?v=1.22.0"></script>
+<script src="reader.js?v=1.22.0"></script>
+<script src="cards.js?v=1.22.0"></script>
+<script src="matcher.js?v=1.22.0"></script>
 <script>
 "use strict";
 
@@ -60,7 +61,7 @@ async function runAllPhotos() {
 	// ?only=IMG_1988,IMG_1990 runs just the photos whose file names contain one of those.
 	const only = new URLSearchParams(location.search).get("only");
 	if (only) photos = photos.filter((photo) => only.split(",").some((part) => photo.file.includes(part)));
-	const scores = { total: 0, name: 0, number: 0, found: 0, openedRight: 0, openedWrong: 0 };
+	const scores = { total: 0, name: 0, number: 0, found: 0, openedRight: 0, openedWrong: 0, finishRight: 0, finishTold: 0 };
 	for (const photo of photos) {
 		const file = await fetch("dev-local/" + photo.file, { cache: "no-store" }).then((response) => response.blob());
 		const started = performance.now();
@@ -78,7 +79,7 @@ async function runAllPhotos() {
 			const located = reading.cardBox !== null || reading.textArea !== null;
 			const pick = found.cards.length === 1
 				? { cards: found.cards, clear: true }
-				: pickBestMatch(ranked, located, found.setSizes, "", found.numbersRead);
+				: pickBestMatch(ranked, located, found.setSizes, "", found.numbersRead, Boolean(reading.sparkle && reading.sparkle.reverseHolo));
 			foundAt = pick.cards.findIndex((card) => card.id === photo.id);
 			if (pick.clear) opened = foundAt === 0 ? "opened by itself: right" : "opened by itself: WRONG";
 			if (found.matchedNumber) matched = "database confirmed " + found.matchedNumber;
@@ -99,6 +100,18 @@ async function runAllPhotos() {
 		if (matched) lines.push(matched);
 		if (looks) lines.push(looks);
 		if (opened) lines.push(opened);
+		// Reverse holo or not, from the sparkle outside the picture (sparkle.js). "version" in
+		// real-photos.json marks the reverse holos.
+		const shouldSparkle = photo.version === "reverseHolofoil";
+		if (reading.sparkle) {
+			const toldRight = reading.sparkle.reverseHolo === shouldSparkle;
+			lines.push("sparkle " + reading.sparkle.grain.toFixed(1) + ": " + (reading.sparkle.reverseHolo ? "reverse holo" : "plain")
+				+ (toldRight ? " (right)" : " (WRONG)"));
+			scores.finishTold++;
+			if (toldRight) scores.finishRight++;
+		} else {
+			lines.push("sparkle: can't tell");
+		}
 		const strips = lines.join("\n");
 		scores.total++;
 		if (nameOk) scores.name++;
@@ -112,7 +125,8 @@ async function runAllPhotos() {
 	const line = "Name read " + scores.name + "/" + scores.total
 		+ " · number read " + scores.number + "/" + scores.total
 		+ " · right card shown first " + scores.found + "/" + scores.total
-		+ " · opened by itself " + scores.openedRight + " right, " + scores.openedWrong + " wrong";
+		+ " · opened by itself " + scores.openedRight + " right, " + scores.openedWrong + " wrong"
+		+ " · reverse holo or not " + scores.finishRight + "/" + scores.finishTold + " right";
 	summary.textContent = line;
 	console.log("REAL PHOTO TEST: " + line);
 	window.testScores = scores;   // lets a script read the result

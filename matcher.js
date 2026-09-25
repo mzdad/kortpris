@@ -167,7 +167,8 @@ function isClearWinner(ranked) {
 //   card's own number isn't - but not always, so the picture has to agree.
 // - setName: the set's name, when Claude read the card.
 // - numbersRead: every collector number the reader thought possible ("8/64").
-function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead = []) {
+// - looksReverseHolo: the photo sparkles outside the card's picture (see sparkle.js).
+function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead = [], looksReverseHolo = false) {
 	if (ranked.length === 0) return { cards: [], clear: false };
 	const cards = ranked.map((entry) => entry.card);
 	// Claude names the set. If exactly one candidate is from that set, that settles it.
@@ -207,6 +208,14 @@ function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead
 	const nearNumber = lookAlikes.filter((entry) =>
 		numbersRead.some((read) => nearlySameNumber(read, entry.card.number + "/" + entry.card.set.printedTotal)));
 	if (nearNumber.length === 1) return { cards: moveToFront(inOrder, nearNumber[0].card), clear: true };
+
+	// The photo sparkles outside its picture, and exactly one of the look-alikes was ever printed
+	// as a reverse holo: the Legendary Collection Dratini, not the Base Set one with the very same
+	// picture.
+	if (looksReverseHolo) {
+		const sparkly = lookAlikes.filter((entry) => hasReverseHolo(entry.card));
+		if (sparkly.length === 1) return { cards: moveToFront(inOrder, sparkly[0].card), clear: true };
+	}
 
 	return { cards: inOrder, clear: isClearWinner(candidates) };
 }
