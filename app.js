@@ -18,8 +18,8 @@ const KIDS_MODE_STORAGE_KEY = "kortpris.kidsMode";
 // A version's big price from this amount up (six digits) gets a smaller size, so it fits its box.
 const LONG_PRICE_FROM = 100000;
 // Kids mode shows a card's value as 1 to 5 Poké Balls: one more ball from each of these prices, in
-// euros (about 4, 22, 110 and 520 kroner). Five balls also gets a "Wow!".
-const BALL_STEPS_EUR = [0.5, 3, 15, 70];
+// kroner (whichever currency the prices are shown in). Five balls also gets a "Wow!".
+const BALL_STEPS_DKK = [20, 40, 250, 520];
 const MOST_BALLS = 5;
 // ...and the more balls, the better the ball: one Poké Ball, two Premier Balls, three Great Balls,
 // four Ultra Balls, five Master Balls.
@@ -1378,12 +1378,12 @@ function ballPictureHtml(kind) {
 }
 
 function ballCount(eur, usd) {
-	// 1 to 5 balls (see BALL_STEPS_EUR), or 0 when the price isn't known.
-	let value = null;
-	if (eur > 0) value = eur;
-	else if (usd > 0) value = fromDollars(usd, "EUR");
-	if (value === null) return 0;
-	return 1 + BALL_STEPS_EUR.filter((step) => value >= step).length;
+	// 1 to 5 balls (see BALL_STEPS_DKK), or 0 when the price isn't known.
+	let kroner = null;
+	if (eur > 0) kroner = fromEuros(eur, "DKK");
+	else if (usd > 0) kroner = fromDollars(usd, "DKK");
+	if (kroner === null) return 0;
+	return 1 + BALL_STEPS_DKK.filter((step) => kroner >= step).length;
 }
 
 function friendlyAmount(value) {
