@@ -57,7 +57,6 @@ export default {
 async function gradedPrices(cardId, apiKey, raw) {
 	if (!apiKey) throw new Error("the relay has no PPT_API_KEY secret");
 	const productId = await tcgplayerProductId(cardId);
-	if (!productId) return { card: cardId, found: false, grades: [] };
 
 	const address = PRICE_API + "?tcgPlayerId=" + productId + "&includeEbay=true&limit=1";
 	const response = await fetch(address, { headers: { Authorization: "Bearer " + apiKey } });
@@ -73,32 +72,30 @@ async function tcgplayerProductId(cardId) {
 	const response = await fetch(TCGPLAYER_LINK + cardId, { redirect: "manual" });
 	const location = response.headers.get("Location") || "";
 	const match = location.match(/product\/(\d+)/) || decodeURIComponent(location).match(/product\/(\d+)/);
-	return match ? match[1] : null;
+	// Not found is not remembered: it may only be the link service having a bad moment.
+	if (!match) throw new Error("no TCGplayer number for " + cardId + " (answer " + response.status + " " + location.slice(0, 120) + ")");
+	return match[1];
 }
 
 function psaGrades(body) {
-	// Finds every "psa10", "psa9", "psa8"... entry in the answer, wherever it sits, and keeps
-	// the sale count and prices. Best grade first.
-	const found = new Map();
-	const visit = (value) => {
-		if (!value || typeof value !== "object") return;
-		for (const [key, inner] of Object.entries(value)) {
-			const grade = key.match(/^psa[_-]?(\d+(?:\.5)?)$/i);
-			if (grade && inner && typeof inner === "object" && !found.has(grade[1])) {
-				const entry = {
-					grade: grade[1],
-					count: numberOrNull(inner.count ?? inner.salesCount ?? inner.sales),
-					median: numberOrNull(inner.medianPrice ?? inner.median),
-					average: numberOrNull(inner.averagePrice ?? inner.avg ?? inner.average),
-				};
-				if (entry.median !== null || entry.average !== null) found.set(grade[1], entry);
-			} else {
-				visit(inner);
-			}
-		}
-	};
-	visit(body);
-	return [...found.values()].sort((a, b) => Number(b.grade) - Number(a.grade));
+	// The answer lists the card's eBay sales per grade under data.ebay.salesByGrade: "psa10",
+	// "psa9", "psa8_5" (that is 8.5) and so on, next to other graders (cgc, bgs, tag) that the
+	// app doesn't show. Best grade first.
+	const card = Array.isArray(body.data) ? body.data[0] : body.data;
+	const salesByGrade = (card && card.ebay && card.ebay.salesByGrade) || {};
+	const grades = [];
+	for (const [key, sales] of Object.entries(salesByGrade)) {
+		const match = key.match(/^psa(\d+)(_5)?$/);
+		if (!match || !sales) continue;
+		const entry = {
+			grade: match[2] ? match[1] + ".5" : match[1],
+			count: numberOrNull(sales.count),
+			median: numberOrNull(sales.medianPrice),
+			average: numberOrNull(sales.averagePrice),
+		};
+		if (entry.median !== null || entry.average !== null) grades.push(entry);
+	}
+	return grades.sort((a, b) => Number(b.grade) - Number(a.grade));
 }
 
 function numberOrNull(value) {

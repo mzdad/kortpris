@@ -4,3 +4,8 @@ name = "kortpris-psa"
 main = "psa-prices.js"
 compatibility_date = "2026-09-01"
 workers_dev = true
+
+# Where each card's PSA prices are remembered for a day (made with: wrangler kv namespace create).
+[[kv_namespaces]]
+binding = "REMEMBERED"
+id = "dfee0657feef42ddbee9acb2322f8488"

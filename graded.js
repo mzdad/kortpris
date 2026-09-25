@@ -4,8 +4,8 @@
 // No free price database the page can ask has them, so they come through the Kortpris relay
 // (relay/psa-prices.js, on Cloudflare), which holds the price service's secret key.
 
-// Where the relay is online. Empty = no relay yet: the card page then only links to eBay.
-const PSA_RELAY_URL = "";
+// Where the relay is online. Empty = no relay: the card page then only links to eBay.
+const PSA_RELAY_URL = "https://kortpris-psa.kortpris.workers.dev/";
 // Each card's answer is also kept on this phone for a day: the prices change once a day, and
 // the free price service allows about 50 cards a day in all.
 const GRADED_STORAGE_KEY = "kortpris.graded";

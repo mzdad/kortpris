@@ -10,7 +10,13 @@ shows. It only answers the app (`https://mzdad.github.io`, plus `http://localhos
 testing) and remembers each card for a day in Cloudflare's KV store, so the free plan's 100
 credits a day (2 per card) go a long way.
 
-The app's side is `graded.js`; `PSA_RELAY_URL` there must be this relay's address.
+The app's side is `graded.js`; `PSA_RELAY_URL` there must be this relay's address, which is
+<https://kortpris-psa.kortpris.workers.dev/> (set up 2026-09-25).
+
+The price service answers with `data.ebay.salesByGrade`: `psa10`, `psa9`, `psa8_5` (8.5) and so
+on, each with `count`, `medianPrice`, `averagePrice`, `lastSaleDate` and more, next to other
+graders (`cgc9`, `bgs9_5`, `tag8`, `ace7`) and `ungraded`. The relay passes on only PSA's.
+Sales are per TCGplayer product, so a card's normal and reverse holo prints are counted together.
 
 ## Setting it up (once)
 

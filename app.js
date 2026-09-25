@@ -1061,12 +1061,15 @@ function gradedPricesHtml(card) {
 		const sales = Number.isFinite(entry.count) ? entry.count : "–";
 		return `<tr><td>PSA ${escapeHtml(entry.grade)}</td><td>${shown}</td><td>${shownDollars}</td><td>${sales}</td></tr>`;
 	});
+	// The sales come per card, not per version: a PSA 10 reverse holo and a PSA 10 normal print
+	// count as the same card, though the reverse holo may be worth far more.
+	const mixed = cardVersions(card).length > 1 ? " " + t("gradedAllVersions") : "";
 	return `
 		<table class="price-table">
 			<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedMiddle")}</th><th>${t("gradedDollars")}</th><th>${t("gradedSales")}</th></tr></thead>
 			<tbody>${rows.join("")}</tbody>
 		</table>
-		<p class="hint">${t("gradedFrom")}</p>`;
+		<p class="hint">${t("gradedFrom")}${mixed}</p>`;
 }
 
 function ebaySoldUrl(card, version, grade = "") {
