@@ -32,7 +32,9 @@ A web page with nothing to install. What happens to a photo:
    cards reads differently after even a tiny change (one PC read `86/110`, another `0/110`,
    from the same photo).
 3. **Card → prices.** Prices from **Cardmarket** (Europe, euros, also shown in kroner)
-   and **TCGplayer** (USA, dollars), with links to both shops.
+   and **TCGplayer** (USA, dollars), with links to both shops. **PSA prices** (what the card
+   sold for on eBay in each PSA grade) come from PokemonPriceTracker through a small relay on
+   Cloudflare that keeps its key secret (`relay/`, see `relay/README.md`).
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
    value in kroner. A search box narrows the list by name, set, number or version
    ("jungle holo", "pika", "58") and says what the cards found are worth together.
@@ -75,6 +77,8 @@ Anthropic.
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
+| `graded.js` | PSA prices of a card, asked from the relay and kept on the phone for a day |
+| `relay/` | The PSA price relay that runs on Cloudflare, not in the page |
 | `storage.js` | Saves things on the phone (language, My cards) |
 | `currency.js` | Shows prices in DKK, EUR, GBP or IDR, with the central bank's daily rates |
 | `account.js` | Accounts: sign up, sign in, and My cards kept online (Firebase) |

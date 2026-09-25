@@ -3,3 +3,7 @@
 
 # Private test photos, never published
 dev-local/
+
+# The relay's local test state and local secrets (relay/psa-prices.js)
+relay/.wrangler/
+relay/.dev.vars

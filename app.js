@@ -225,10 +225,16 @@ function makeMoneyFormats(lang, code) {
 			minimumFractionDigits: decimals,
 			maximumFractionDigits: decimals,
 		}),
-		// Rounded prices for kids mode: "33 kr." rather than "32,89 kr.".
+		// Rounded prices for kids mode and PSA prices: "33 kr." rather than "32,89 kr.".
 		whole: new Intl.NumberFormat(locale, {
 			style: "currency",
 			currency: code,
+			minimumFractionDigits: 0,
+			maximumFractionDigits: 0,
+		}),
+		wholeDollars: new Intl.NumberFormat(locale, {
+			style: "currency",
+			currency: "USD",
 			minimumFractionDigits: 0,
 			maximumFractionDigits: 0,
 		}),
@@ -1019,7 +1025,8 @@ function tcgplayerTableHtml(tcgplayer) {
 		</div>`;
 }
 
-// Graded cards: no free price database has them, so these links search real sales instead.
+// Graded cards: their prices come through the Kortpris relay (graded.js), and these links
+// search the real sales as well.
 function gradedLinksHtml(card, version) {
 	const priceCharting = "https://www.pricecharting.com/search-products?type=prices&q="
 		+ encodeURIComponent(card.name + " " + card.set.name + " " + card.number);
@@ -1027,12 +1034,39 @@ function gradedLinksHtml(card, version) {
 		<div class="source">
 			<h3>${t("gradedTitle")}</h3>
 			<p class="hint">${t("gradedExplain")}</p>
+			${gradedPricesHtml(card)}
 			<div class="graded-links">
 				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 10"), t("gradedEbay", { grade: "PSA 10" }))}
 				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 9"), t("gradedEbay", { grade: "PSA 9" }))}
 				${storeLinkHtml(priceCharting, t("gradedPriceCharting"))}
 			</div>
 		</div>`;
+}
+
+function gradedPricesHtml(card) {
+	// A table of what the card sold for in each PSA grade: the middle price of the sales, in the
+	// chosen currency and in dollars as sold, and how many sales it is based on.
+	if (!gradedPricesAvailable()) return "";
+	// When the prices arrive, the open card is drawn again to show them.
+	const known = gradedPricesOf(card.id, () => renderResults());
+	if (known.state === "loading") return `<p class="note">${t("gradedLoading")}</p>`;
+	if (known.state === "failed") return `<p class="note">${t("gradedFailed")}</p>`;
+	if (known.grades.length === 0) return `<p class="note">${t("gradedNone")}</p>`;
+	const rows = known.grades.map((entry) => {
+		const dollars = entry.median || entry.average;
+		const local = localPrice(null, dollars);
+		// Whole amounts: a price guessed from a few sales has no meaningful øre or cents.
+		const shown = local !== null ? money.whole.format(local) : "–";
+		const shownDollars = dollars > 0 ? money.wholeDollars.format(dollars) : "–";
+		const sales = Number.isFinite(entry.count) ? entry.count : "–";
+		return `<tr><td>PSA ${escapeHtml(entry.grade)}</td><td>${shown}</td><td>${shownDollars}</td><td>${sales}</td></tr>`;
+	});
+	return `
+		<table class="price-table">
+			<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedMiddle")}</th><th>${t("gradedDollars")}</th><th>${t("gradedSales")}</th></tr></thead>
+			<tbody>${rows.join("")}</tbody>
+		</table>
+		<p class="hint">${t("gradedFrom")}</p>`;
 }
 
 function ebaySoldUrl(card, version, grade = "") {

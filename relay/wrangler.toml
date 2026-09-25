@@ -1,0 +1,6 @@
+# Settings for Cloudflare's "wrangler" tool, which puts psa-prices.js online.
+# The price service's key is NOT here: it is a Cloudflare secret (wrangler secret put PPT_API_KEY).
+name = "kortpris-psa"
+main = "psa-prices.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
