@@ -108,6 +108,7 @@ const collectionSearchNote = document.getElementById("collection-search-note");
 const voiceSettings = document.getElementById("voice-settings");
 const voiceSelects = document.querySelectorAll("[data-voice-language]");
 const notice = document.getElementById("notice");
+const claudeSettings = document.getElementById("claude-settings");
 const claudeState = document.getElementById("claude-state");
 const claudeForm = document.getElementById("claude-form");
 const claudeKeyInput = document.getElementById("claude-key-input");
@@ -584,10 +585,10 @@ async function scanPhoto(imageFile) {
 	setNotice(null);
 	versionHint = null;
 
-	// With a saved API key, Claude reads the card. If that fails for any reason,
-	// the built-in reader takes over, and a notice says why.
+	// With a saved API key, and signed in to an account, Claude reads the card. If that fails
+	// for any reason, the built-in reader takes over, and a notice says why.
 	let reading = null;
-	if (claudeKey()) {
+	if (claudeKey() && claudeReadingAllowed()) {
 		setStatus("claudeReading");
 		showProgress(null);
 		try {
@@ -1473,6 +1474,7 @@ function handleAccountChange(username) {
 	renderAccount();
 	renderCollection();
 	renderResults();
+	renderClaudeSettings();   // shown only while signed in
 }
 
 function renderAccount() {
@@ -1541,7 +1543,14 @@ function showAccountMessage() {
 
 // ---------- Read cards with Claude ----------
 
+function claudeReadingAllowed() {
+	// Reading with Claude is only offered to someone signed in to an account. Signed out, the
+	// settings are hidden, and a key saved earlier on this phone stays unused until they sign in.
+	return accountName !== null;
+}
+
 function renderClaudeSettings() {
+	claudeSettings.hidden = !claudeReadingAllowed();
 	const on = claudeKey() !== "";
 	claudeState.textContent = t(on ? "claudeOn" : "claudeOff");
 	claudeState.classList.toggle("on", on);

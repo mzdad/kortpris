@@ -57,8 +57,9 @@ characters and pass the [zxcvbn](https://github.com/dropbox/zxcvbn) guessability
 Accounts run on a Firebase project the owner creates: see [SETUP-ACCOUNTS.md](SETUP-ACCOUNTS.md).
 Until `firebase-config.js` has that project's settings, the app hides accounts.
 
-**Optional: read cards with Claude.** Under "Read cards with Claude" on the Scan screen,
-the viewer can save their own Anthropic API key. Photos are then read by Claude Opus 5
+**Optional: read cards with Claude.** Only for someone signed in to an account: then, under
+"Read cards with Claude" on the Scan screen, they can save their own Anthropic API key
+(signed out, the box is hidden and a key saved earlier isn't used). Photos are then read by Claude Opus 5
 (`claude.js`), which handles worn, foil and non-English cards far better, at roughly
 US$0.03 per photo on the key owner's account. If Claude fails, the built-in reader takes
 over and a notice says why. The key is kept in the phone's browser and sent only to
