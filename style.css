@@ -399,6 +399,16 @@ button.version { cursor: pointer; }
 .settings-body { display: grid; gap: 12px; margin-top: 14px; }
 .settings-body p { margin: 0; }
 .settings-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.voice-select {
+	font: inherit; font-size: 16px;   /* 16px stops iPhones from zooming in on focus */
+	color: var(--ink);
+	background: var(--surface-2);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 11px 12px;
+	width: 100%; min-width: 0;
+}
+.voice-select:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; }
 .note.error { color: var(--error); }
 
 footer { color: var(--muted); font-size: 0.8rem; display: grid; gap: 4px; }
@@ -451,6 +461,7 @@ body.kids .steps,
 body.kids #example-button,
 body.kids #search-form,
 body.kids #claude-settings,
+body.kids #voice-settings,
 body.kids #notice,
 body.kids #results-note,
 body.kids .result-set,

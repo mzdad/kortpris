@@ -105,6 +105,8 @@ const collectionList = document.getElementById("collection-list");
 const collectionSearchRow = document.getElementById("collection-search-row");
 const collectionSearch = document.getElementById("collection-search");
 const collectionSearchNote = document.getElementById("collection-search-note");
+const voiceSettings = document.getElementById("voice-settings");
+const voiceSelects = document.querySelectorAll("[data-voice-language]");
 const notice = document.getElementById("notice");
 const claudeState = document.getElementById("claude-state");
 const claudeForm = document.getElementById("claude-form");
@@ -275,6 +277,7 @@ function applyLanguage() {
 	renderResults();
 	renderCollection();
 	renderClaudeSettings();
+	renderVoiceSettings();
 	renderAccount();
 	renderFooter();
 }
@@ -398,6 +401,20 @@ detail.addEventListener("change", (event) => {
 for (const button of viewButtons) {
 	button.addEventListener("click", () => showView(button.dataset.view));
 }
+
+// The "Reading aloud" settings: a voice for each language, and a button to hear it.
+for (const select of voiceSelects) {
+	select.addEventListener("change", () => chooseVoice(select.dataset.voiceLanguage, select.value));
+}
+voiceSettings.addEventListener("click", (event) => {
+	const button = event.target.closest("[data-try-voice]");
+	if (!button) return;
+	// The sample is always in the voice's own language, whatever language the page is in.
+	const voiceLanguage = button.dataset.tryVoice;
+	speak(STRINGS[voiceLanguage].voiceSample, voiceLanguage);
+});
+// Phones and browsers find their voices a moment after the page opens, and may add more later.
+if (canSpeak()) speechSynthesis.addEventListener("voiceschanged", renderVoiceSettings);
 
 claudeForm.addEventListener("submit", (event) => {
 	event.preventDefault();   // stay on this page instead of reloading it
@@ -1253,6 +1270,29 @@ function readAloudButtonHtml() {
 
 function say(text) {
 	speak(text, language);
+}
+
+function renderVoiceSettings() {
+	// Each language's list: "Automatic" (the most natural voice, named), then every voice this
+	// phone has for that language, most natural first (see voicesFor in speech.js).
+	for (const select of voiceSelects) {
+		const voiceLanguage = select.dataset.voiceLanguage;
+		const voices = voicesFor(voiceLanguage);
+		const chosen = chosenVoiceName(voiceLanguage);
+		const automatic = voices.length > 0 ? t("voiceAutomatic", { name: shortVoiceName(voices[0]) }) : t("voiceNone");
+		const options = [`<option value="">${escapeHtml(automatic)}</option>`];
+		for (const voice of voices) {
+			const selected = voice.name === chosen ? "selected" : "";
+			options.push(`<option value="${escapeHtml(voice.name)}" ${selected}>${escapeHtml(shortVoiceName(voice))}</option>`);
+		}
+		select.innerHTML = options.join("");
+		select.disabled = voices.length === 0;
+	}
+}
+
+function shortVoiceName(voice) {
+	// "Microsoft Helle - Danish (Denmark)" -> "Microsoft Helle": the language is known already.
+	return voice.name.replace(/\s+-\s+.*$/, "");
 }
 
 function stopSpeaking() {

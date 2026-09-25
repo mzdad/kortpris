@@ -71,7 +71,7 @@ Anthropic.
 | `index.html` | The page layout |
 | `style.css` | Colours, fonts, spacing |
 | `strings.js` | Every text in English and Danish - edit wordings here |
-| `speech.js` | Reads text aloud with the phone's own voice |
+| `speech.js` | Reads text aloud with the phone's own voice, picking its most natural one |
 | `pokemon-names.js` | All Pokémon names, used to correct misreads |
 | `card-finder.js` | Finds where the card is in the photo (yellow border, or shape) |
 | `reader.js` | Photo → name and number |
