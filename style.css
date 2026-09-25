@@ -406,6 +406,10 @@ footer p { margin: 0; }
 footer p:empty { display: none; }
 .app-version { font-family: var(--font-mono); font-size: 0.75rem; }
 .graded-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+/* a tick box with its words, the whole row tappable */
+.check-row { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 600; cursor: pointer; justify-self: start; }
+.check-row input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.check-row input:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 
 /* ---------- Button bar, always within thumb reach ---------- */
 .actionbar {

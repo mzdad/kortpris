@@ -387,6 +387,14 @@ detail.addEventListener("click", (event) => {
 	if (kidsMode && !saveFailed) say(t("saySaved"));
 });
 
+// The "fetch PSA prices" tick box on the open card: remembered, and the card drawn again, which
+// fetches its PSA prices straight away when it was just ticked.
+detail.addEventListener("change", (event) => {
+	if (!event.target.matches("[data-action='fetch-psa']")) return;
+	setFetchPsaPrices(event.target.checked);
+	renderResults();
+});
+
 for (const button of viewButtons) {
 	button.addEventListener("click", () => showView(button.dataset.view));
 }
@@ -1047,11 +1055,18 @@ function gradedPricesHtml(card) {
 	// A table of what the card sold for in each PSA grade: the middle price of the sales, in the
 	// chosen currency and in dollars as sold, and how many sales it is based on.
 	if (!gradedPricesAvailable()) return "";
+	// The tick box that switches fetching on and off (see fetchPsaPrices in graded.js).
+	const toggle = `
+		<label class="check-row">
+			<input type="checkbox" data-action="fetch-psa" ${fetchPsaPrices ? "checked" : ""}>
+			${t("gradedFetchToggle")}
+		</label>`;
 	// When the prices arrive, the open card is drawn again to show them.
 	const known = gradedPricesOf(card.id, () => renderResults());
-	if (known.state === "loading") return `<p class="note">${t("gradedLoading")}</p>`;
-	if (known.state === "failed") return `<p class="note">${t("gradedFailed")}</p>`;
-	if (known.grades.length === 0) return `<p class="note">${t("gradedNone")}</p>`;
+	if (known.state === "off") return toggle + `<p class="note">${t("gradedOff")}</p>`;
+	if (known.state === "loading") return toggle + `<p class="note">${t("gradedLoading")}</p>`;
+	if (known.state === "failed") return toggle + `<p class="note">${t("gradedFailed")}</p>`;
+	if (known.grades.length === 0) return toggle + `<p class="note">${t("gradedNone")}</p>`;
 	const rows = known.grades.map((entry) => {
 		const dollars = entry.median || entry.average;
 		const local = localPrice(null, dollars);
@@ -1064,7 +1079,7 @@ function gradedPricesHtml(card) {
 	// The sales come per card, not per version: a PSA 10 reverse holo and a PSA 10 normal print
 	// count as the same card, though the reverse holo may be worth far more.
 	const mixed = cardVersions(card).length > 1 ? " " + t("gradedAllVersions") : "";
-	return `
+	return toggle + `
 		<table class="price-table">
 			<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedMiddle")}</th><th>${t("gradedDollars")}</th><th>${t("gradedSales")}</th></tr></thead>
 			<tbody>${rows.join("")}</tbody>

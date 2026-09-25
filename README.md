@@ -34,7 +34,9 @@ A web page with nothing to install. What happens to a photo:
 3. **Card → prices.** Prices from **Cardmarket** (Europe, euros, also shown in kroner)
    and **TCGplayer** (USA, dollars), with links to both shops. **PSA prices** (what the card
    sold for on eBay in each PSA grade) come from PokemonPriceTracker through a small relay on
-   Cloudflare that keeps its key secret (`relay/`, see `relay/README.md`).
+   Cloudflare that keeps its key secret (`relay/`, see `relay/README.md`). They are only
+   fetched while "Fetch PSA prices automatically" is ticked on the card page, because the free
+   plan allows about 50 cards a day; prices fetched in the last day are shown either way.
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
    value in kroner. A search box narrows the list by name, set, number or version
    ("jungle holo", "pika", "58") and says what the cards found are worth together.
