@@ -44,8 +44,26 @@ const CLEAR_WINNER_GAP = 2;
 // nearly as alike: at most this many times further from the photo. Cards with the very same
 // artwork score within about 1.13 of each other; a different card at least twice as far.
 const SET_SIZE_LOOK_SLACK = 1.5;
+// An anniversary reprint (see ANNIVERSARY_REPRINT_SETS in cards.js) has its original's picture
+// and number, but a "30" stamp at one bottom corner of the picture: the right one on most, the
+// left one when the Pokémon sits on the right. These patches around both corners, as shares of
+// the card's width and height (measured on the reprints' pictures), are compared as well...
+const STAMP_CORNERS = [
+	{ x0: 0.0, x1: 0.28, y0: 0.38, y1: 0.54 },
+	{ x0: 0.72, x1: 1.0, y0: 0.38, y1: 0.54 },
+];
+const CORNER_COLUMNS = 12;
+const CORNER_ROWS = 7;
+const CORNER_SHIFTS_X = [-0.02, 0, 0.02];
+const CORNER_SHIFTS_Y = [-0.015, 0, 0.015];
+// ...and the reprint or its original wins when the other's corners are at least this many times
+// further from the photo. A photo of the Jigglypuff reprint scored 1.32 against the original's
+// 2.31; made-up photos of Base Set originals scored ten times closer to the original.
+const REPRINT_CORNER_GAP = 1.3;
 
-// Returns [{ card, distance }] sorted with the closest look first. Smaller distance = more alike.
+// Returns [{ card, distance, corners }] sorted with the closest look first. Smaller distance =
+// more alike. corners is the same for the patches in STAMP_CORNERS, or null when the card's
+// place in the photo isn't known exactly.
 // cardBox is where the card is in the photo, when card-finder.js found it;
 // without it, the card's place is estimated from its text. onProgress(done, total) is told
 // after each candidate's picture: with a few hundred of them, this takes a while.
@@ -64,22 +82,60 @@ async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = (
 		}
 	}
 
+	// Each stamp corner of the photo, also a little shifted (see STAMP_CORNERS).
+	const photoCorners = cardBox ? STAMP_CORNERS.map((corner) => cornerGridsOfPhoto(photo, cardBox, corner)) : null;
+
 	let done = 0;
 	const ranked = await Promise.all(cards.map(async (card) => {
 		let distance = Infinity;   // a picture that doesn't load goes last
+		let corners = null;
 		try {
 			const picture = await loadPicture(card.images.small);
-			const cardGrid = colourGrid(picture, artworkOf({ x0: 0, y0: 0, x1: picture.width, y1: picture.height }));
+			const wholeCard = { x0: 0, y0: 0, x1: picture.width, y1: picture.height };
+			const cardGrid = colourGrid(picture, artworkOf(wholeCard));
 			distance = Math.min(...photoGrids.map((grid) => gridDistance(grid, cardGrid)));
+			if (photoCorners) corners = cornerDistance(photoCorners, picture, wholeCard);
 		} catch (error) {
 			console.error(error);
 		}
 		done++;
 		onProgress(done, cards.length);
-		return { card, distance };
+		return { card, distance, corners };
 	}));
 	ranked.sort((a, b) => a.distance - b.distance);
 	return ranked;
+}
+
+function cornerGridsOfPhoto(photo, cardBox, corner) {
+	const grids = [];
+	for (const shiftX of CORNER_SHIFTS_X) {
+		for (const shiftY of CORNER_SHIFTS_Y) {
+			grids.push(colourGrid(photo, partOfCard(cardBox, corner, shiftX, shiftY), CORNER_COLUMNS, CORNER_ROWS));
+		}
+	}
+	return grids;
+}
+
+function cornerDistance(photoCorners, picture, wholeCard) {
+	// How unlike the photo both stamp corners of a card's picture are, added up.
+	let total = 0;
+	STAMP_CORNERS.forEach((corner, index) => {
+		const cardGrid = colourGrid(picture, partOfCard(wholeCard, corner, 0, 0), CORNER_COLUMNS, CORNER_ROWS);
+		total += Math.min(...photoCorners[index].map((grid) => gridDistance(grid, cardGrid)));
+	});
+	return total;
+}
+
+function partOfCard(cardBox, part, shiftX, shiftY) {
+	// part (shares of the card's width and height) inside a card's box, moved by the shifts.
+	const width = cardBox.x1 - cardBox.x0;
+	const height = cardBox.y1 - cardBox.y0;
+	return {
+		x0: cardBox.x0 + width * (part.x0 + shiftX),
+		x1: cardBox.x0 + width * (part.x1 + shiftX),
+		y0: cardBox.y0 + height * (part.y0 + shiftY),
+		y1: cardBox.y0 + height * (part.y1 + shiftY),
+	};
 }
 
 function artworkOf(cardBox) {
@@ -119,22 +175,56 @@ function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead
 	if (fromSet.length === 1) return { cards: moveToFront(cards, fromSet[0]), clear: true };
 	if (!located) return { cards: cards, clear: false };
 
-	// Among the cards that look nearly as much like the photo as the best one, exactly one
-	// comes from a set of a size the reader saw: that is the one.
+	// The cards that look nearly as much like the photo as the best one.
 	const best = ranked[0].distance;
-	const lookAlikes = ranked.filter((entry) =>
+	let lookAlikes = ranked.filter((entry) =>
 		Number.isFinite(entry.distance) && entry.distance <= best * SET_SIZE_LOOK_SLACK);
+
+	// An anniversary reprint and its original among them: the corners with the stamp decide.
+	// When they can't, both are shown for the viewer to pick - their prices can be far apart.
+	const reprintCheck = reprintOrOriginal(lookAlikes);
+	if (reprintCheck.won) return { cards: moveToFront(cards, reprintCheck.won), clear: true };
+	if (reprintCheck.unsure) {
+		return { cards: [...reprintCheck.unsure, ...cards.filter((card) => !reprintCheck.unsure.includes(card))], clear: false };
+	}
+	let candidates = ranked;
+	let lastCards = [];
+	if (reprintCheck.lost) {
+		// Not the reprint: it goes last, and the rules below choose among the rest.
+		candidates = ranked.filter((entry) => entry !== reprintCheck.lost);
+		lookAlikes = lookAlikes.filter((entry) => entry !== reprintCheck.lost);
+		lastCards = [reprintCheck.lost.card];
+	}
+	const inOrder = [...candidates.map((entry) => entry.card), ...lastCards];
+
+	// Among the look-alikes, exactly one comes from a set of a size the reader saw: that is the one.
 	const fromSetSize = lookAlikes.filter((entry) => setSizes.includes(String(entry.card.set.printedTotal)));
-	if (fromSetSize.length === 1) return { cards: moveToFront(cards, fromSetSize[0].card), clear: true };
+	if (fromSetSize.length === 1) return { cards: moveToFront(inOrder, fromSetSize[0].card), clear: true };
 
 	// Among those look-alikes, exactly one has a number at most one digit away from a number
 	// read: tiny print turns a 6 into an 8, so "8/64" was Mr. Mime 6/64 - not the non-holo
 	// Mr. Mime 22/64 with the very same picture.
 	const nearNumber = lookAlikes.filter((entry) =>
 		numbersRead.some((read) => nearlySameNumber(read, entry.card.number + "/" + entry.card.set.printedTotal)));
-	if (nearNumber.length === 1) return { cards: moveToFront(cards, nearNumber[0].card), clear: true };
+	if (nearNumber.length === 1) return { cards: moveToFront(inOrder, nearNumber[0].card), clear: true };
 
-	return { cards: cards, clear: isClearWinner(ranked) };
+	return { cards: inOrder, clear: isClearWinner(candidates) };
+}
+
+// Looks for an anniversary reprint and its original among the look-alikes (see STAMP_CORNERS).
+// Returns { won: the reprint's card } when the photo is the reprint, { lost: the reprint's entry }
+// when it is the original, { unsure: [both cards, closer first] }, or {} with nothing to decide.
+function reprintOrOriginal(lookAlikes) {
+	const reprint = lookAlikes.find((entry) => isAnniversaryReprint(entry.card));
+	if (!reprint) return {};
+	const originals = lookAlikes.filter((entry) => isReprintOf(reprint.card, entry.card));
+	if (originals.length === 0) return {};
+	// Base Set Charizard 4/102 and Base Set 2 Charizard 4/130 are both originals of one reprint.
+	const original = originals.reduce((closest, entry) => (entry.corners < closest.corners ? entry : closest));
+	if (reprint.corners === null || original.corners === null) return { unsure: [original.card, reprint.card] };
+	if (original.corners >= reprint.corners * REPRINT_CORNER_GAP) return { won: reprint.card };
+	if (reprint.corners >= original.corners * REPRINT_CORNER_GAP) return { lost: reprint };
+	return { unsure: reprint.corners < original.corners ? [reprint.card, original.card] : [original.card, reprint.card] };
 }
 
 function nearlySameNumber(read, printed) {
@@ -206,10 +296,10 @@ function moveBox(box, shiftShare, shiftShareY, scale) {
 	};
 }
 
-function colourGrid(source, box) {
-	const small = shrink(source, box, LOOK_COLUMNS, LOOK_ROWS);
-	const pixels = small.getContext("2d").getImageData(0, 0, LOOK_COLUMNS, LOOK_ROWS).data;
-	const cells = LOOK_COLUMNS * LOOK_ROWS;
+function colourGrid(source, box, columns = LOOK_COLUMNS, rows = LOOK_ROWS) {
+	const small = shrink(source, box, columns, rows);
+	const pixels = small.getContext("2d").getImageData(0, 0, columns, rows).data;
+	const cells = columns * rows;
 	const grid = new Float32Array(cells * 3);
 	for (let channel = 0; channel < 3; channel++) {
 		// Light makes a whole photo brighter, darker or more yellow. Measuring each cell

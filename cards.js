@@ -14,6 +14,14 @@ const WIDE_PAGE_SIZE = 250;
 // (measured September 2026), so every lookup is sent twice at once and retried a few times.
 const MAX_API_ATTEMPTS = 6;
 const RETRY_DELAY_MS = 400;
+// Sets that print old cards again with the old card's own number: the 2026 reprint of Erika's
+// Jigglypuff says "69/132", just like the one from 2000. The database knows no set size for
+// these sets, so a search on the number never finds them - they are added next to their
+// originals instead (see withReprints), and the photo decides which one it is (matcher.js).
+const ANNIVERSARY_REPRINT_SETS = ["me55c"];   // 30th Celebration: Classic Collection (2026)
+
+// The reprints, fetched once: the sets are small (30 cards).
+let reprintsPromise = null;
 
 // Searches for the card with this name and collector number ("4/102").
 // Tries the most exact search first, then looser ones in case the photo was misread.
@@ -38,7 +46,7 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 			const page = await fetchCardPage(attempt.query, RESULTS_PAGE_SIZE);
 			if (page.cards.length > 0) {
 				return {
-					cards: page.cards,
+					cards: await withReprints(page.cards),
 					description: attempt.description,
 					totalCount: page.totalCount,
 					exactFound: Boolean(attempt.exact),
@@ -60,7 +68,7 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 			const page = await fetchCardPage(query, RESULTS_PAGE_SIZE);
 			if (page.cards.length > 0) {
 				return {
-					cards: page.cards,
+					cards: await withReprints(page.cards),
 					description: { key: "matchExact", values: { name: nameWord, number: parsed.number + "/" + parsed.total } },
 					totalCount: page.totalCount,
 					exactFound: true,
@@ -103,7 +111,7 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 		for (const card of page.cards) pile.set(card.id, card);
 		if (page.cards.length > 0) description = { key: "matchSetSizeLook", values: { total: likeliestSize } };
 	}
-	const cards = [...pile.values()];
+	const cards = await withReprints([...pile.values()]);
 	return {
 		cards: cards,
 		description: cards.length > 0 ? description : null,
@@ -112,6 +120,41 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 		setSizes: setSizes,
 		numbersRead: guesses,
 	};
+}
+
+async function withReprints(cards) {
+	// The cards found, plus the anniversary reprint of any of them. If the database doesn't
+	// answer, the cards alone: the reprints are an extra, not worth failing the search for.
+	let reprints;
+	try {
+		reprints = await allReprints();
+	} catch (problem) {
+		return cards;
+	}
+	const extra = reprints.filter((reprint) =>
+		!cards.some((card) => card.id === reprint.id)
+		&& cards.some((card) => isReprintOf(reprint, card)));
+	return [...cards, ...extra];
+}
+
+function allReprints() {
+	if (!reprintsPromise) {
+		const query = ANNIVERSARY_REPRINT_SETS.map((setId) => "set.id:" + setId).join(" OR ");
+		reprintsPromise = fetchCards(query, WIDE_PAGE_SIZE);
+		reprintsPromise.catch(() => { reprintsPromise = null; });   // try again on the next search
+	}
+	return reprintsPromise;
+}
+
+function isAnniversaryReprint(card) {
+	return ANNIVERSARY_REPRINT_SETS.includes(card.set.id);
+}
+
+function isReprintOf(reprint, card) {
+	// Same name and same number, but not itself a reprint.
+	return isAnniversaryReprint(reprint) && !isAnniversaryReprint(card)
+		&& reprint.name.toLowerCase() === card.name.toLowerCase()
+		&& reprint.number === card.number;
 }
 
 // True when there is enough to search on: a name, a number, or at least a set size ("?/110").

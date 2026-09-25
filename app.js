@@ -864,6 +864,7 @@ function cardDetailHtml(card) {
 			</div>
 		</div>
 		${versionsHtml(versions, version.key)}
+		${versions.length === 0 ? `<p>${storeLinkHtml(ebaySoldUrl(card, version), t("soldOnEbay"))}</p>` : ""}
 		${own}
 		${cardmarketTableHtml(card.cardmarket)}
 		${tcgplayerTableHtml(card.tcgplayer)}
@@ -1020,11 +1021,6 @@ function tcgplayerTableHtml(tcgplayer) {
 
 // Graded cards: no free price database has them, so these links search real sales instead.
 function gradedLinksHtml(card, version) {
-	const words = ["Pokemon", card.name, collectorNumber(card), card.set.name];
-	if (version.key === "reverseHolofoil") words.push("reverse holo");
-	if (version.key.startsWith("firstEdition")) words.push("1st edition");
-	const ebaySold = (grade) => "https://www.ebay.com/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw="
-		+ encodeURIComponent(words.join(" ") + " " + grade);
 	const priceCharting = "https://www.pricecharting.com/search-products?type=prices&q="
 		+ encodeURIComponent(card.name + " " + card.set.name + " " + card.number);
 	return `
@@ -1032,11 +1028,24 @@ function gradedLinksHtml(card, version) {
 			<h3>${t("gradedTitle")}</h3>
 			<p class="hint">${t("gradedExplain")}</p>
 			<div class="graded-links">
-				${storeLinkHtml(ebaySold("PSA 10"), t("gradedEbay", { grade: "PSA 10" }))}
-				${storeLinkHtml(ebaySold("PSA 9"), t("gradedEbay", { grade: "PSA 9" }))}
+				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 10"), t("gradedEbay", { grade: "PSA 10" }))}
+				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 9"), t("gradedEbay", { grade: "PSA 9" }))}
 				${storeLinkHtml(priceCharting, t("gradedPriceCharting"))}
 			</div>
 		</div>`;
+}
+
+function ebaySoldUrl(card, version, grade = "") {
+	// eBay's finished sales of this card: what people really paid. For a reprint, the number is
+	// left out - the database has only half of it ("69" of "69/132"), which titles never show
+	// alone - and so is the end of the set's name, which sellers skip: "30th Celebration".
+	const words = isAnniversaryReprint(card)
+		? ["Pokemon", card.name, card.set.name.split(":")[0]]
+		: ["Pokemon", card.name, collectorNumber(card), card.set.name];
+	if (version.key === "reverseHolofoil") words.push("reverse holo");
+	if (version.key.startsWith("firstEdition")) words.push("1st edition");
+	if (grade) words.push(grade);
+	return "https://www.ebay.com/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=" + encodeURIComponent(words.join(" "));
 }
 
 function formatDollars(value) {
