@@ -18,6 +18,11 @@ on, each with `count`, `medianPrice`, `averagePrice`, `lastSaleDate` and more, n
 graders (`cgc9`, `bgs9_5`, `tag8`, `ace7`) and `ungraded`. The relay passes on only PSA's.
 Sales are per TCGplayer product, so a card's normal and reverse holo prints are counted together.
 
+Every answer from the price service has an `X-RateLimit-Daily-Remaining` header (credits left
+today; they refill at midnight UTC). The relay keeps the latest one in KV under `credits`, adds
+`cardsLeft` and `resetsAt` to its own answers, and `?credits=1` returns just those, for free.
+When the credits are used up, the relay answers 429.
+
 ## Setting it up (once)
 
 1. Make a free account on pokemonpricetracker.com and copy its API key.

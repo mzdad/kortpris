@@ -1055,15 +1055,23 @@ function gradedPricesHtml(card) {
 	// A table of what the card sold for in each PSA grade: the middle price of the sales, in the
 	// chosen currency and in dollars as sold, and how many sales it is based on.
 	if (!gradedPricesAvailable()) return "";
-	// The tick box that switches fetching on and off (see fetchPsaPrices in graded.js).
+	// The tick box that switches fetching on and off (see fetchPsaPrices in graded.js), and how
+	// many cards can still be looked up today. Either arriving draws the open card again.
+	const allowance = psaAllowanceNow(() => renderResults());
+	let left = "";
+	if (allowance) {
+		const values = { count: allowance.cardsLeft, time: clockTime(psaRefillTime()) };
+		left = `<p class="hint">${t(allowance.cardsLeft === 1 ? "gradedLeftOne" : "gradedLeft", values)}</p>`;
+	}
 	const toggle = `
 		<label class="check-row">
 			<input type="checkbox" data-action="fetch-psa" ${fetchPsaPrices ? "checked" : ""}>
 			${t("gradedFetchToggle")}
-		</label>`;
-	// When the prices arrive, the open card is drawn again to show them.
+		</label>
+		${left}`;
 	const known = gradedPricesOf(card.id, () => renderResults());
 	if (known.state === "off") return toggle + `<p class="note">${t("gradedOff")}</p>`;
+	if (known.state === "usedUp") return toggle + `<p class="note">${t("gradedUsedUp", { time: clockTime(psaRefillTime()) })}</p>`;
 	if (known.state === "loading") return toggle + `<p class="note">${t("gradedLoading")}</p>`;
 	if (known.state === "failed") return toggle + `<p class="note">${t("gradedFailed")}</p>`;
 	if (known.grades.length === 0) return toggle + `<p class="note">${t("gradedNone")}</p>`;
@@ -1085,6 +1093,11 @@ function gradedPricesHtml(card) {
 			<tbody>${rows.join("")}</tbody>
 		</table>
 		<p class="hint">${t("gradedFrom")}${mixed}</p>`;
+}
+
+function clockTime(date) {
+	// "02.00" in Danish, "02:00" in English: the time of day on this phone's clock.
+	return new Intl.DateTimeFormat(money.locale, { hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
 function ebaySoldUrl(card, version, grade = "") {
