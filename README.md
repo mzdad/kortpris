@@ -57,8 +57,8 @@ number exactly, because the same picture is printed in several sets. "Cards the 
 the Scan screen lists them, each with a Forget button. Tested with `dev_learning_test.html`.
 
 **Kids mode.** The 🧒 button at the top switches on a mode for children who can't read well
-yet: one big picture to tap for the camera, the card with 1 to 5 gold coins for how valuable
-it is, one rounded price, versions as little pictures of where the card glitters, and a big
+yet: one big picture to tap for the camera, the card with 1 to 5 Poké Balls for how valuable
+it is (one Poké Ball, then two Premier, three Great, four Ultra and five Master Balls), one rounded price, versions as little pictures of where the card glitters, and a big
 Save button. Typing, settings, price tables and accounts are hidden (sign a child in first,
 in normal mode). The phone also says everything out loud in Danish or English ("Pikachu. It's
 worth about 33 kroner."), with its own built-in voice (`speech.js`): free, and nothing is sent

@@ -17,10 +17,25 @@ const CLAUDE_FINISH_VERSIONS = { holo: "holofoil", reverse_holo: "reverseHolofoi
 const KIDS_MODE_STORAGE_KEY = "kortpris.kidsMode";
 // A version's big price from this amount up (six digits) gets a smaller size, so it fits its box.
 const LONG_PRICE_FROM = 100000;
-// Kids mode shows a card's value as 1 to 5 coins: one more coin from each of these prices, in
-// euros (about 4, 22, 110 and 520 kroner). Five coins also gets a "Wow!".
-const COIN_STEPS_EUR = [0.5, 3, 15, 70];
-const MOST_COINS = 5;
+// Kids mode shows a card's value as 1 to 5 Poké Balls: one more ball from each of these prices, in
+// euros (about 4, 22, 110 and 520 kroner). Five balls also gets a "Wow!".
+const BALL_STEPS_EUR = [0.5, 3, 15, 70];
+const MOST_BALLS = 5;
+// ...and the more balls, the better the ball: one Poké Ball, two Premier Balls, three Great Balls,
+// four Ultra Balls, five Master Balls.
+const BALL_KINDS = ["poke", "premier", "great", "ultra", "master"];
+// Each ball's markings on its top half, drawn over the ball's colour (see ballPictureHtml).
+const BALL_MARKINGS = {
+	poke: "",
+	premier: "",
+	great: `<ellipse class="ball-marking" cx="8.5" cy="9.5" rx="3.6" ry="2" transform="rotate(-40 8.5 9.5)"/>
+		<ellipse class="ball-marking" cx="23.5" cy="9.5" rx="3.6" ry="2" transform="rotate(40 23.5 9.5)"/>`,
+	ultra: `<rect class="ball-marking" x="6.8" y="5.2" width="3.4" height="10" rx="1.2"/>
+		<rect class="ball-marking" x="21.8" y="5.2" width="3.4" height="10" rx="1.2"/>`,
+	master: `<circle class="ball-marking" cx="8.5" cy="9.5" r="3"/>
+		<circle class="ball-marking" cx="23.5" cy="9.5" r="3"/>
+		<path class="ball-letter" d="M12.6 12.4V6.8l3.4 3.6 3.4-3.6v5.6"/>`,
+};
 // In kids mode every status message is swapped for a short one...
 const KID_STATUS = {
 	statusIdle: "kidIdle",
@@ -1261,7 +1276,7 @@ function storeLinkHtml(url, text) {
 }
 
 // ---------- Kids mode and reading aloud ----------
-// For children who can't read well yet: the card's picture and name, a row of coins for how
+// For children who can't read well yet: the card's picture and name, a row of Poké Balls for how
 // valuable it is, one rounded price and big buttons - and the phone says it out loud.
 
 function kidCardDetailHtml(card) {
@@ -1292,7 +1307,7 @@ function kidWorthHtml(version) {
 	if (local === null) return `<p class="kid-price">${t("noPrice")}</p>`;
 	return `
 		<div class="kid-worth">
-			${coinsHtml(coinCount(version.eur, version.usd))}
+			${ballsHtml(ballCount(version.eur, version.usd))}
 			<p class="kid-price">${kidPriceText(local)}</p>
 		</div>`;
 }
@@ -1337,21 +1352,38 @@ function sparkleHtml(x, y) {
 	return `<path class="sparkle" d="M${x} ${y - 2.4}L${x + 0.7} ${y - 0.7}L${x + 2.4} ${y}L${x + 0.7} ${y + 0.7}L${x} ${y + 2.4}L${x - 0.7} ${y + 0.7}L${x - 2.4} ${y}L${x - 0.7} ${y - 0.7}Z"/>`;
 }
 
-function coinsHtml(count) {
-	const coins = [];
-	for (let coin = 1; coin <= MOST_COINS; coin++) {
-		coins.push(`<span class="coin${coin <= count ? " filled" : ""}"></span>`);
+function ballsHtml(count) {
+	// count balls of the kind for that count, then empty places up to 5, so a child sees how far up it is.
+	const kind = BALL_KINDS[count - 1];
+	const balls = [];
+	for (let place = 1; place <= MOST_BALLS; place++) {
+		balls.push(place <= count ? ballPictureHtml(kind) : `<span class="ball empty"></span>`);
 	}
-	return `<div class="coins" role="img" aria-label="${t("coins", { count: count })}">${coins.join("")}</div>`;
+	const label = t("balls", { count: count, ball: t("ball_" + kind) });
+	return `<div class="balls" role="img" aria-label="${label}">${balls.join("")}</div>`;
 }
 
-function coinCount(eur, usd) {
-	// 1 to 5 coins (see COIN_STEPS_EUR), or 0 when the price isn't known.
+function ballPictureHtml(kind) {
+	// A ball of this kind (BALL_KINDS): the top half in its colour with its markings, the bottom
+	// half white, and a black band with the round button in the middle. Colours are in style.css.
+	return `
+		<svg class="ball ${kind}" viewBox="0 0 32 32" aria-hidden="true">
+			<path class="ball-top" d="M1 16a15 15 0 0 1 30 0z"/>
+			${BALL_MARKINGS[kind]}
+			<path class="ball-bottom" d="M1 16a15 15 0 0 0 30 0z"/>
+			<circle class="ball-outline" cx="16" cy="16" r="15"/>
+			<path class="ball-band" d="M1 16h30"/>
+			<circle class="ball-button" cx="16" cy="16" r="4.4"/>
+		</svg>`;
+}
+
+function ballCount(eur, usd) {
+	// 1 to 5 balls (see BALL_STEPS_EUR), or 0 when the price isn't known.
 	let value = null;
 	if (eur > 0) value = eur;
 	else if (usd > 0) value = fromDollars(usd, "EUR");
 	if (value === null) return 0;
-	return 1 + COIN_STEPS_EUR.filter((step) => value >= step).length;
+	return 1 + BALL_STEPS_EUR.filter((step) => value >= step).length;
 }
 
 function friendlyAmount(value) {
@@ -1436,7 +1468,7 @@ function cardSentence(card) {
 	if (local === null) return t("sayNoPrice", { name: card.name });
 	const values = { name: card.name, version: t(version.key), price: spokenMoney(local) };
 	const sentence = cardVersions(card).length > 1 ? t("sayWorthVersion", values) : t("sayWorth", values);
-	return coinCount(version.eur, version.usd) === MOST_COINS ? t("sayWow", { sentence: sentence }) : sentence;
+	return ballCount(version.eur, version.usd) === MOST_BALLS ? t("sayWow", { sentence: sentence }) : sentence;
 }
 
 function spokenMoney(amount) {
@@ -1551,14 +1583,14 @@ function savedCardHtml(entry) {
 	const id = escapeHtml(entry.id);
 	const version = entry.version ? escapeHtml(entry.version) : "";
 	const versionName = entry.version ? " · " + t(entry.version) : "";
-	const coins = coinCount(entry.priceEur, entry.priceUsd);
-	const kidCoins = kidsMode && coins > 0 ? coinsHtml(coins) : "";
+	const balls = ballCount(entry.priceEur, entry.priceUsd);
+	const kidBalls = kidsMode && balls > 0 ? ballsHtml(balls) : "";
 	return `
 		<li class="saved-card">
 			<img class="card-image" src="${escapeHtml(readablePictureUrl(entry.image))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
 			<div class="saved-info">
 				<span class="saved-name">${escapeHtml(entry.name)}</span>
-				${kidCoins}
+				${kidBalls}
 				<span class="saved-meta">${escapeHtml(entry.setName)} · <span class="mono">${escapeHtml(entry.number)}</span>${versionName}</span>
 				<span class="saved-price">${t("each", { price: each })}${lineTotal}</span>
 			</div>

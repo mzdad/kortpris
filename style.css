@@ -15,6 +15,7 @@
 	--warn-ink: #6E4B00;
 	--good: #1E7A4C;
 	--bad: #C2410C;
+	--ball-rim: #1E1E1E;     /* the outline of the Poké Balls in kids mode */
 	--font-ui: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 	--radius: 16px;
@@ -36,6 +37,7 @@
 		--warn-ink: #F5D272;
 		--good: #5DD39E;
 		--bad: #FB923C;
+		--ball-rim: #8A96A8;   /* light, or the black Ultra Ball would vanish */
 		color-scheme: dark;
 	}
 }
@@ -524,16 +526,28 @@ body.kids .kid-start:focus-visible { outline: 3px solid var(--link); outline-off
 .kid-price { margin: 0; font-size: 2.1rem; font-weight: 800; font-stretch: 85%; line-height: 1.1; }
 .kid-save { width: 100%; min-height: 64px; font-size: 1.3rem; }
 
-/* How valuable a card is, as 1 to 5 gold coins. */
-.coins { display: flex; gap: 6px; }
-.coin { width: 32px; height: 32px; border-radius: 50%; border: 3px dashed var(--line); }
-.coin.filled {
-	border: 2px solid #A67C00;
-	background: radial-gradient(circle at 35% 35%, #FFEB99, #F5C518 55%, #C99A00);
-	box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.3);
-}
-.saved-info .coins { gap: 3px; margin: 2px 0; }
-.saved-info .coin { width: 16px; height: 16px; border-width: 2px; }
+/* How valuable a card is, as 1 to 5 Poké Balls: Poké Ball, Premier, Great, Ultra, Master. */
+.balls { display: flex; gap: 6px; }
+.ball { width: 32px; height: 32px; flex: none; }
+.ball.empty { border-radius: 50%; border: 3px dashed var(--line); }
+.ball-outline { fill: none; stroke: var(--ball-rim); stroke-width: 1.6; }
+.ball-bottom { fill: #F4F4F4; }
+.ball-band { stroke: #1E1E1E; stroke-width: 2.4; }
+.ball-button { fill: #FFFFFF; stroke: #1E1E1E; stroke-width: 2; }
+.ball.poke .ball-top { fill: #E3350D; }
+.ball.premier .ball-top { fill: #F4F4F4; }
+.ball.premier .ball-band,
+.ball.premier .ball-button { stroke: #D0342C; }
+.ball.great .ball-top { fill: #2F6FD0; }
+.ball.great .ball-marking { fill: #E3350D; }
+.ball.ultra .ball-top { fill: #2B2B2B; }
+.ball.ultra .ball-marking { fill: #F5C518; }
+.ball.master .ball-top { fill: #7A3FA8; }
+.ball.master .ball-marking { fill: #E86BB0; }
+.ball-letter { fill: none; stroke: #FFFFFF; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.saved-info .balls { gap: 3px; margin: 2px 0; }
+.saved-info .ball { width: 18px; height: 18px; }
+.saved-info .ball.empty { border-width: 2px; }
 
 /* The versions of a card, each with a little picture of where it glitters. */
 .kid-versions { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
