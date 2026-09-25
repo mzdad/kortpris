@@ -171,7 +171,7 @@ const STRINGS = {
 		claudeRemoved: "Removed. Photos are read by the built-in reader again.",
 		claudeKeyShape: "That doesn't look like an Anthropic API key. They start with “sk-ant-”.",
 		claudeSaveFailed: "This browser won't let the app save the key. Private browsing does this.",
-		claudePrivacy: "The key is saved on this phone only and is sent only to Anthropic. Photos you scan are sent to Anthropic to be read.",
+		claudePrivacy: "The key belongs to your account and is saved on this phone only: someone else signing in here doesn't get it. It is sent only to Anthropic. Photos you scan are sent to Anthropic to be read.",
 
 		voiceTitle: "Reading aloud",
 		voiceExplain: "The voice that reads cards aloud in kids mode and on 🔊. How natural it sounds depends on the voices this phone or PC has: the most natural one is picked, but you can choose another.",
@@ -443,7 +443,7 @@ const STRINGS = {
 		claudeRemoved: "Fjernet. Billeder læses igen af den indbyggede læser.",
 		claudeKeyShape: "Det ligner ikke en Anthropic API-nøgle. De starter med »sk-ant-«.",
 		claudeSaveFailed: "Browseren tillader ikke, at appen gemmer nøglen. Privat browsing gør det.",
-		claudePrivacy: "Nøglen gemmes kun på denne telefon og sendes kun til Anthropic. Billeder, du scanner, sendes til Anthropic for at blive læst.",
+		claudePrivacy: "Nøglen hører til din konto og gemmes kun på denne telefon: en anden, der logger ind her, får den ikke. Den sendes kun til Anthropic. Billeder, du scanner, sendes til Anthropic for at blive læst.",
 
 		voiceTitle: "Oplæsning",
 		voiceExplain: "Stemmen, der læser kortene op i børnetilstand og på 🔊. Hvor naturlig den lyder, afhænger af de stemmer, telefonen eller pc'en har: den mest naturlige vælges, men du kan vælge en anden.",

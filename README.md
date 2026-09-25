@@ -58,8 +58,9 @@ Accounts run on a Firebase project the owner creates: see [SETUP-ACCOUNTS.md](SE
 Until `firebase-config.js` has that project's settings, the app hides accounts.
 
 **Optional: read cards with Claude.** Only for someone signed in to an account: then, under
-"Read cards with Claude" on the Scan screen, they can save their own Anthropic API key
-(signed out, the box is hidden and a key saved earlier isn't used). Photos are then read by Claude Opus 5
+"Read cards with Claude" on the Scan screen, they can save their own Anthropic API key.
+Each account has its own key on each phone (`kortpris.claudeKey.<username>`), so someone else
+signing in on the same phone doesn't use it; signed out, the box is hidden. Photos are then read by Claude Opus 5
 (`claude.js`), which handles worn, foil and non-English cards far better, at roughly
 US$0.03 per photo on the key owner's account. If Claude fails, the built-in reader takes
 over and a notice says why. The key is kept in the phone's browser and sent only to

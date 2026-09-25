@@ -7,6 +7,8 @@
 // The official Anthropic SDK, fetched from a CDN the first time Claude is used.
 const CLAUDE_SDK_URL = "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+esm";
 const CLAUDE_MODEL = "claude-opus-5";
+// Each account keeps its own key on this phone: "kortpris.claudeKey.<username>". Versions
+// before 1.21.0 kept one key for the whole phone under the name without the username.
 const CLAUDE_KEY_STORAGE_KEY = "kortpris.claudeKey";
 // Claude Opus 5 sees up to 2576 pixels on a photo's long side. Sending that much keeps the
 // tiny collector number readable. It is also the priciest size: about 4800 tokens per photo.
@@ -50,15 +52,31 @@ let client = null;
 let clientKey = null;
 
 function claudeKey() {
-	return readStorage(CLAUDE_KEY_STORAGE_KEY) || "";
+	// The signed-in account's key on this phone. Signed out, there is none.
+	if (accountName === null) return "";
+	return readStorage(accountKeyName()) || "";
 }
 
-// Returns true when it was saved.
+// Returns true when it was saved (only possible while signed in).
 function saveClaudeKey(key) {
-	return writeStorage(CLAUDE_KEY_STORAGE_KEY, key);
+	if (accountName === null) return false;
+	return writeStorage(accountKeyName(), key);
 }
 
 function forgetClaudeKey() {
+	if (accountName !== null) removeStorage(accountKeyName());
+}
+
+function accountKeyName() {
+	return CLAUDE_KEY_STORAGE_KEY + "." + accountName;
+}
+
+function claimPhoneClaudeKey() {
+	// A key saved before keys belonged to accounts goes to the first account that signs in on
+	// this phone - most likely whoever saved it - unless that account has a key already.
+	const oldKey = readStorage(CLAUDE_KEY_STORAGE_KEY);
+	if (!oldKey || accountName === null) return;
+	if (!claudeKey()) saveClaudeKey(oldKey);
 	removeStorage(CLAUDE_KEY_STORAGE_KEY);
 }
 

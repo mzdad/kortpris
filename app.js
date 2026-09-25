@@ -1471,10 +1471,14 @@ function handleAccountChange(username) {
 	} else {
 		usePhoneCollection();
 	}
+	claimPhoneClaudeKey();
+	// The Claude box now shows another account (or none): nothing typed or said there carries over.
+	claudeKeyInput.value = "";
+	claudeMessageKey = null;
 	renderAccount();
 	renderCollection();
 	renderResults();
-	renderClaudeSettings();   // shown only while signed in
+	renderClaudeSettings();   // shown only while signed in, with that account's key
 }
 
 function renderAccount() {
@@ -1544,8 +1548,8 @@ function showAccountMessage() {
 // ---------- Read cards with Claude ----------
 
 function claudeReadingAllowed() {
-	// Reading with Claude is only offered to someone signed in to an account. Signed out, the
-	// settings are hidden, and a key saved earlier on this phone stays unused until they sign in.
+	// Reading with Claude is only offered to someone signed in to an account, with that
+	// account's own key (see claudeKey in claude.js). Signed out, the settings are hidden.
 	return accountName !== null;
 }
 
