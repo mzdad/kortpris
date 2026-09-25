@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kortpris learning test</title>
+<style>
+	body { font: 14px/1.45 system-ui, sans-serif; margin: 0; padding: 16px; background: #EDF0F5; color: #141C28; }
+	h1 { font-size: 1.3rem; margin: 0 0 4px; }
+	p { margin: 0 0 12px; max-width: 75ch; }
+	#summary { font-weight: 700; font-size: 1.05rem; }
+	.table-wrap { overflow-x: auto; }
+	table { border-collapse: collapse; background: #fff; }
+	th, td { padding: 6px 10px; border-bottom: 1px solid #D6DCE6; text-align: left; vertical-align: top; }
+	th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #586579; }
+	td img { width: 90px; display: block; }
+	.pass { color: #1E7A4C; font-weight: 700; }
+	.fail { color: #B3261E; font-weight: 700; }
+	code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Kortpris learning test</h1>
+<p>Development tool, not part of the app. It checks <code>learned.js</code> with the real photos in
+<code>dev-local/</code> (never published, listed in <code>dev-local/real-photos.json</code>). First every photo is
+learned, as if the viewer had picked its card. Then a made-up second photo of each (tilted, moved, other light,
+blurred, the same every run) must be recognised as its own card. And each photo must <em>not</em> be recognised
+as anything while its own card isn't learned: that is the check against opening the wrong card.</p>
+<p id="summary">Running…</p>
+<div class="table-wrap">
+	<table>
+		<thead><tr><th>Second photo</th><th>Card</th><th>Recognised</th><th>Own card not learned</th><th>Distances</th></tr></thead>
+		<tbody id="rows"></tbody>
+	</table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
+<script src="storage.js?v=1.23.0"></script>
+<script src="pokemon-names.js?v=1.23.0"></script>
+<script src="card-finder.js?v=1.23.0"></script>
+<script src="sparkle.js?v=1.23.0"></script>
+<script src="reader.js?v=1.23.0"></script>
+<script src="cards.js?v=1.23.0"></script>
+<script src="matcher.js?v=1.23.0"></script>
+<script src="learned.js?v=1.23.0"></script>
+<script>
+"use strict";
+
+const PHOTO_LIST_URL = "dev-local/real-photos.json";
+const RANDOM_SEED = 20260925;
+
+const rows = document.getElementById("rows");
+const summary = document.getElementById("summary");
+
+runAllPhotos();
+
+async function runAllPhotos() {
+	let photos;
+	try {
+		photos = await fetch(PHOTO_LIST_URL, { cache: "no-store" }).then((response) => response.json());
+	} catch (error) {
+		summary.textContent = "No private photos found: add them to dev-local/ and list them in " + PHOTO_LIST_URL;
+		return;
+	}
+	// ?only=IMG_1988,IMG_1990 runs just the photos whose file names contain one of those.
+	const only = new URLSearchParams(location.search).get("only");
+	if (only) photos = photos.filter((photo) => only.split(",").some((part) => photo.file.includes(part)));
+	const random = seededRandom(RANDOM_SEED);
+
+	// 1. Learn every photo, as the app does when the viewer picks its card. The list stays in this
+	// page: the phone's own learned cards (localStorage) are left alone.
+	const learned = [];
+	const originals = [];
+	for (const photo of photos) {
+		const file = await fetch("dev-local/" + photo.file, { cache: "no-store" }).then((response) => response.blob());
+		const reading = await readCardPhoto(file);
+		const [card] = await findCardsById([photo.id]);
+		// The same checks as learnCard in learned.js, without saving on the phone.
+		const seen = await cardInPhoto(card, reading.photo, reading.textArea, reading.cardBox);
+		const learnedIt = seen !== null && seen.distance <= UNLIKE_CARD_DISTANCE;
+		if (learnedIt) learned.push({ cardId: photo.id, name: card.name, thumbnail: packThumbnail(seen.grid) });
+		originals.push({ photo, file, reading, learnedIt });
+		summary.textContent = "Learning… " + originals.length + " of " + photos.length;
+	}
+
+	// 2. A second photo of each, recognised with everything learned - and with its own card left out.
+	const scores = { total: 0, notLearned: 0, right: 0, wrong: 0, missed: 0, strangerWrong: 0, strangerTotal: 0 };
+	for (const original of originals) {
+		const { photo } = original;
+		const secondFile = await secondPhoto(original.file, random);
+		const reading = await readCardPhoto(secondFile);
+		const withOwn = recogniseLearnedCard(reading.photo, reading.textArea, reading.cardBox, learned);
+		const others = learned.filter((entry) => entry.cardId !== photo.id);
+		// Neither photo may be taken for another card while its own card isn't learned.
+		const strangers = [
+			recogniseLearnedCard(reading.photo, reading.textArea, reading.cardBox, others),
+			recogniseLearnedCard(original.reading.photo, original.reading.textArea, original.reading.cardBox, others),
+		];
+		scores.total++;
+		if (!original.learnedIt) scores.notLearned++;
+		else if (withOwn === null) scores.missed++;
+		else if (withOwn.cardId === photo.id) scores.right++;
+		else scores.wrong++;
+		scores.strangerTotal += strangers.length;
+		scores.strangerWrong += strangers.filter(Boolean).length;
+		addRow(secondFile, photo, original.learnedIt, withOwn, strangers, distancesText(reading, learned, photo.id));
+		summary.textContent = "Second photos… " + scores.total + " of " + originals.length;
+	}
+	const line = "Second photo recognised: " + scores.right + " right, " + scores.wrong + " wrong, " + scores.missed + " not recognised"
+		+ (scores.notLearned ? ", " + scores.notLearned + " couldn't be learned" : "")
+		+ " · own card not learned, taken for another: " + scores.strangerWrong + " of " + scores.strangerTotal;
+	summary.textContent = line;
+	console.log("LEARNING TEST: " + line);
+	window.testScores = scores;   // lets a script read the result
+}
+
+function distancesText(reading, learned, ownId) {
+	// How far the second photo is from its own card's learned photos, and from the closest other card's.
+	if (!reading.cardBox && !reading.textArea) return "card not found in the photo";
+	const grids = photoArtworkGrids(reading.photo, reading.textArea, reading.cardBox, true);   // as recogniseLearnedCard does
+	let own = Infinity;
+	let other = { distance: Infinity, name: "" };
+	for (const entry of learned) {
+		const distance = closestGridDistance(grids, unpackThumbnail(entry.thumbnail));
+		if (entry.cardId === ownId) own = Math.min(own, distance);
+		else if (distance < other.distance) other = { distance, name: entry.name + " " + entry.cardId };
+	}
+	return "own " + own.toFixed(3) + "\nclosest other " + other.distance.toFixed(3) + " (" + other.name + ")"
+		+ "\ngap " + (other.distance / own).toFixed(1) + "\nfound by " + (reading.cardBox ? reading.cardBox.foundBy : "text");
+}
+
+function addRow(file, photo, learnedIt, withOwn, strangers, distances) {
+	const tr = document.createElement("tr");
+	const thumb = document.createElement("img");
+	thumb.src = URL.createObjectURL(file);
+	let recognised;
+	if (!learnedIt) recognised = mark(false, "couldn't be learned");
+	else if (withOwn === null) recognised = mark(false, "not recognised");
+	else recognised = mark(withOwn.cardId === photo.id, withOwn.cardId);
+	const wrongly = strangers.filter(Boolean).map((entry) => entry.cardId);
+	const cells = [
+		thumb,
+		photo.file + "<br>" + photo.id + " · " + photo.name,
+		recognised,
+		mark(wrongly.length === 0, wrongly.length === 0 ? "not recognised (right)" : "taken for " + wrongly.join(", ")),
+		"<code>" + escapeText(distances) + "</code>",
+	];
+	for (const content of cells) {
+		const td = document.createElement("td");
+		if (content instanceof Node) td.append(content);
+		else td.innerHTML = content;
+		tr.append(td);
+	}
+	rows.append(tr);
+}
+
+// A made-up second photo of the same card: a little tilted, moved, nearer or further, in other
+// light, slightly blurred and saved as JPEG again.
+async function secondPhoto(file, random) {
+	const original = await createImageBitmap(file);
+	const canvas = document.createElement("canvas");
+	canvas.width = original.width;
+	canvas.height = original.height;
+	const ctx = canvas.getContext("2d", { willReadFrequently: true });
+	ctx.fillStyle = "#3A3632";   // a dark table where the moved photo leaves a gap
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	const tilt = between(random, -3, 3) * Math.PI / 180;
+	const scale = between(random, 0.88, 1);
+	const shiftX = between(random, -0.03, 0.03) * canvas.width;
+	const shiftY = between(random, -0.03, 0.03) * canvas.height;
+	const brightness = between(random, 0.8, 1.15);
+	const light = random() < 0.5 ? "sepia(0.18)" : "hue-rotate(-8deg) saturate(0.9)";   // warm or cool
+	ctx.filter = "brightness(" + brightness.toFixed(2) + ") " + light + " blur(" + (canvas.width / 1500).toFixed(1) + "px)";
+	ctx.translate(canvas.width / 2 + shiftX, canvas.height / 2 + shiftY);
+	ctx.rotate(tilt);
+	ctx.scale(scale, scale);
+	ctx.drawImage(original, -original.width / 2, -original.height / 2);
+	original.close();
+	return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+}
+
+function mark(ok, text) {
+	return `<span class="${ok ? "pass" : "fail"}">${ok ? "PASS" : "FAIL"}</span> <code>${escapeText(text)}</code>`;
+}
+
+function escapeText(text) {
+	return String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+}
+
+function between(random, low, high) {
+	return low + random() * (high - low);
+}
+
+function seededRandom(seed) {
+	// Mulberry32: a tiny random number generator that gives the same sequence for the same seed.
+	return function () {
+		seed |= 0;
+		seed = (seed + 0x6D2B79F5) | 0;
+		let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+		x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+		return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+	};
+}
+</script>
+</body>
+</html>

@@ -58,27 +58,10 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 
 	// With a photo: try each number the reader thought possible. An exact match on name and
 	// number settles it - and shows which guess was right.
-	const guesses = [...new Set([numberText, ...numberGuesses].map((guess) => guess.trim()).filter(Boolean))];
+	const guesses = allNumberGuesses(numberText, numberGuesses);
 	const setSizes = [...new Set(guesses.map((guess) => parseCollectorNumber(guess).total).filter(Boolean))];
-	if (nameWord) {
-		for (const guess of guesses) {
-			const parsed = parseCollectorNumber(guess);
-			if (!parsed.number || !parsed.total) continue;
-			const query = nameQueryFor(nameWord) + " number:" + parsed.number + " set.printedTotal:" + parsed.total;
-			const page = await fetchCardPage(query, RESULTS_PAGE_SIZE);
-			if (page.cards.length > 0) {
-				return {
-					cards: await withReprints(page.cards),
-					description: { key: "matchExact", values: { name: nameWord, number: parsed.number + "/" + parsed.total } },
-					totalCount: page.totalCount,
-					exactFound: true,
-					matchedNumber: guess,
-					setSizes: setSizes,
-					numbersRead: guesses,
-				};
-			}
-		}
-	}
+	const exact = await findExactCards(name, guesses);
+	if (exact) return { ...exact, setSizes: setSizes, numbersRead: guesses };
 	// Otherwise part of the text was misread, and nobody knows which part. So every looser
 	// search goes into one pile, and the pictures decide - helped by the set sizes read, which
 	// are often right even when the card's own number isn't (see pickBestMatch in matcher.js).
@@ -120,6 +103,43 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 		setSizes: setSizes,
 		numbersRead: guesses,
 	};
+}
+
+// The number in the box first, then the reader's other guesses, each once.
+function allNumberGuesses(numberText, numberGuesses = []) {
+	return [...new Set([numberText, ...numberGuesses].map((guess) => guess.trim()).filter(Boolean))];
+}
+
+// Searches for a card with this name and one of these collector numbers, trying each in turn.
+// Returns what findCards returns for an exact match, with matchedNumber the guess that was
+// right, or null when no guess fits a card of that name.
+async function findExactCards(name, guesses) {
+	const nameWord = longestWord(name);
+	if (!nameWord) return null;
+	for (const guess of guesses) {
+		const parsed = parseCollectorNumber(guess);
+		if (!parsed.number || !parsed.total) continue;
+		const query = nameQueryFor(nameWord) + " number:" + parsed.number + " set.printedTotal:" + parsed.total;
+		const page = await fetchCardPage(query, RESULTS_PAGE_SIZE);
+		if (page.cards.length > 0) {
+			return {
+				cards: await withReprints(page.cards),
+				description: { key: "matchExact", values: { name: nameWord, number: parsed.number + "/" + parsed.total } },
+				totalCount: page.totalCount,
+				exactFound: true,
+				matchedNumber: guess,
+			};
+		}
+	}
+	return null;
+}
+
+// The cards with these ids ("base6-72"), fresh from the database, in the same order. An id the
+// database no longer has is left out.
+async function findCardsById(ids) {
+	if (ids.length === 0) return [];
+	const cards = await fetchCards(ids.map((id) => "id:" + id).join(" OR "), ids.length);
+	return ids.map((id) => cards.find((card) => card.id === id)).filter(Boolean);
 }
 
 async function withReprints(cards) {

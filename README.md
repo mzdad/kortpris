@@ -45,6 +45,17 @@ A web page with nothing to install. What happens to a photo:
    ("jungle holo", "pika", "58") and says what the cards found are worth together.
    Without an account it is kept in the phone's browser only.
 
+**Learning.** When the app can't tell which card a photo shows (or opens the wrong one) and the
+viewer taps or types the right one, or saves the card the photo found, the app remembers how that
+card's artwork looked in the photo (`learned.js`): the same small colour thumbnail the picture
+comparison uses, about 1,300 bytes, kept on this phone only. A search typed while the photo's card
+is already known is taken as a price lookup of some other card, and teaches nothing
+(`answersPhoto` in `app.js`). Every new photo is compared with those first. When it looks just like one
+learned card (`SAME_CARD_DISTANCE`) and clearly unlike every other (`SAME_CARD_GAP`), that card
+opens straight away, however badly the text read - unless the reader read another card's name and
+number exactly, because the same picture is printed in several sets. "Cards the app has learned" on
+the Scan screen lists them, each with a Forget button. Tested with `dev_learning_test.html`.
+
 **Kids mode.** The 🧒 button at the top switches on a mode for children who can't read well
 yet: one big picture to tap for the camera, the card with 1 to 5 gold coins for how valuable
 it is, one rounded price, versions as little pictures of where the card glitters, and a big
@@ -85,6 +96,7 @@ Anthropic.
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
 | `sparkle.js` | Tells a reverse holo from the photo: glitter everywhere except the picture |
+| `learned.js` | Remembers cards the viewer picked for a photo, and recognises the next photo of them |
 | `graded.js` | PSA prices of a card, asked from the relay and kept on the phone for a day |
 | `relay/` | The PSA price relay that runs on Cloudflare, not in the page |
 | `storage.js` | Saves things on the phone (language, My cards) |
@@ -98,14 +110,15 @@ Anthropic.
 | `app.js` | The screen: buttons, results, prices |
 | `dev_reading_test.html` | Development tool, not part of the app (see below) |
 | `dev_real_photos_test.html` | Development tool: runs real photos from the private `dev-local/` folder |
+| `dev_learning_test.html` | Development tool: checks that learned cards are recognised, and nothing else is |
 
 ## Publishing a change
 
 Every push to `main` goes live within a minute or two. Before pushing, raise the version
-number `?v=...` on our own files in `index.html` (and in the two `dev_` test pages), for example:
+number `?v=...` on our own files in `index.html` (and in the three `dev_` test pages), for example:
 
 ```bash
-sed -i 's/?v=1.10.0/?v=1.10.1/g' index.html dev_reading_test.html dev_real_photos_test.html
+sed -i 's/?v=1.10.0/?v=1.10.1/g' index.html dev_reading_test.html dev_real_photos_test.html dev_learning_test.html
 ```
 
 The page shows that number at the bottom ("Kortpris version 1.10.0"), so it's easy to check which

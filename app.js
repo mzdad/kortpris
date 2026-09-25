@@ -34,6 +34,7 @@ const KID_STATUS = {
 	comparingProgress: "kidBusy",
 	foundOne: "kidFound",
 	bestMatchOpened: "kidFound",
+	learnedOpened: "kidFound",
 	foundMany: "kidPickOne",
 	foundManyByLook: "kidPickOne",
 	noMatch: "kidNotFound",
@@ -109,6 +110,11 @@ const collectionSearch = document.getElementById("collection-search");
 const collectionSearchNote = document.getElementById("collection-search-note");
 const voiceSettings = document.getElementById("voice-settings");
 const voiceSelects = document.querySelectorAll("[data-voice-language]");
+const learnedSettings = document.getElementById("learned-settings");
+const learnedCount = document.getElementById("learned-count");
+const learnedList = document.getElementById("learned-list");
+const learnedNone = document.getElementById("learned-none");
+const forgetAllButton = document.getElementById("forget-all-learned");
 const notice = document.getElementById("notice");
 const claudeSettings = document.getElementById("claude-settings");
 const claudeState = document.getElementById("claude-state");
@@ -174,6 +180,8 @@ let photoUrl = null;
 // The latest photo (shrunk) and where its text was, for comparing cards' looks.
 // Stays null until a photo is taken, so typed searches work as they always did.
 let lastPhoto = null;
+// The cards shown came from a search about that photo, so tapping one answers which card it shows.
+let resultsForPhoto = false;
 // The number the reader put in the box, and every other number it thought possible.
 let scannedNumbers = { shown: "", guesses: [] };
 
@@ -281,6 +289,7 @@ function applyLanguage() {
 	renderCollection();
 	renderClaudeSettings();
 	renderVoiceSettings();
+	renderLearned();
 	renderAccount();
 	renderFooter();
 }
@@ -345,7 +354,7 @@ libraryInput.addEventListener("change", () => takeFileFrom(libraryInput));
 
 searchForm.addEventListener("submit", (event) => {
 	event.preventDefault();   // stay on this page instead of reloading it
-	searchForCard();
+	searchForCard(true);
 });
 
 exampleButton.addEventListener("click", async () => {
@@ -369,7 +378,9 @@ resultsGrid.addEventListener("click", (event) => {
 	chosenVersion = null;
 	renderResults();
 	scrollToDetail();
-	if (kidsMode) sayCard(shownCards.find((card) => card.id === selectedCardId));
+	const card = shownCards.find((shown) => shown.id === selectedCardId);
+	if (resultsForPhoto) rememberCard(card);   // the viewer's answer: this is the card in the photo
+	if (kidsMode) sayCard(card);
 });
 
 detail.addEventListener("click", (event) => {
@@ -388,6 +399,8 @@ detail.addEventListener("click", (event) => {
 	}
 	if (!event.target.closest("[data-action='add-to-collection']") || !collectionReady()) return;
 	saveFailed = !addToCollection(card, versionOf(card).key);
+	// Saving the card the photo was taken to be says it was right: that photo is learned too.
+	if (lastPhoto && lastPhoto.card && lastPhoto.card.id === card.id) rememberCard(card);
 	renderResults();
 	renderCollection();
 	if (kidsMode && !saveFailed) say(t("saySaved"));
@@ -404,6 +417,18 @@ detail.addEventListener("change", (event) => {
 for (const button of viewButtons) {
 	button.addEventListener("click", () => showView(button.dataset.view));
 }
+
+// The cards the app has learned: each can be forgotten, or all of them.
+learnedSettings.addEventListener("click", (event) => {
+	const button = event.target.closest("[data-forget]");
+	if (!button) return;
+	forgetLearnedCard(button.dataset.forget);
+	renderLearned();
+});
+forgetAllButton.addEventListener("click", () => {
+	forgetAllLearned();
+	renderLearned();
+});
 
 // The "Reading aloud" settings: a voice for each language, and a button to hear it.
 for (const select of voiceSelects) {
@@ -630,18 +655,28 @@ async function scanPhoto(imageFile) {
 			cardBox: reading.cardBox || null,
 			setName: reading.setName || "",
 			looksReverseHolo: versionHint === "reverseHolofoil",
+			// Tells this photo apart when a card is learned from it (see learnCard in learned.js).
+			key: String(Date.now()),
+			// A card the app has learned that looks just like this photo (learned.js), or null.
+			learnedCard: recogniseLearnedCard(reading.photo, reading.textArea, reading.cardBox || null),
+			// The card the photo is taken to be, once one was opened for it or learned from it...
+			card: null,
+			// ...and whether that was because the photo looked like a learned card.
+			recognised: false,
 		};
 	}
 	nameInput.value = reading.name;
 	numberInput.value = reading.number;
 	scannedNumbers = { shown: reading.number, guesses: reading.numberGuesses || [] };
-	if (!reading.name && !reading.number) {
+	// A learned card is found by its looks, so it doesn't matter how badly the text read.
+	const recognised = lastPhoto !== null && lastPhoto.learnedCard !== null;
+	if (!recognised && !reading.name && !reading.number) {
 		hideProgress();
 		setStatus("readFailed", {}, "error");
 		return;
 	}
 	// A name the reader isn't sure of, and no number: searching on it would show random cards.
-	if (!reading.nameSure && !reading.number) {
+	if (!recognised && !reading.nameSure && !reading.number) {
 		hideProgress();
 		setStatus("unsureName", {}, "error");
 		numberInput.classList.add("needs-attention");
@@ -689,9 +724,17 @@ function showPhoto(imageFile) {
 
 // ---------- Step 2: find the card in the price database ----------
 
-async function searchForCard() {
+// byViewer: the viewer pressed Search, rather than the app searching on what it read.
+async function searchForCard(byViewer = false) {
 	const searchId = ++latestSearchId;
-	if (!canSearch(nameInput.value, numberInput.value)) {
+	// A photo of a card the app has learned opens that card - unless the viewer searches for another.
+	const learnedCard = !byViewer && lastPhoto ? lastPhoto.learnedCard : null;
+	// The viewer's search is their answer about the photo, to learn, when the app couldn't tell which
+	// card the photo shows, or took it for a learned card (it then asks for a search if that's wrong).
+	// Otherwise the photo's card is known, and the viewer is looking up the price of another card.
+	const answersPhoto = byViewer && lastPhoto !== null && (lastPhoto.card === null || lastPhoto.recognised);
+	resultsForPhoto = lastPhoto !== null && (!byViewer || answersPhoto);
+	if (!learnedCard && !canSearch(nameInput.value, numberInput.value)) {
 		hideProgress();
 		setStatus("needNameOrNumber", {}, "error");
 		return;
@@ -707,8 +750,16 @@ async function searchForCard() {
 		// The reader's other number guesses only count while the number box still shows its reading:
 		// once the viewer types their own number, that is the one to use.
 		const guesses = numberInput.value.trim() === scannedNumbers.shown ? scannedNumbers.guesses : [];
-		const found = await findCards(nameInput.value, numberInput.value, lastPhoto !== null, guesses);
+		let found = null;
+		if (learnedCard) found = await findLearnedCard(learnedCard, nameInput.value, numberInput.value, guesses);
+		if (!found) found = await findCards(nameInput.value, numberInput.value, lastPhoto !== null, guesses);
 		if (searchId !== latestSearchId) return;   // a newer photo or search took over
+		if (found.learned) {
+			// Show the recognised card's own name and number, whatever was read.
+			nameInput.value = found.cards[0].name;
+			numberInput.value = found.cards[0].number + "/" + found.cards[0].set.printedTotal;
+			scannedNumbers.shown = numberInput.value;
+		}
 		// Another of the guesses was the right number: show that one.
 		if (found.matchedNumber && found.matchedNumber !== numberInput.value.trim()) {
 			numberInput.value = found.matchedNumber;
@@ -720,9 +771,11 @@ async function searchForCard() {
 			setStatus("noMatch", {}, "error");
 		} else if (found.cards.length === 1) {
 			hideProgress();
-			setStatus("foundOne");
+			setStatus(found.learned ? "learnedOpened" : "foundOne");
 			if (!found.exactFound) fixMisreadName(found.cards[0], guesses);
 			showResults(found.cards, found.description, found.cards[0].id, null);
+			if (answersPhoto) rememberCard(found.cards[0]);
+			else if (!byViewer) takeFor(found.cards[0], Boolean(found.learned));
 		} else if (!lastPhoto) {
 			hideProgress();
 			setStatus("foundMany", { count: found.cards.length });
@@ -746,6 +799,8 @@ async function searchForCard() {
 				setStatus("bestMatchOpened");
 				fixMisreadName(cards[0], guesses);
 				showResults(cards, found.description, best, best);
+				if (answersPhoto) rememberCard(cards[0]);
+				else if (!byViewer) takeFor(cards[0], false);
 			} else {
 				setStatus("foundManyByLook", { count: cards.length });
 				showResults(cards, found.description, null, best);
@@ -759,6 +814,30 @@ async function searchForCard() {
 	} finally {
 		if (searchId === latestSearchId) searchButton.disabled = false;
 	}
+}
+
+// The app opened this card for the latest photo by itself: the photo is taken to be that card.
+// recognised: because the photo looked like a learned card.
+function takeFor(card, recognised) {
+	if (!lastPhoto) return;
+	lastPhoto.card = card;
+	lastPhoto.recognised = recognised;
+}
+
+// The viewer answered which card the latest photo shows (or confirmed it by saving it): remember
+// how it looked there, so the next photo of it is recognised straight away (learned.js).
+function rememberCard(card) {
+	const photo = lastPhoto;
+	if (!photo || !card) return;
+	learnCard(card, photo.picture, photo.textArea, photo.cardBox, photo.key).then((learned) => {
+		if (learned) {
+			photo.card = card;
+			photo.recognised = false;
+		}
+		renderLearned();
+	}, (error) => {
+		console.error(error);   // not learned this time; nothing else changes
+	});
 }
 
 function fixMisreadName(card, guesses) {
@@ -1296,6 +1375,26 @@ function readAloudButtonHtml() {
 
 function say(text) {
 	speak(text, language);
+}
+
+function renderLearned() {
+	const cards = learnedCards();
+	learnedCount.textContent = String(cards.length);
+	learnedNone.hidden = cards.length > 0;
+	forgetAllButton.hidden = cards.length === 0;
+	learnedList.innerHTML = cards.map(learnedCardHtml).join("");
+}
+
+function learnedCardHtml(card) {
+	return `
+		<li class="saved-card">
+			<img class="card-image" src="${escapeHtml(readablePictureUrl(card.image))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
+			<div class="saved-info">
+				<span class="saved-name">${escapeHtml(card.name)}</span>
+				<span class="saved-meta">${escapeHtml(card.setName)} · <span class="mono">${escapeHtml(card.number)}</span></span>
+			</div>
+			<button type="button" class="button secondary" data-forget="${escapeHtml(card.cardId)}">${t("learnedForget")}</button>
+		</li>`;
 }
 
 function renderVoiceSettings() {

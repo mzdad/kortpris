@@ -68,19 +68,7 @@ const REPRINT_CORNER_GAP = 1.3;
 // without it, the card's place is estimated from its text. onProgress(done, total) is told
 // after each candidate's picture: with a few hundred of them, this takes a while.
 async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = () => {}) {
-	const shifts = cardBox ? FOUND_SHIFTS : ESTIMATED_SHIFTS;
-	const scales = cardBox ? FOUND_SCALES : ESTIMATED_SCALES;
-	const photoGrids = [];
-	for (const box of cardBox ? [cardBox] : possibleCardBoxes(photo, textArea)) {
-		const artwork = artworkOf(box);
-		for (const shiftX of shifts) {
-			for (const shiftY of shifts) {
-				for (const scale of scales) {
-					photoGrids.push(colourGrid(photo, moveBox(artwork, shiftX, shiftY, scale)));
-				}
-			}
-		}
-	}
+	const photoGrids = photoArtworkGrids(photo, textArea, cardBox);
 
 	// Each stamp corner of the photo, also a little shifted (see STAMP_CORNERS).
 	const photoCorners = cardBox ? STAMP_CORNERS.map((corner) => cornerGridsOfPhoto(photo, cardBox, corner)) : null;
@@ -92,8 +80,7 @@ async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = (
 		try {
 			const picture = await loadPicture(card.images.small);
 			const wholeCard = { x0: 0, y0: 0, x1: picture.width, y1: picture.height };
-			const cardGrid = colourGrid(picture, artworkOf(wholeCard));
-			distance = Math.min(...photoGrids.map((grid) => gridDistance(grid, cardGrid)));
+			distance = closestGridDistance(photoGrids, colourGrid(picture, artworkOf(wholeCard)));
 			if (photoCorners) corners = cornerDistance(photoCorners, picture, wholeCard);
 		} catch (error) {
 			console.error(error);
@@ -104,6 +91,33 @@ async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = (
 	}));
 	ranked.sort((a, b) => a.distance - b.distance);
 	return ranked;
+}
+
+// The artwork window of the card in the photo as blurry thumbnails, tried a little shifted,
+// bigger and smaller: the card's place in the photo is never exact. Without its box, at every
+// place the card might be. wideSearch tries the wider shifts even with the card's box: two photos
+// of one card are compared that way (learned.js), because the box can be found a little
+// differently in each.
+function photoArtworkGrids(photo, textArea, cardBox, wideSearch = false) {
+	const shifts = cardBox && !wideSearch ? FOUND_SHIFTS : ESTIMATED_SHIFTS;
+	const scales = cardBox && !wideSearch ? FOUND_SCALES : ESTIMATED_SCALES;
+	const grids = [];
+	for (const box of cardBox ? [cardBox] : possibleCardBoxes(photo, textArea)) {
+		const artwork = artworkOf(box);
+		for (const shiftX of shifts) {
+			for (const shiftY of shifts) {
+				for (const scale of scales) {
+					grids.push(colourGrid(photo, moveBox(artwork, shiftX, shiftY, scale)));
+				}
+			}
+		}
+	}
+	return grids;
+}
+
+// How unlike a thumbnail is to the photo: the distance to the photo thumbnail that fits it best.
+function closestGridDistance(photoGrids, grid) {
+	return Math.min(...photoGrids.map((photoGrid) => gridDistance(photoGrid, grid)));
 }
 
 function cornerGridsOfPhoto(photo, cardBox, corner) {
