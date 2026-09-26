@@ -1,9 +1,9 @@
-// Kortpris relay. Runs on Cloudflare Workers (free plan), not in the app itself. It holds keys
-// that a public web page can't: as Cloudflare secrets, never written in this file.
+// Kortpris PSA price relay. Runs on Cloudflare Workers (free plan), not in the app itself.
 //
-// 1. PSA prices. They come from pokemonpricetracker.com, which needs a secret key (PPT_API_KEY)
-//    and refuses to be asked straight from a web page. The relay asks for the app and hands back
-//    only the PSA prices of one card.
+// Why a relay: PSA prices come from pokemonpricetracker.com, which needs a secret key, and it
+// refuses to be asked straight from a web page. This small program holds the key - as a
+// Cloudflare secret named PPT_API_KEY, never written in this file - asks for the app, and
+// hands back only the PSA prices of one card.
 //
 // Ask:    GET https://<this relay>/?card=base6-86        (the card's id in pokemontcg.io)
 // Answer: { card, grades: [{ grade: "10", count, median, average }, ...], found,
@@ -15,25 +15,12 @@
 // Each card is remembered for a day in Cloudflare's key-value store (named REMEMBERED in
 // wrangler.toml), because the prices only change once a day and the free plan allows 100
 // credits a day (a card costs 2).
-//
-// 2. Card searches in the card database (pokemontcg.io), with its free key (TCG_API_KEY). Without
-//    a key the database allows 1,000 lookups a day and 30 a minute per internet connection; with
-//    one, 20,000 a day for the whole app. Its makers ask for the key to be kept out of web pages.
-//
-// Ask:    GET https://<this relay>/cards?q=...&orderBy=...&pageSize=...&select=...
-//         (the same search the app would send the database itself)
-// Answer: the database's own answer, passed on as it came, failures too. 503 when the relay has
-//         no key yet: the app then asks the database itself (fetchCardPage in cards.js).
 
 const PRICE_API = "https://www.pokemonpricetracker.com/api/v2/cards";
-const CARDS_API = "https://api.pokemontcg.io/v2/cards";
-// Only the parts of a search the app uses are passed on.
-const CARD_SEARCH_PARTS = ["q", "orderBy", "pageSize", "select"];
 // pokemontcg.io forwards this address to the card's page on TCGplayer, whose product number
 // is how pokemonpricetracker.com knows the card.
 const TCGPLAYER_LINK = "https://prices.pokemontcg.io/tcgplayer/";
-// Only the app may use this relay, so strangers can't use up the day's credits and lookups from a
-// web page.
+// Only the app may use this relay, so strangers can't use up the day's credits from a web page.
 const ALLOWED_ORIGINS = ["https://mzdad.github.io", "http://localhost:8765"];
 const REMEMBER_SECONDS = 24 * 60 * 60;
 // Card ids look like "base6-86", "swsh7-215" or "me55c-106m".
@@ -53,7 +40,6 @@ export default {
 		if (origin && !ALLOWED_ORIGINS.includes(origin)) return reply({ error: "not allowed" }, 403, allowOrigin);
 
 		const url = new URL(request.url);
-		if (url.pathname === "/cards") return cardSearch(url, env, allowOrigin);
 		if (url.searchParams.get("credits") === "1") return reply(await allowance(env), 200, allowOrigin);
 
 		const cardId = url.searchParams.get("card") || "";
@@ -79,29 +65,6 @@ export default {
 		return reply({ ...answer, ...(await allowance(env)) }, 200, allowOrigin);
 	},
 };
-
-async function cardSearch(url, env, allowOrigin) {
-	// Asks the card database with the key, and passes its answer on as it came. Its failures too
-	// (it fails about half of all requests, then answers 500): the app tries again, as it would
-	// without the relay.
-	if (!env.TCG_API_KEY) return reply({ error: "the relay has no TCG_API_KEY secret" }, 503, allowOrigin);
-	const search = new URLSearchParams();
-	for (const part of CARD_SEARCH_PARTS) {
-		const value = url.searchParams.get(part);
-		if (value !== null) search.set(part, value);
-	}
-	if (!search.get("q")) return reply({ error: "the search (q) is missing" }, 400, allowOrigin);
-	let response;
-	try {
-		response = await fetch(CARDS_API + "?" + search, { headers: { "X-Api-Key": env.TCG_API_KEY } });
-	} catch (problem) {
-		return reply({ error: "the card database didn't answer: " + String(problem.message || problem) }, 502, allowOrigin);
-	}
-	const headers = corsHeaders(allowOrigin);
-	headers["Content-Type"] = response.headers.get("Content-Type") || "application/json; charset=utf-8";
-	headers["Cache-Control"] = "no-store";
-	return new Response(response.body, { status: response.status, headers: headers });
-}
 
 async function gradedPrices(cardId, env, raw) {
 	if (!env.PPT_API_KEY) throw new Error("the relay has no PPT_API_KEY secret");

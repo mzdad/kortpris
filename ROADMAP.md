@@ -5,19 +5,17 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
-## Done in 1.31.0
+## Done in 1.31.0 and 1.31.1
 
-- **2.7 The free database's daily allowance.** Without a key the card database allows 1,000
-  lookups a day and 30 a minute per internet connection, and a scan takes from a few to about 25 (the
-  app asks twice at once, and again when the database fails). The relay on Cloudflare now also searches the
-  database, with a free key kept as its secret (`/cards` in `relay/relay.js`): 20,000 lookups a
-  day for the whole app. The app asks through the relay first, and the database directly when the
-  relay can't help (no key yet, the key's day used up, or no answer); then it leaves the relay
-  alone for 10 minutes. When the database says "too many requests" (429), the app no longer asks
-  again (up to 12 times), and says so: "The price database has had too many lookups from this
-  internet connection today. Try again later, or on mobile data." **Still to do, by you:** make
-  the free account at dev.pokemontcg.io and give the relay its key (steps in `relay/README.md`).
-  Until then the app works as before, asking the database directly.
+- **2.7 The free database's daily allowance, in part.** Without a key the card database allows
+  1,000 lookups a day and 30 a minute per internet connection, and a scan takes from a few to about
+  25 (the app asks twice at once, and again when the database fails). When the database says "too
+  many requests" (429), the app no longer asks again, up to 12 times, and says so instead: "The
+  price database has had too many lookups from this internet connection today. Try again later,
+  or on mobile data." The other half, a free key kept in the relay, turned out impossible:
+  pokemontcg.io no longer takes new sign-ups and is being shut down (the keys it gave stop working
+  on 1 March 2027). The relay route built for the key in 1.31.0 was taken out again in 1.31.1.
+  See 5.1.
 
 ## Done in 1.30.0
 
@@ -141,6 +139,12 @@ L = several sessions).
 |---|---|---|---|
 | 4.1 | **Kids' own accounts under a parent**: see and move cards between them. | Each kid has their own cards. | L |
 | 4.2 | **The Claude key in the account**, not only on one phone. | It has to be typed again on every phone. | S |
+
+## 5. Keeping the app working
+
+| | What | Why | Size |
+|---|---|---|---|
+| 5.1 | **Move to another card database before 1 March 2027.** First a trial of TCGdex (free, no key, open to web pages): can it find everything the app needs, fast and reliably? Then the app's search is rebuilt on it. | pokemontcg.io, where every card, picture and price comes from, is being shut down. TCGdex has Cardmarket and TCGplayer prices updated daily (pokemontcg.io's Cardmarket prices were months old). Some of its set ids differ (Legendary Collection is "lc", not "base6"), so saved and learned cards must be translated. The paid alternative is Scrydex (2.6). | L |
 
 ## Not planned
 
