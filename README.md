@@ -51,12 +51,15 @@ Zoomed in, the phone is held further away, so the card is in focus and out of th
 light stays on, so a glare spot shows before the photo is taken. Zoom needs iOS 17 or Chrome on
 Android, the light iOS 18; the buttons for them only show when the phone can. Both are remembered.
 Where the browser can (Safari 18.4, Chrome), the photo is the camera's own full-size photo, otherwise
-the live picture. A live picture is softer than a photo, and a slightly soft picture hides the tiny
-numbers on old cards from the reader, so: the white frame covers 90% of the camera's real picture
-(the screen shows the whole of it), the sharpest of six pictures in the 0.6 s after the press is
-kept (pressing shakes the phone), and it is sharpened. On 10 old cards made slightly soft, that read
-9 numbers where the plain soft pictures read 6. The bottom of the page then says how big the
-camera's photo was and what kind ("camera 1080×1920 (live picture)"), to find out what a phone does. "Use the phone's own camera" at the bottom opens the old camera screen, and so does
+the live picture (an iPhone gives 2160×3840). A live picture is softer than a photo, and a slightly
+soft picture hides the tiny numbers on old cards from the reader, so: the white frame covers 90% of
+the camera's real picture (the screen shows the whole of it), the sharpest of six pictures in the
+0.6 s after the press is kept (pressing shakes the phone), and a picture that measures soft
+(`softnessOf`) is sharpened, by an amount scaled to its size. Sharp pictures are left alone:
+sharpening them made numbers read worse. On 10 old cards, sharp and slightly soft pictures (4K and
+1080p) read 9 or 10 numbers, as many as the phone's own photos. The bottom of the page then says
+what the camera gave ("camera 2160×3840 (live picture) · soft (0.18), sharpened"), to find out
+what a phone does. "Use the phone's own camera" at the bottom opens the old camera screen, and so does
 the button when the page can't have a live camera.
 
 **Learning.** When the app can't tell which card a photo shows (or opens the wrong one) and the

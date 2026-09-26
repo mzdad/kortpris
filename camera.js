@@ -36,13 +36,24 @@ const STEADY_WATCH_MS = 600;
 // Sharpness is measured on a copy this wide, in the middle part of the picture (shares of it).
 const SHARPNESS_WIDTH = 360;
 const SHARPNESS_AREA = { x0: 0.2, x1: 0.8, y0: 0.2, y1: 0.8 };
-// A live picture is softer than a photo, and the reader can't make out tiny numbers in a soft
-// picture: in the camera lab (version 1.24.1), real cards made slightly soft read 0 of 4 numbers,
-// and 3 of 4 after sharpening like this. Each pixel's brightness is pushed away from its
-// surroundings' (an "unsharp mask"), this much...
+// A live picture is softer than a photo, and the reader can't make out the tiny numbers on old
+// cards in a soft picture. So a soft one is sharpened: each pixel's brightness pushed this much away
+// from its surroundings' (an "unsharp mask")...
 const SHARPEN_AMOUNT = 1.5;
-// ...where the surroundings are a smooth blur of about 1.4 pixels (smoothBlur in reader.js).
+// ...where the surroundings are a smooth blur of about 1.4 pixels (smoothBlur in reader.js) in a
+// picture whose shorter side is this long, and proportionally wider in a bigger picture: the same
+// softness spreads over twice as many pixels in an iPhone's 2160 x 3840 live picture. In
+// dev-local/camera-lab.html (version 1.24.2), 8 real cards in slightly soft 4K pictures read 5
+// numbers as they were, and all 8 sharpened...
 const SHARPEN_RADIUS = 1;
+const SHARPEN_TESTED_SIDE = 1080;
+// ...but sharpening pictures that were sharp already turned 7 read numbers into 6. So only a picture
+// at least this soft is sharpened (see softnessOf). Made-up camera pictures of 30 real cards
+// measured 0.01 to 0.08 sharp, and 0.12 and up slightly soft (dev-local/softness-lab.html). The
+// line is on the sharp side of the gap, to sharpen when in doubt: the live pictures that read badly
+// were soft. With it, 10 old cards read 9 or 10 numbers from sharp and slightly soft pictures, 4K
+// and 1080p alike - as many as from the phone's own photos (9).
+const SOFT_FROM = 0.06;
 
 // True when this browser can show a live camera in the page at all. It also needs https
 // (or this computer, while testing).
@@ -84,10 +95,11 @@ async function setLiveCamera(camera, zoom, light) {
 	}
 }
 
-// Takes the photo: { file, source, width, height, photoNote }. source is "photo" for the camera's own
-// full-size photo, which browsers with ImageCapture can take, or "video" for the sharpest live
-// picture. photoNote says why the full-size photo wasn't used: a text key from strings.js plus its
-// values, shown at the bottom of the page to find out what a phone does.
+// Takes the photo: { file, source, width, height, photoNote, softness, sharpened }. source is "photo"
+// for the camera's own full-size photo, which browsers with ImageCapture can take, or "video" for
+// the sharpest live picture. photoNote says why the full-size photo wasn't used: a text key from
+// strings.js plus its values. softness (see softnessOf) and sharpened are for live pictures. All of
+// it is shown at the bottom of the page, to find out what a phone does.
 async function takeLivePhoto(camera, video) {
 	// The live pictures first: by the end of them the phone has steadied, which helps the photo too.
 	const steadiest = await sharpestLivePicture(video);
@@ -109,35 +121,88 @@ async function takeLivePhoto(camera, video) {
 			photoNote = { key: "cameraPhotoFailed", values: {} };
 		}
 	}
-	sharpen(steadiest);
+	const softness = softnessOf(steadiest);
+	const sharpened = softness >= SOFT_FROM;
+	if (sharpened) sharpen(steadiest);
 	const file = await new Promise((resolve, reject) => {
 		steadiest.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("The camera gave no picture"))), "image/jpeg", PHOTO_JPEG_QUALITY);
 	});
-	return { file: file, source: "video", width: steadiest.width, height: steadiest.height, photoNote: photoNote };
+	const { width, height } = steadiest;
+	freeCanvas(steadiest);
+	return { file: file, source: "video", width: width, height: height, photoNote: photoNote, softness: softness, sharpened: sharpened };
 }
 
-// The sharpest of a few live pictures over STEADY_WATCH_MS, as a canvas.
+// The sharpest of a few live pictures over STEADY_WATCH_MS, as a canvas. Each is measured on a
+// small copy, and only the sharpest so far is kept full size: a 4K picture takes 33 MB, and
+// iPhones refuse to draw once a page's pictures take a few hundred.
 async function sharpestLivePicture(video) {
-	let best = null;
+	const best = document.createElement("canvas");
+	best.width = video.videoWidth;
+	best.height = video.videoHeight;
+	const bestCtx = best.getContext("2d", { willReadFrequently: true });
 	let bestSharpness = -1;
 	for (let look = 0; look < STEADY_LOOKS; look++) {
 		if (look > 0) await new Promise((resolve) => setTimeout(resolve, STEADY_WATCH_MS / STEADY_LOOKS));
-		const picture = document.createElement("canvas");
-		picture.width = video.videoWidth;
-		picture.height = video.videoHeight;
-		picture.getContext("2d", { willReadFrequently: true }).drawImage(video, 0, 0);
-		const sharpness = sharpnessOf(picture);
+		// Measured and kept in one go, with nothing to wait for in between, so both are the same picture.
+		const sharpness = sharpnessOf(video, video.videoWidth, video.videoHeight);
 		if (sharpness > bestSharpness) {
-			best = picture;
+			bestCtx.drawImage(video, 0, 0);
 			bestSharpness = sharpness;
 		}
 	}
 	return best;
 }
 
+function freeCanvas(canvas) {
+	// iPhones hand back a picture's memory straight away when it is shrunk to nothing, but only
+	// much later when it is merely forgotten.
+	canvas.width = 0;
+	canvas.height = 0;
+}
+
+// How soft a picture is, from 0 (sharp) up: how much of its fine detail is left after blurring it a
+// little more ("blur the blur"). A sharp picture loses most of its fine detail; a soft one has
+// little to lose. Measured on a copy brought to the size the sharpening was tested at, in the middle.
+function softnessOf(picture) {
+	const scale = SHARPEN_TESTED_SIDE / Math.min(picture.width, picture.height);
+	const width = Math.round(picture.width * scale);
+	const height = Math.round(picture.height * scale);
+	const copy = document.createElement("canvas");
+	copy.width = width;
+	copy.height = height;
+	const ctx = copy.getContext("2d", { willReadFrequently: true });
+	ctx.imageSmoothingQuality = "high";
+	ctx.drawImage(picture, 0, 0, width, height);
+	const pixels = ctx.getImageData(0, 0, width, height).data;
+	freeCanvas(copy);
+	const brightness = new Float32Array(width * height);
+	for (let i = 0; i < brightness.length; i++) {
+		brightness[i] = 0.299 * pixels[i * 4] + 0.587 * pixels[i * 4 + 1] + 0.114 * pixels[i * 4 + 2];
+	}
+	const blurredMore = smoothBlur(brightness, width, height, SHARPEN_RADIUS);
+	return fineDetail(blurredMore, width, height) / Math.max(fineDetail(brightness, width, height), 1e-6);
+}
+
+function fineDetail(values, width, height) {
+	// The square of each pixel minus the average of its four neighbours, on average, in the middle
+	// of the picture (SHARPNESS_AREA), where the card is.
+	let total = 0;
+	let count = 0;
+	for (let y = Math.round(height * SHARPNESS_AREA.y0); y < height * SHARPNESS_AREA.y1; y++) {
+		for (let x = Math.round(width * SHARPNESS_AREA.x0); x < width * SHARPNESS_AREA.x1; x++) {
+			const i = y * width + x;
+			const edge = 4 * values[i] - values[i - 1] - values[i + 1] - values[i - width] - values[i + width];
+			total += edge * edge;
+			count++;
+		}
+	}
+	return total / count;
+}
+
 function sharpen(canvas) {
 	// See SHARPEN_AMOUNT. Brightness only, so the colours stay as they were.
 	const { width, height } = canvas;
+	const radius = Math.max(SHARPEN_RADIUS, Math.round(SHARPEN_RADIUS * Math.min(width, height) / SHARPEN_TESTED_SIDE));
 	const ctx = canvas.getContext("2d", { willReadFrequently: true });
 	const image = ctx.getImageData(0, 0, width, height);
 	const pixels = image.data;
@@ -145,7 +210,7 @@ function sharpen(canvas) {
 	for (let i = 0; i < brightness.length; i++) {
 		brightness[i] = 0.299 * pixels[i * 4] + 0.587 * pixels[i * 4 + 1] + 0.114 * pixels[i * 4 + 2];
 	}
-	const surroundings = smoothBlur(brightness, width, height, SHARPEN_RADIUS);
+	const surroundings = smoothBlur(brightness, width, height, radius);
 	for (let i = 0; i < brightness.length; i++) {
 		const push = SHARPEN_AMOUNT * (brightness[i] - surroundings[i]);
 		// The pixels are an Uint8ClampedArray: anything below 0 or above 255 is kept at 0 or 255.
@@ -156,11 +221,11 @@ function sharpen(canvas) {
 	ctx.putImageData(image, 0, 0);
 }
 
-function sharpnessOf(picture) {
+function sharpnessOf(picture, pictureWidth, pictureHeight) {
 	// How much neighbouring pixels differ, on average: a blurred picture has soft edges everywhere.
 	// (The square of each pixel minus the average of its four neighbours.)
 	const width = SHARPNESS_WIDTH;
-	const height = Math.round(picture.height * width / picture.width);
+	const height = Math.round(pictureHeight * width / pictureWidth);
 	const small = document.createElement("canvas");
 	small.width = width;
 	small.height = height;
@@ -180,6 +245,7 @@ function sharpnessOf(picture) {
 			count++;
 		}
 	}
+	freeCanvas(small);
 	return total / count;
 }
 

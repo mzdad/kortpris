@@ -336,6 +336,10 @@ function renderFooter() {
 		});
 		const note = lastCameraPhoto.photoNote;
 		if (note) appVersionText.textContent += " · " + t(note.key, note.values);
+		if (lastCameraPhoto.softness !== undefined) {
+			const values = { value: lastCameraPhoto.softness.toFixed(2) };
+			appVersionText.textContent += " · " + t(lastCameraPhoto.sharpened ? "cameraSharpened" : "cameraSharp", values);
+		}
 	}
 	if (shownCurrency() !== currency) {
 		ratesNote.textContent = t("ratesMissing");
