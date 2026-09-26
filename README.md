@@ -14,7 +14,10 @@ A web page with nothing to install. What happens to a photo:
    `reader.js`). The name is checked against all 1025 Pokémon names and every Trainer and Energy
    card's name (`card-names.js`), so small misreads get corrected. The card is
    found in the photo by its yellow border, or, for silver-bordered and foil cards, by its
-   shape (`card-finder.js`). The number is then read again from the full-size photo, in the
+   shape (`card-finder.js`). The strip along its top where the name is printed is then read on
+   its own, enlarged: as it is, with only its dark ink, and with only its white ink. On full-art
+   cards the name sits on the artwork, where a read of the whole card often loses it
+   (`readNameStrip`). The number is then read again from the full-size photo, in the
    two small corners where it is printed, several different ways (one of them with only the
    black ink kept, which hides coloured backgrounds and glitter).
 2. **Text → card.** The name and number are looked up in the free
@@ -143,14 +146,15 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `dev_real_photos_test.html` | Development tool: runs real photos from the private `dev-local/` folder |
 | `dev_learning_test.html` | Development tool: checks that learned cards are recognised, and nothing else is |
 | `dev_special_numbers_test.html` | Development tool: promos, gallery and other lettered numbers (see below) |
+| `dev_fullart_test.html` | Development tool: full-art, gold and illustration-rare cards (see below) |
 
 ## Publishing a change
 
 Every push to `main` goes live within a minute or two. Before pushing, raise the version
-number `?v=...` on our own files in `index.html` (and in the four `dev_` test pages), for example:
+number `?v=...` on our own files in `index.html` (and in the five `dev_` test pages), for example:
 
 ```bash
-sed -i 's/?v=1.10.0/?v=1.10.1/g' index.html dev_reading_test.html dev_real_photos_test.html dev_learning_test.html dev_special_numbers_test.html
+sed -i 's/?v=1.10.0/?v=1.10.1/g' index.html dev_reading_test.html dev_real_photos_test.html dev_learning_test.html dev_special_numbers_test.html dev_fullart_test.html
 ```
 
 The page shows that number at the bottom ("Kortpris version 1.10.0"), so it's easy to check which
@@ -196,6 +200,8 @@ pictures, so their tiny print has far less detail than a real phone photo.
 <http://localhost:8765/dev_special_numbers_test.html> does the same for 27 cards with unusual
 numbers: Black Star promos, Galarian and Trainer Gallery, Shiny Vault, Radiant Collection and the
 Aquapolis/Skyridge holos. `?only=svp,GG` runs just some of them.
+<http://localhost:8765/dev_fullart_test.html> does it for 27 full-art, gold, rainbow and
+illustration-rare cards, whose name and number are printed on the artwork.
 
 ## Things to know
 

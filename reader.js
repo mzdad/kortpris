@@ -55,6 +55,26 @@ const FRAME_SIZE_SLACK = { min: 0.7, max: 1.15 };
 // A card placed by the frame alone is cut out with this much margin: it may have been held a
 // little bigger than the frame.
 const FRAME_CROP_MARGIN = 0.08;
+// Where the name is printed, as shares of the card's width and height: along the top, left of
+// the HP on a Pokémon, under the "Trainer" banner on a Trainer card. On full-art cards the name
+// is printed on the artwork itself, and a read of the whole card often loses it there, so this
+// strip is also read on its own, enlarged (see readNameStrip).
+const NAME_STRIP = { x0: 0.03, x1: 0.78, y0: 0.015, y1: 0.15 };
+// How wide the whole card would be at the strip's enlargement, in pixels. (1400 read one name
+// fewer in the fake photos of dev_fullart_test.html, and it is no quicker: each read of the strip
+// takes about a second either way.)
+const NAME_STRIP_CARD_WIDTH = 2000;
+// A name's letters are at least this tall, as a share of the card's height: 1.9% to 9.5% on 27
+// full-art cards. A known name made up of smaller print in the strip is a bit of the picture or
+// the small print ("alot" in the noise of a photo is one letter from Swalot).
+const NAME_MIN_HEIGHT = 0.015;
+// Ways of reading the name strip, in turn, until one finds a known name: the photo itself, only
+// its dark ink, and only its light ink - white letters, as on many full-art cards.
+const NAME_STRIP_READS = [
+	{ ink: "", mode: "block" },
+	{ ink: "dark", mode: "ink" },
+	{ ink: "light", mode: "ink" },
+];
 // Where the collector number is printed, as shares of the card's width and height: bottom
 // right on cards up to 2016, bottom left from 2017 on. Only these small windows are read,
 // because the text, lines and glitter around them make Tesseract misread the number.
@@ -67,6 +87,8 @@ const NUMBER_PLACES = [
 // than any one way alone: on 12 real photos 11, against at most 7 (version 1.10.0).
 // cardWidth: how wide the whole card would be at that enlargement, in pixels.
 // ink: "soft" or "hard" for a black-ink-only copy (see inkAgainstBackground), "" for the photo itself.
+// (A white-ink copy, for numbers printed white on full-art cards, was tried in version 1.28.0: it
+// read none of them, as they are italic and edged in black.)
 const NUMBER_READS = [
 	{ cardWidth: 3750, ink: "soft", mode: "numberScattered" },
 	{ cardWidth: 3000, ink: "", mode: "numberBlock" },
@@ -113,8 +135,10 @@ const NOT_NAME_WORDS = new Set([
 const POKEMON_KEYS = POKEMON_NAMES.map((name) => ({ name: name, key: lettersOnly(name) }));
 const OTHER_CARD_KEYS = [...TRAINER_NAMES, ...ENERGY_NAMES].map((name) => ({ name: name, key: lettersOnly(name) }));
 // Black Star promo cards have a code instead of a number out of a set size: "SWSH193", "SM60".
-// A few cards of older sets are numbered the same way: "SH10", "SL1", "RT1", "AR1".
-const PROMO_NUMBER = /(?<![A-Za-z])(SWSH|HGSS|SM|XY|BW|DP|SH|SL|RT|AR)\s?(\d{1,3}|0\d{3})(?!\d)/gi;
+const PROMO_NUMBER = /(?<![A-Za-z])(SWSH|HGSS|SM|XY|BW|DP)\s?(\d{1,3}|0\d{3})(?!\d)/gi;
+// A few cards of older sets are numbered the same way: "SH10", "SL1", "RT1", "AR1". Only in
+// capitals and without a space, as printed: small print like "aR 7" is no number.
+const OLD_CODE_NUMBER = /(?<![A-Za-z0-9])(SH|SL|RT|AR)(\d{1,2})(?![A-Za-z0-9\/])/g;
 // Scarlet & Violet promos print their set's code, the language and the number: "SVP EN 001".
 // The code sits white on black in a little box, and is only now and then read.
 const SVP_NUMBER = /SVP[^\d\/]{0,6}?(\d{1,3})(?![\d\/])/g;
@@ -165,6 +189,12 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null) {
 
 	const firstRead = await readPage(worker, view.picture, "scattered");
 	let name = guessCardName(firstRead.lines, firstRead.textArea);
+	// The name's own place on the card, read on its own. A known name found there is the card's
+	// name, even when the whole card's read found another one somewhere else on the card.
+	if (cardBox) {
+		const stripName = await readNameStrip(worker, original, scaleBox(cardBox, original.width / photo.width));
+		if (stripName) name = stripName;
+	}
 	// No known Pokémon found: read it a second time, the other way.
 	if (!name.sure) {
 		const secondRead = await readPage(worker, view.picture, "block");
@@ -176,7 +206,7 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null) {
 	// ("Seel"), so only an exact Pokémon name counts from this read.
 	if (!name.sure) {
 		const inkRead = await readPage(worker, inkOnly(view.picture), "ink");
-		const inkName = guessCardName(inkRead.lines, inkRead.textArea, 0);
+		const inkName = guessCardName(inkRead.lines, inkRead.textArea, { maxMistakes: 0 });
 		if (inkName.sure) name = inkName;
 	}
 
@@ -352,9 +382,55 @@ function findTextArea(lines) {
 
 // ---------- The name ----------
 
-// Returns { text, sure }. "sure" means the text is a known Pokémon name, read with at most
-// maxMistakes wrong letters (the default allows the usual typos, see countMistakes).
-function guessCardName(lines, textArea, maxMistakes = Infinity) {
+async function readNameStrip(worker, original, card) {
+	// Reads the strip where the name is printed (card is the card's box in the full-size original),
+	// in each of the ways in NAME_STRIP_READS until one finds a known name. Returns what
+	// guessCardName returns for it, or null when no way found one.
+	const cardWidth = card.x1 - card.x0;
+	const cardHeight = card.y1 - card.y0;
+	const area = {
+		x0: card.x0 + cardWidth * NAME_STRIP.x0,
+		x1: card.x0 + cardWidth * NAME_STRIP.x1,
+		y0: card.y0 + cardHeight * NAME_STRIP.y0,
+		y1: card.y0 + cardHeight * NAME_STRIP.y1,
+	};
+	const zoom = NAME_STRIP_CARD_WIDTH / cardWidth;
+	const closeUp = cropAndZoom(original, area, zoom);
+	const smallestName = cardHeight * zoom * NAME_MIN_HEIGHT;
+	for (const way of NAME_STRIP_READS) {
+		const picture = way.ink ? inkAgainstBackground(closeUp, "soft", way.ink === "light") : closeUp;
+		const read = await readPage(worker, picture, way.mode);
+		const name = biggestKnownName(read.lines, smallestName);
+		if (name) return name;
+	}
+	return null;
+}
+
+function biggestKnownName(lines, smallestName = 0) {
+	// In the name strip the name is the biggest text, so of the lines holding a known name, the
+	// biggest wins - even a Trainer's name over a Pokémon's: two bits of small print above it,
+	// "pa TRAI", are one letter from Patrat. Lines with letters smaller than smallestName (in
+	// pixels) aren't the name.
+	let best = null;
+	for (const line of lines) {
+		let name = guessCardName([line], null);
+		// On the artwork a name can be read right and still be given a low score ("Wiggly tuff",
+		// 0 out of 100). Such faint words count too, when they spell a long name all but exactly:
+		// short names are too easily made up from bits of the picture.
+		if (!name.sure) {
+			const faint = guessCardName([line], null, { maxMistakes: 1, minConfidence: 0 });
+			if (faint.sure && lettersOnly(faint.text).length >= LONG_NAME_LETTERS) name = faint;
+		}
+		if (!name.sure || name.size < smallestName) continue;
+		if (!best || name.size > best.size) best = name;
+	}
+	return best;
+}
+
+// Returns { text, sure, size, rank }. "sure" means the text is a known Pokémon, Trainer or Energy
+// card's name, read with at most maxMistakes wrong letters (the default allows the usual typos,
+// see countMistakes). Words Tesseract gave a lower score than minConfidence are left out.
+function guessCardName(lines, textArea, { maxMistakes = Infinity, minConfidence = MIN_NAME_CONFIDENCE } = {}) {
 	// The name is the biggest text near the top of the card. Only the top part counts,
 	// because further down some cards print their attack names even bigger.
 	const zoneBottom = textArea ? textArea.y0 + (textArea.y1 - textArea.y0) * NAME_ZONE_SHARE : Infinity;
@@ -362,7 +438,7 @@ function guessCardName(lines, textArea, maxMistakes = Infinity) {
 	// name; 0 for other text.
 	let best = { text: "", size: 0, sure: false, rank: 0 };
 	for (const line of lines) {
-		const words = nameWordsOnLine(line);
+		const words = nameWordsOnLine(line, false, minConfidence);
 		if (words.length === 0) continue;
 		if (Math.min(...words.map((word) => word.top)) > zoneBottom) continue;
 		// Tesseract's row height measures the letter size of the whole line. It is steadier
@@ -371,17 +447,20 @@ function guessCardName(lines, textArea, maxMistakes = Infinity) {
 		const size = line.rowAttributes ? line.rowAttributes.rowHeight : tallest;
 
 		const pokemon = findPokemonName(words.map((word) => word.text), maxMistakes);
-		if (pokemon) {
-			if (best.rank < 2 || size > best.size) best = { text: pokemon, size: size, sure: true, rank: 2 };
+		// A Trainer or Energy card. Their names can hold words that are left out above ("Item
+		// Finder", "Pokémon Center"), so the whole line is compared.
+		const otherCard = findOtherCardName(nameWordsOnLine(line, true, minConfidence).map((word) => word.text), maxMistakes);
+		// Both on one line: the closer match wins, and of two as close, the longer one. "Earthen
+		// Vessel" read exactly is that Trainer card, not the Pokémon Archen, two letters from "Earthen".
+		const trainerWins = otherCard && pokemon && (otherCard.mistakes < pokemon.mistakes
+			|| (otherCard.mistakes === pokemon.mistakes && otherCard.letters > pokemon.letters));
+		if (pokemon && !trainerWins) {
+			if (best.rank < 2 || size > best.size) best = { text: pokemon.name, size: size, sure: true, rank: 2 };
 			continue;
 		}
 		if (best.rank === 2) continue;
-
-		// A Trainer or Energy card. Their names can hold words that are left out above ("Item
-		// Finder", "Pokémon Center"), so the whole line is compared.
-		const otherCard = findOtherCardName(nameWordsOnLine(line, true).map((word) => word.text), maxMistakes);
 		if (otherCard) {
-			if (best.rank < 1 || size > best.size) best = { text: otherCard, size: size, sure: true, rank: 1 };
+			if (best.rank < 1 || size > best.size) best = { text: otherCard.name, size: size, sure: true, rank: 1 };
 			continue;
 		}
 		if (best.rank === 1) continue;
@@ -396,12 +475,13 @@ function guessCardName(lines, textArea, maxMistakes = Infinity) {
 }
 
 // The words on a line that could be the card's name. keepAllWords keeps the words that are never
-// part of a Pokémon's name (NOT_NAME_WORDS), for Trainer names like "Item Finder".
-function nameWordsOnLine(line, keepAllWords = false) {
+// part of a Pokémon's name (NOT_NAME_WORDS), for Trainer names like "Item Finder". Words with a
+// lower score than minConfidence are left out.
+function nameWordsOnLine(line, keepAllWords = false, minConfidence = MIN_NAME_CONFIDENCE) {
 	const kept = [];
 	let evolvesFromWords = 0;   // words still to skip after "from"
 	for (const word of line.words || []) {
-		const text = cleanWord(word.text);
+		const text = cleanWord(withoutGluedLogo(word.text));
 		const upper = text.toUpperCase();
 		// "Evolves from Galarian Linoone": the words after "from", up to a Pokémon's name, are the
 		// Pokémon this one evolves from, not this one.
@@ -409,11 +489,13 @@ function nameWordsOnLine(line, keepAllWords = false) {
 			evolvesFromWords = MAX_EVOLVES_FROM_WORDS;
 			continue;
 		}
+		// "fromAron": "from" read stuck to the Pokémon's name.
+		if (upper.startsWith("FROM") && matchPokemonName(text.slice(4))) continue;
 		if (evolvesFromWords > 0) {
 			evolvesFromWords = matchPokemonName(text) ? 0 : evolvesFromWords - 1;
 			continue;
 		}
-		if (!text || word.confidence < MIN_NAME_CONFIDENCE) continue;
+		if (!text || word.confidence < minConfidence) continue;
 		if (!keepAllWords && NOT_NAME_WORDS.has(upper)) continue;
 		kept.push({
 			text: text,
@@ -423,6 +505,12 @@ function nameWordsOnLine(line, keepAllWords = false) {
 		});
 	}
 	return kept;
+}
+
+function withoutGluedLogo(rawWord) {
+	// A logo printed right after the name can be read stuck to it: "Incineroar@X" is Incineroar ex.
+	const glued = rawWord.match(/^([^\p{L}]*\p{L}{3,})[^\p{L}.'’-]/u);
+	return glued ? glued[1] : rawWord;
 }
 
 function cleanWord(rawWord) {
@@ -436,7 +524,8 @@ function cleanWord(rawWord) {
 
 function findPokemonName(words, maxMistakes = Infinity) {
 	// Checks each word, and each pair of neighbouring words ("Mr. Mime", "Iron Treads"),
-	// against the name list. The closest match on the line wins.
+	// against the name list. The closest match on the line wins. Returns { name, mistakes, letters }
+	// (letters: how many letters were read), or null.
 	let best = null;
 	for (let i = 0; i < words.length; i++) {
 		const tries = [words[i]];
@@ -444,16 +533,16 @@ function findPokemonName(words, maxMistakes = Infinity) {
 		for (const text of tries) {
 			const match = matchPokemonName(text);
 			if (!match || match.mistakes > maxMistakes) continue;
-			if (!best || match.mistakes < best.mistakes) best = match;
+			if (!best || match.mistakes < best.mistakes) best = { ...match, letters: lettersOnly(text).length };
 		}
 	}
-	return best ? best.name : "";
+	return best;
 }
 
 function findOtherCardName(words, maxMistakes = Infinity) {
 	// Checks every run of neighbouring words against the Trainer and Energy names. The longest
 	// run that matches wins ("Double Colorless Energy" over "Colorless Energy"), then the one with
-	// the fewest mistakes.
+	// the fewest mistakes. Returns { name, mistakes, letters }, or null.
 	let best = null;
 	for (let start = 0; start < words.length; start++) {
 		const end = Math.min(words.length, start + MAX_NAME_WORDS);
@@ -466,7 +555,7 @@ function findOtherCardName(words, maxMistakes = Infinity) {
 			if (!best || match.letters > best.letters || (match.letters === best.letters && match.mistakes < best.mistakes)) best = match;
 		}
 	}
-	return best ? best.name : "";
+	return best;
 }
 
 function matchOtherCardName(text) {
@@ -482,9 +571,11 @@ function matchOtherCardName(text) {
 		const mistakes = read === card.key ? 0 : editDistance(read, card.key, allowed);
 		if (mistakes > allowed) continue;
 		if (!best || mistakes < best.mistakes) {
-			best = { name: card.name, mistakes: mistakes, letters: read.length };
+			best = { name: card.name, key: card.key, mistakes: mistakes, letters: read.length };
 			tied = false;
-		} else if (mistakes === best.mistakes) {
+		} else if (mistakes === best.mistakes && card.key !== best.key) {
+			// Names with the very same letters ("Energy Removal", "Energy Removal 2") aren't a tie:
+			// the search finds them all by those letters anyway.
 			tied = true;
 		}
 	}
@@ -665,8 +756,10 @@ function scaleBox(box, scale) {
 // background - red, purple, green, yellow, even foil glitter - is bright in at least one. So
 // each pixel is judged by its brightest colour, compared with the average around it, which
 // also evens out shadows and glare. style "soft" keeps shades of grey at the edges of the
-// letters; "hard" is pure black and white.
-function inkAgainstBackground(picture, style) {
+// letters; "hard" is pure black and white. lightInk finds white letters instead (printed on the
+// artwork of many full-art cards): they are light in all three colours, so each pixel is judged
+// by its darkest colour, turned around - and they come out black, as Tesseract likes them.
+function inkAgainstBackground(picture, style, lightInk = false) {
 	const width = picture.width;
 	const height = picture.height;
 	const copy = document.createElement("canvas");
@@ -678,7 +771,10 @@ function inkAgainstBackground(picture, style) {
 	const pixels = image.data;
 	const brightest = new Float32Array(width * height);
 	for (let i = 0; i < brightest.length; i++) {
-		brightest[i] = Math.max(pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2]);
+		const red = pixels[i * 4];
+		const green = pixels[i * 4 + 1];
+		const blue = pixels[i * 4 + 2];
+		brightest[i] = lightInk ? 255 - Math.min(red, green, blue) : Math.max(red, green, blue);
 	}
 	const background = smoothBlur(brightest, width, height, Math.max(2, Math.round(width * INK_BACKGROUND_BLUR)));
 	for (let i = 0; i < brightest.length; i++) {
@@ -807,6 +903,9 @@ function numberCandidates(text) {
 		// No promo has four digits: "SWSH0001" is SWSH001 with a misread zero too many.
 		const digits = match[2].length === 4 ? match[2].slice(1) : match[2];
 		found.push({ number: match[1].toUpperCase() + digits, sawSlash: true });
+	}
+	for (const match of cleaned.matchAll(OLD_CODE_NUMBER)) {
+		found.push({ number: match[1] + match[2], sawSlash: true });
 	}
 	for (const match of cleaned.matchAll(SVP_NUMBER)) {
 		found.push({ number: "SVP" + match[1], sawSlash: true });

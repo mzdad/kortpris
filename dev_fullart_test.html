@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kortpris special numbers test</title>
+<title>Kortpris full-art test</title>
 <style>
 	body { font: 14px/1.45 system-ui, sans-serif; margin: 0; padding: 16px; background: #EDF0F5; color: #141C28; }
 	h1 { font-size: 1.3rem; margin: 0 0 4px; }
@@ -13,22 +13,22 @@
 	table { border-collapse: collapse; background: #fff; }
 	th, td { padding: 6px 10px; border-bottom: 1px solid #D6DCE6; text-align: left; vertical-align: top; }
 	th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #586579; }
+	td img { width: 80px; display: block; }
 	.pass { color: #1E7A4C; font-weight: 700; }
 	.fail { color: #B3261E; font-weight: 700; }
 	code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
 </style>
 </head>
 <body>
-<h1>Kortpris special numbers test</h1>
-<p>Development tool, not part of the app. Cards whose number isn't "number/set size": Black Star promos
-("SWSH050", "SVP EN 001"), Galarian and Trainer Gallery ("GG01/GG70", "TG05/TG30"), Shiny Vault
-("SV1/SV94"), Radiant Collection ("RC1/RC32") and Aquapolis/Skyridge holos ("H1/H32"). It makes a fake
-phone photo of each from the database's own picture, runs it through the app's reader and search, and
-scores the result. The last column shows how the number corners were read.</p>
+<h1>Kortpris full-art test</h1>
+<p>Development tool, not part of the app. Full-art, gold, rainbow and illustration-rare cards, whose name
+and number are printed on the artwork, from 2012 to 2025. It makes a fake phone photo of each from the
+database's own picture, runs it through the app's reader and search, and scores the result. The last
+column says what the name strip (see <code>readNameStrip</code> in <code>reader.js</code>) read.</p>
 <p id="summary">Running…</p>
 <div class="table-wrap">
 	<table>
-		<thead><tr><th>Card</th><th>Printed</th><th>Number read</th><th>Found</th><th>Seconds</th><th>Number corners read as</th></tr></thead>
+		<thead><tr><th>Photo</th><th>Card</th><th>Name read</th><th>Number read</th><th>Found</th><th>Seconds</th><th>Name strip</th></tr></thead>
 		<tbody id="rows"></tbody>
 	</table>
 </div>
@@ -44,51 +44,34 @@ scores the result. The last column shows how the number corners were read.</p>
 <script>
 "use strict";
 
-// printed: what the card's corner says. number: the database's number for it.
-const TEST_CARDS = [
-	{ id: "svp-1", printed: "SVP EN 001", number: "1" },
-	{ id: "svp-27", printed: "SVP EN 027", number: "27" },
-	{ id: "svp-50", printed: "SVP EN 050", number: "50" },
-	{ id: "svp-160", printed: "SVP EN 160", number: "160" },
-	{ id: "swsh12pt5gg-GG01", printed: "GG01/GG70", number: "GG01" },
-	{ id: "swsh12pt5gg-GG44", printed: "GG44/GG70", number: "GG44" },
-	{ id: "swsh9tg-TG05", printed: "TG05/TG30", number: "TG05" },
-	{ id: "swsh11tg-TG12", printed: "TG12/TG30", number: "TG12" },
-	{ id: "sma-SV1", printed: "SV1/SV94", number: "SV1" },
-	{ id: "sma-SV49", printed: "SV49/SV94", number: "SV49" },
-	{ id: "swsh45sv-SV001", printed: "SV001/SV122", number: "SV001" },
-	{ id: "swsh45sv-SV107", printed: "SV107/SV122", number: "SV107" },
-	{ id: "g1-RC1", printed: "RC1/RC32", number: "RC1" },
-	{ id: "g1-RC25", printed: "RC25/RC32", number: "RC25" },
-	{ id: "bw11-RC5", printed: "RC5/RC25", number: "RC5" },
-	{ id: "ecard2-H1", printed: "H1/H32", number: "H1" },
-	{ id: "ecard3-H10", printed: "H10/H32", number: "H10" },
-	{ id: "xyp-XY01", printed: "XY01", number: "XY01" },
-	{ id: "xyp-XY124", printed: "XY124", number: "XY124" },
-	{ id: "smp-SM01", printed: "SM01", number: "SM01" },
-	{ id: "smp-SM210", printed: "SM210", number: "SM210" },
-	{ id: "bwp-BW004", printed: "BW004", number: "BW004" },
-	{ id: "bwp-BW50", printed: "BW50", number: "BW50" },
-	{ id: "dpp-DP01", printed: "DP01", number: "DP01" },
-	{ id: "hsp-HGSS01", printed: "HGSS01", number: "HGSS01" },
-	{ id: "swshp-SWSH001", printed: "SWSH001", number: "SWSH001" },
-	{ id: "swshp-SWSH050", printed: "SWSH050", number: "SWSH050" },
+// Special illustration rares, illustration rares, gold hyper rares and full arts from Scarlet &
+// Violet; full-art EX and GX, rainbow and gold secret rares from Black & White to Sword & Shield.
+const TEST_CARD_IDS = [
+	"sv4pt5-239", "sv9-185", "sv3pt5-200", "sv8-237", "sv8pt5-162",
+	"sv2-204", "sv4-196", "sv3-226", "sv6-184",
+	"sv4pt5-244", "me1-188", "sv6pt5-96", "sv3-230",
+	"sv3pt5-187", "sv6-203", "sv5-187",
+	"xy2-103", "xy4-117", "bw6-121", "sm4-102",
+	"sm8-227", "swsh7-213", "swsh3-193",
+	"sm3-162", "sm12-269",
+	"swsh12pt5gg-GG30", "swsh7-215",
 ];
-// A fairly kind phone photo: the database's pictures are only 1024 pixels tall, so the tiny
-// print already has far less detail than in a real photo.
+// A fairly kind phone photo. The database's pictures are only 1024 pixels tall.
 const PHOTO_WIDTH = 3000;
 const PHOTO_HEIGHT = 4000;
-const TABLE_COLOURS = ["#8B6B4A", "#5E6670", "#2E3440"];
-const RANDOM_SEED = 7;
-// ?only=svp,GG runs just the cards whose id contains one of these.
+// The last one is a light grey table, on which a card's edges are harder to find.
+const TABLE_COLOURS = ["#8B6B4A", "#5E6670", "#2E3440", "#D9D4CC"];
+const RANDOM_SEED = 5;
+// ?only=sv4pt5,xy2 runs just the cards whose id contains one of these.
 const only = new URLSearchParams(location.search).get("only");
 
-// Every text read in the number corners, to show how the special numbers come out.
-const cornerTexts = [];
-const realNumberCandidates = window.numberCandidates;
-window.numberCandidates = function (text) {
-	cornerTexts.push(text.replace(/\s+/g, " ").trim());
-	return realNumberCandidates(text);
+// What the name strip gave for the photo being read.
+let stripSaid = "not read (no card edges found)";
+const realNameStrip = window.readNameStrip;
+window.readNameStrip = async function (...args) {
+	const name = await realNameStrip(...args);
+	stripSaid = name ? name.text : "nothing";
+	return name;
 };
 
 const rows = document.getElementById("rows");
@@ -97,39 +80,46 @@ const summary = document.getElementById("summary");
 runAllTests();
 
 async function runAllTests() {
-	const cards = only ? TEST_CARDS.filter((card) => only.split(",").some((part) => card.id.includes(part))) : TEST_CARDS;
+	const cards = await findCardsById(TEST_CARD_IDS);
 	const random = seededRandom(RANDOM_SEED);
-	const scores = { total: 0, number: 0, first: 0, openedRight: 0, openedWrong: 0 };
+	const scores = { total: 0, name: 0, number: 0, first: 0, openedRight: 0, openedWrong: 0 };
 	const allRows = [];
-	for (const card of TEST_CARDS) {
+	for (const card of cards) {
 		// Every card's photo is made, so ?only= gives each the same photo as a full run.
-		const photo = await makeFakePhoto(await loadImage(hiresImageUrl(card.id)), random);
-		if (!cards.includes(card)) continue;
+		const photo = await makeFakePhoto(await loadImage(card.images.large), random);
+		if (only && !only.split(",").some((part) => card.id.includes(part))) continue;
 		const row = await testOnePhoto(card, photo);
 		allRows.push({ id: card.id, ...row });
 		scores.total++;
+		if (row.nameOk) scores.name++;
 		if (row.numberOk) scores.number++;
 		if (row.foundAt === 0) scores.first++;
 		if (row.opened && row.foundAt === 0) scores.openedRight++;
 		if (row.opened && row.foundAt !== 0) scores.openedWrong++;
-		summary.textContent = "Running… " + scores.total + " of " + cards.length;
+		summary.textContent = "Running… " + scores.total + " done";
 	}
-	const line = "Number read " + scores.number + "/" + scores.total
+	const line = "Name read " + scores.name + "/" + scores.total
+		+ " · number read " + scores.number + "/" + scores.total
 		+ " · shown first " + scores.first + "/" + scores.total
 		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong";
 	summary.textContent = line;
-	console.log("SPECIAL NUMBERS TEST: " + line);
+	console.log("FULL-ART TEST: " + line);
 	window.testScores = scores;   // lets a script read the result
 	window.testRows = allRows;
 }
 
 async function testOnePhoto(card, photo) {
 	const started = performance.now();
-	cornerTexts.length = 0;
+	stripSaid = "not read (no card edges found)";
 	const reading = await readCardPhoto(photo);
-	const texts = cornerTexts.slice();
-	// Right when the number read names the card's number ("BW0004" does name BW004).
-	const numberOk = numberSpellings(parseCollectorNumber(reading.number || "").number).includes(card.number);
+	// Right when every word read is a word of the card's name: "Kangaskhan" for Kangaskhan-EX,
+	// but not "Aron" for Lairon.
+	const words = (text) => text.split(/[\s-]+/).map(lettersOnly).filter(Boolean);
+	const nameOk = reading.nameSure && words(reading.name).length > 0
+		&& words(reading.name).every((word) => words(card.name).includes(word));
+	const read = parseCollectorNumber(reading.number || "");
+	const numberOk = numberSpellings(read.number).includes(card.number)
+		&& (read.total === String(card.set.printedTotal) || isPromoCode(read));   // "GG30/GG70" has no plain set size
 	let foundAt = -1;
 	let opened = false;   // would the app open a card's prices without asking?
 	let error = "";
@@ -146,23 +136,31 @@ async function testOnePhoto(card, photo) {
 	} catch (problem) {
 		error = String(problem);
 	}
-	const row = { name: reading.name, number: reading.number, numberOk, foundAt, opened, seconds: (performance.now() - started) / 1000 };
-	addRow(card, row, texts, error);
+	const row = { name: reading.name, number: reading.number, nameOk, numberOk, foundAt, opened, seconds: (performance.now() - started) / 1000 };
+	addRow(photo, card, row, error);
 	return row;
 }
 
-function addRow(card, row, texts, error) {
+function addRow(photo, card, row, error) {
+	const thumb = document.createElement("img");
+	thumb.src = URL.createObjectURL(photo);
 	const found = error || (row.foundAt < 0 ? "not found" : "position " + (row.foundAt + 1) + (row.opened ? ", opened" : ""));
 	const cells = [
-		card.id + "<br>" + safe(row.name || "(no name)"),
-		card.printed,
+		thumb,
+		card.id + " · " + safe(card.name) + " " + card.number + "/" + card.set.printedTotal + "<br><small>" + safe(card.rarity || "") + "</small>",
+		mark(row.nameOk, row.name || "(nothing)"),
 		mark(row.numberOk, row.number || "(nothing)"),
 		mark(row.foundAt === 0 && row.opened, found) + (row.opened && row.foundAt !== 0 ? " <b>WRONG</b>" : ""),
 		row.seconds.toFixed(1),
-		"<code>" + safe(texts.filter((text) => text.length < 160).join(" ‖ ")) + "</code>",
+		"<code>" + safe(stripSaid) + "</code>",
 	];
 	const tr = document.createElement("tr");
-	tr.innerHTML = cells.map((content) => "<td>" + content + "</td>").join("");
+	for (const content of cells) {
+		const td = document.createElement("td");
+		if (content instanceof Node) td.append(content);
+		else td.innerHTML = content;
+		tr.append(td);
+	}
 	rows.append(tr);
 }
 
@@ -203,11 +201,6 @@ async function makeFakePhoto(cardImage, random) {
 	}
 	ctx.putImageData(pixels, 0, 0);
 	return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
-}
-
-function hiresImageUrl(cardId) {
-	const dash = cardId.lastIndexOf("-");
-	return "https://images.pokemontcg.io/" + cardId.slice(0, dash) + "/" + cardId.slice(dash + 1) + "_hires.png";
 }
 
 function loadImage(url) {

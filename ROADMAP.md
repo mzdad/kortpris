@@ -5,6 +5,23 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.28.0
+
+- **1.3 The names of full-art and gold cards are read.** The strip along the card's top where the
+  name is printed is read on its own, enlarged, three ways: as it is, with only its dark ink, and
+  with only its white ink. A known name found there, printed at least name-sized, is the card's
+  name, even when the read of the whole card found another one (Blastoise ex had been read as
+  "Mew"); smaller print in the strip can spell names by chance ("Magby" on a Double Colorless
+  Energy). Also: a Trainer's name read
+  exactly beats a Pokémon two letters away ("Earthen Vessel" isn't Archen); a logo read stuck to
+  the name is cut off ("Incineroar@X"); "Energy Removal" is recognised (its twin "Energy Removal 2"
+  used to make it a tie); and small print like "aR 7" is no longer taken for the old number "AR7".
+  In fake photos of 27 full-art, gold, rainbow and illustration-rare cards: 22 names read (15
+  before), and 26 opened by themselves, where before 3 weren't found at all; none wrong
+  (`dev_fullart_test.html`). The 40 real photos: 39 names read (37 before; one is the reverse holo
+  Pikachu, long read as "Eevee"), the rest as before. It costs about a second per photo. Not solved: numbers printed white on the artwork (see 1.8), and the strip needs the
+  card's edges (see 1.9).
+
 ## Done in 1.27.0
 
 - **1.2 Special numbers are read.** Scarlet & Violet promos ("SVP EN 001") are looked for in their
@@ -46,11 +63,12 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 1.3 | **Full-art and gold cards**: the name and number sit on the artwork. | The reader loses text on busy backgrounds; the "ink only" copy used for numbers could help names too. | M |
 | 1.4 | **Learned cards as suggestions**: a learned card that looks somewhat like the photo, but not clearly enough to open, is added to the cards the photo is compared with. | Today a learned card either opens or plays no part. | S |
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.6 | **A second look at the number in any photo**: when the reads don't agree, read the number corner again from a slightly bigger and smaller cut of the card. | In 1.26.0 a second cut (the camera frame) turned 11 read numbers into 13. Photos from the phone's own camera have no frame, but could get the same second chance. | S |
 | 1.7 | **The set's code on newer cards**: since Scarlet & Violet, cards print their set's code by the number ("PAL EN 123/193"). Read it with the colours turned around, as it is white on black. | The code names the set exactly; today the set is guessed from its size, which several sets share. In 1.27.0 the "SVP" code was read in only about 1 of 3 tries. | M |
+| 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black. | 8 of 27 full-art numbers weren't read in 1.28.0, and a white-ink copy of the corner read none of them, so it needs something else, like thinning the black edge away first. The name and the look find these cards anyway. | M |
+| 1.9 | **Find the edges of silver-bordered and full-art cards** in photos from the phone's own camera. | The name strip and the number corners need them; 2 of 27 full-art photos had none. The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
 
 ## 2. Quicker
 
