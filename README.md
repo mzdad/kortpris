@@ -54,7 +54,9 @@ Zoomed in, the phone is held further away, so the card is in focus and out of th
 light stays on, so a glare spot shows before the photo is taken. Zoom needs iOS 17 or Chrome on
 Android, the light iOS 18; the buttons for them only show when the phone can. Both are remembered.
 Where the browser can (Safari 18.4, Chrome), the photo is the camera's own full-size photo, otherwise
-the live picture (an iPhone gives 2160×3840). A live picture is softer than a photo, and a slightly
+the live picture (an iPhone gives 2160×3840). The reader is told where the white frame was
+(`readCardPhoto`'s `frame`): the card's own edges are used when found close to it, and the frame
+otherwise; and when the number reads aren't sure, the number is read again at the frame's place. A live picture is softer than a photo, and a slightly
 soft picture hides the tiny numbers on old cards from the reader, so: the white frame covers 90% of
 the camera's real picture (the screen shows the whole of it), the sharpest of six pictures in the
 0.6 s after the press is kept (pressing shakes the phone), and a picture that measures soft

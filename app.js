@@ -167,6 +167,7 @@ const kidStartButton = document.getElementById("kid-start");
 const liveCameraView = document.getElementById("live-camera");
 const cameraVideo = document.getElementById("camera-video");
 const cameraBox = document.getElementById("camera-box");
+const cameraFrame = document.getElementById("camera-frame");
 const cameraMessage = document.getElementById("camera-message");
 const cameraCloseButton = document.getElementById("camera-close");
 const cameraLightButton = document.getElementById("camera-light");
@@ -487,6 +488,7 @@ cameraShutterButton.addEventListener("click", async () => {
 	if (!liveCamera || cameraShutterButton.disabled) return;
 	cameraShutterButton.disabled = true;   // one photo per press
 	showCameraMessage("cameraHoldStill");
+	const frame = cameraFrameShares();
 	let photo;
 	try {
 		photo = await takeLivePhoto(liveCamera, cameraVideo);
@@ -499,8 +501,23 @@ cameraShutterButton.addEventListener("click", async () => {
 	closeLiveCamera();
 	lastCameraPhoto = photo;
 	renderFooter();
-	scanPhoto(photo.file);
+	// The white frame is where the card is in a live picture. A full-size photo may show more
+	// than the live picture did, so there the frame's place isn't known.
+	scanPhoto(photo.file, photo.source === "video" ? frame : null);
 });
+
+function cameraFrameShares() {
+	// Where the white frame is on the live picture, as shares of the picture's width and height.
+	// The picture fills its box exactly (see .camera-box in style.css), so the box stands for it.
+	const box = cameraBox.getBoundingClientRect();
+	const edges = cameraFrame.getBoundingClientRect();
+	return {
+		x0: (edges.left - box.left) / box.width,
+		x1: (edges.right - box.left) / box.width,
+		y0: (edges.top - box.top) / box.height,
+		y1: (edges.bottom - box.top) / box.height,
+	};
+}
 
 // Switching to another app stops the camera anyway; close it, so it starts fresh next time.
 document.addEventListener("visibilitychange", () => {
@@ -766,7 +783,8 @@ function takeFileFrom(input) {
 
 // ---------- Step 1: read the photo ----------
 
-async function scanPhoto(imageFile) {
+// frame: where the white frame was, for a photo from the app's own camera (see readCardPhoto).
+async function scanPhoto(imageFile, frame = null) {
 	const scanId = ++latestScanId;
 	latestSearchId++;   // cancel any search still running for the previous card
 	intro.hidden = true;
@@ -809,7 +827,7 @@ async function scanPhoto(imageFile) {
 			setNotice(await claudeProblem(error));
 		}
 	}
-	if (!reading) reading = await readWithBuiltInReader(imageFile, scanId);
+	if (!reading) reading = await readWithBuiltInReader(imageFile, scanId, frame);
 	if (scanId !== latestScanId) return;
 
 	// A card that sparkles outside its picture opens on its reverse holo price (see sparkle.js).
@@ -853,7 +871,7 @@ async function scanPhoto(imageFile) {
 	await searchForCard();
 }
 
-async function readWithBuiltInReader(imageFile, scanId) {
+async function readWithBuiltInReader(imageFile, scanId, frame) {
 	try {
 		return await readCardPhoto(imageFile, (stage, fraction) => {
 			if (scanId !== latestScanId) return;
@@ -867,7 +885,7 @@ async function readWithBuiltInReader(imageFile, scanId) {
 				setStatus("readerStarting");
 				showProgress(null);
 			}
-		});
+		}, frame);
 	} catch (error) {
 		console.error(error);
 		return { name: "", number: "" };

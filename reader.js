@@ -46,6 +46,15 @@ const INK_CUTOFF = 90;
 // The card is read with this much of the photo around it (share of its size), so nothing
 // printed right at its edge is cut off.
 const CARD_CROP_MARGIN = 0.02;
+// A photo from the app's own camera comes with the white frame the viewer filled with the card
+// (see readCardPhoto). The card's own edges, found close to the frame, are more exact than it: at
+// most this share of the frame's size from its middle...
+const FRAME_CENTRE_SLACK = 0.12;
+// ...and from this to this share of its width.
+const FRAME_SIZE_SLACK = { min: 0.7, max: 1.15 };
+// A card placed by the frame alone is cut out with this much margin: it may have been held a
+// little bigger than the frame.
+const FRAME_CROP_MARGIN = 0.08;
 // Where the collector number is printed, as shares of the card's width and height: bottom
 // right on cards up to 2016, bottom left from 2017 on. Only these small windows are read,
 // because the text, lines and glitter around them make Tesseract misread the number.
@@ -119,7 +128,9 @@ let reportProgress = () => {};
 //   by its border or shape, or null - see card-finder.js) are boxes in it, used later to
 //   compare the card's looks.
 // - sparkle is { grain, reverseHolo } from sparkle.js, or null when that can't be told.
-async function readCardPhoto(imageFile, onProgress = () => {}) {
+// frame: where the viewer was asked to put the card, as shares of the photo's width and height
+// ({ x0, x1, y0, y1 }), when the photo came from the app's own camera; otherwise null.
+async function readCardPhoto(imageFile, onProgress = () => {}, frame = null) {
 	reportProgress = onProgress;
 	onProgress("starting", null);
 	// createImageBitmap also turns sideways phone photos the right way up.
@@ -129,7 +140,8 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 
 	// When it is clear where the card is, only the card is read - not the table, cloth or
 	// toploader around it, whose patterns look like made-up letters.
-	const cardBox = findYellowCard(photo) || findCardByShape(photo);
+	const framed = frame ? frameBoxIn(photo, frame) : null;
+	const cardBox = whereIsTheCard(photo, framed);
 	const view = cardBox ? cardView(photo, cardBox) : { picture: photo, x0: 0, y0: 0, zoom: 1 };
 
 	const firstRead = await readPage(worker, view.picture, "scattered");
@@ -149,7 +161,10 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 		if (inkName.sure) name = inkName;
 	}
 
-	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead, view);
+	// The frame is a second place to look for the number when the card's own edges were used: tiny
+	// print read from a slightly different cut often comes out differently (see readCollectorNumbers).
+	const secondBox = framed && cardBox !== framed ? framed : null;
+	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead, view, secondBox);
 	original.close();   // the full-size photo takes a lot of memory; it isn't needed any more
 	const textArea = boxInPhoto(firstRead.textArea, view);
 	return {
@@ -167,10 +182,41 @@ async function readCardPhoto(imageFile, onProgress = () => {}) {
 
 // ---------- Where the card is (see card-finder.js for finding it) ----------
 
+// The card's box in the photo, or null. Found by its yellow border or its shape; in a photo from
+// the app's camera, the white frame's box (framed) when nothing is found close to it.
+function whereIsTheCard(photo, framed) {
+	const found = findYellowCard(photo) || findCardByShape(photo);
+	if (!framed) return found;
+	return found && fitsFrame(found, framed) ? found : framed;
+}
+
+function frameBoxIn(photo, frame) {
+	// The white frame (shares of the photo) as a box in the photo.
+	return {
+		x0: frame.x0 * photo.width,
+		x1: frame.x1 * photo.width,
+		y0: frame.y0 * photo.height,
+		y1: frame.y1 * photo.height,
+		foundBy: "camera frame",
+	};
+}
+
+function fitsFrame(box, frame) {
+	// Close to the frame's middle, and about its size (see FRAME_CENTRE_SLACK).
+	const frameWidth = frame.x1 - frame.x0;
+	const frameHeight = frame.y1 - frame.y0;
+	const offX = Math.abs((box.x0 + box.x1) / 2 - (frame.x0 + frame.x1) / 2) / frameWidth;
+	const offY = Math.abs((box.y0 + box.y1) / 2 - (frame.y0 + frame.y1) / 2) / frameHeight;
+	const size = (box.x1 - box.x0) / frameWidth;
+	return offX <= FRAME_CENTRE_SLACK && offY <= FRAME_CENTRE_SLACK
+		&& size >= FRAME_SIZE_SLACK.min && size <= FRAME_SIZE_SLACK.max;
+}
+
 function cardView(photo, cardBox) {
 	// The card cut out of the photo, with a little margin, enlarged to the usual reading size.
-	const marginX = (cardBox.x1 - cardBox.x0) * CARD_CROP_MARGIN;
-	const marginY = (cardBox.y1 - cardBox.y0) * CARD_CROP_MARGIN;
+	const margin = cardBox.foundBy === "camera frame" ? FRAME_CROP_MARGIN : CARD_CROP_MARGIN;
+	const marginX = (cardBox.x1 - cardBox.x0) * margin;
+	const marginY = (cardBox.y1 - cardBox.y0) * margin;
 	const area = {
 		x0: Math.max(0, cardBox.x0 - marginX),
 		y0: Math.max(0, cardBox.y0 - marginY),
@@ -484,7 +530,7 @@ function lettersOnly(text) {
 
 // ---------- The collector number ----------
 
-async function readCollectorNumbers(worker, original, photo, cardBox, page, view) {
+async function readCollectorNumbers(worker, original, photo, cardBox, page, view, secondBox = null) {
 	// The number is tiny print along the card's bottom edge, too small to read in the whole
 	// photo, so that part is read again, enlarged - cut from the full-size original, which has
 	// far more detail. Tiny print is often misread, so this returns every number that seems
@@ -494,6 +540,12 @@ async function readCollectorNumbers(worker, original, photo, cardBox, page, view
 	let guesses = [];
 	if (cardBox) {
 		guesses = await readNumberPlaces(worker, original, scaleBox(cardBox, toOriginal));
+	}
+	// Not sure yet, and there is another place the card may be (the camera's frame): read there too.
+	// In made-up camera pictures of 17 real cards, the card's own edges gave 11 right numbers, the
+	// frame alone 14, and they were often different ones (version 1.26.0).
+	if (secondBox && !twoReadsAgree(guesses)) {
+		guesses.push(...await readNumberPlaces(worker, original, scaleBox(secondBox, toOriginal)));
 	}
 	if (!sawWholeNumber(guesses) && page.textArea) {
 		// Without the card's outline, or when the number wasn't where the outline says, the
@@ -533,10 +585,15 @@ async function readNumberPlaces(worker, original, card) {
 			const result = await worker.recognize(closeUp);
 			guesses.push(...oncePerNumber(numberCandidates(result.data.text || "")));
 		}
-		const agreed = likeliestVotes(guesses)[0];
-		if (agreed && agreed.sawSlash && isWholeNumber(agreed.number) && agreed.votes >= 2) break;
+		if (twoReadsAgree(guesses)) break;
 	}
 	return guesses;
+}
+
+function twoReadsAgree(guesses) {
+	// Two reads found the same whole number, "/" and all: as sure as reading gets.
+	const agreed = likeliestVotes(guesses)[0];
+	return Boolean(agreed && agreed.sawSlash && isWholeNumber(agreed.number) && agreed.votes >= 2);
 }
 
 function oncePerNumber(guesses) {

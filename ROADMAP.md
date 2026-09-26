@@ -1,8 +1,20 @@
 # Kortpris roadmap
 
-What to build next, and why. Written 26 September 2026, at version 1.25.0. Biggest wins first
+What to build next, and why. Started 26 September 2026 at version 1.25.0, and kept up to date:
+finished items move to "Done" with their version, and keep their number. Biggest wins first
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
+
+## Done in 1.26.0
+
+- **1.1 The camera frame is the card's outline.** A photo from the app's camera tells the reader
+  where the white frame was. The card's own edges are still used when they are found close to the
+  frame, as they are more exact; otherwise the frame is. And when the number isn't clear from the
+  card's edges, it is read once more at the frame's place: tiny print cut out a little differently
+  often reads differently. In made-up camera pictures of 17 real cards, held a little off in the
+  frame: 16 opened by themselves (15 before), 13 numbers read (11), none wrong. And when the
+  card's edges aren't found at all, the frame alone opened 14 of them, where before only 4 of 18
+  opened (`dev-local/frame-lab.html`).
 
 ## Done in 1.25.0
 
@@ -20,11 +32,11 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 1.1 | **Use the camera frame as the card's outline.** In the app's camera the card fills the white frame, so the app already knows where it is. | Finding the card is the step most photos fail at first; skipping it makes reading surer and faster. | M |
 | 1.2 | **Newer promo and gallery numbers**: Scarlet & Violet promos ("SVP EN 001"), Galarian Gallery ("GG01/GG70"). | They read as nothing today, like "SWSH193" did. | S |
 | 1.3 | **Full-art and gold cards**: the name and number sit on the artwork. | The reader loses text on busy backgrounds; the "ink only" copy used for numbers could help names too. | M |
 | 1.4 | **Learned cards as suggestions**: a learned card that looks somewhat like the photo, but not clearly enough to open, is added to the cards the photo is compared with. | Today a learned card either opens or plays no part. | S |
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
+| 1.6 | **A second look at the number in any photo**: when the reads don't agree, read the number corner again from a slightly bigger and smaller cut of the card. | In 1.26.0 a second cut (the camera frame) turned 11 read numbers into 13. Photos from the phone's own camera have no frame, but could get the same second chance. | S |
 
 ## 2. Quicker
 
