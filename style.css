@@ -304,6 +304,8 @@ button.version { cursor: pointer; }
 	padding: 1px 8px; border-radius: 999px;
 	background: var(--accent); color: var(--accent-ink);
 }
+/* A learned card the photo looks somewhat like (learned.js). */
+.badge.seen { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
 .result-set { font-size: 0.78rem; color: var(--muted); line-height: 1.25; }
 
 /* ---------- Scan / My cards switch ---------- */

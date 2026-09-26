@@ -26,6 +26,16 @@ const THUMBNAIL_SCALE = 24;
 const SAME_CARD_DISTANCE = 0.42;
 // ...and every other learned card is at least this many times further away.
 const SAME_CARD_GAP = 2;
+// A learned card the photo is at most this far from, without being clearly that card, is still
+// suggested: it is added to the cards the photo is compared with (app.js), and goes first when
+// nothing is clear (pickBestMatch in matcher.js)... Measured on the 40 real photos (version 1.29.0):
+// with its own card not learned, a photo came this close to another learned card once, and
+// within 0.7 ten times; harder made-up second photos of learned cards that weren't recognised
+// came within 0.6 of their own card 13 times out of 35. At 0.7, wrong suggestions pushed the
+// right card down a place four times; at 0.6, never.
+const LIKE_CARD_DISTANCE = 0.6;
+// ...the closest few of them.
+const MOST_SUGGESTED_CARDS = 3;
 // A card whose own picture is this far from the photo isn't the card in it, and isn't learned.
 // On 34 real photos the right card measured 0.11 to 1.94 (the worst in warm lamp light), so this
 // only keeps out the plainly unlike. Which answers count at all is decided in app.js.
@@ -37,12 +47,14 @@ let learnedAccountMerged = false;   // this phone's learned cards have gone into
 let learnedAccountProblem = null;   // why the account couldn't be read or saved: { key, values }, or null
 let learnedChanged = () => {};      // app.js's redraw, for news that comes later (see whenLearnedChanges)
 
-// Returns the learned card the photo shows: { cardId, name, number, setName, image }, or null
-// when it doesn't look clearly like one. cardBox and textArea say where the card is in the
-// photo (reader.js); without either, the photo isn't compared at all. learned is what the
-// phone has learned, unless a test brings its own.
-function recogniseLearnedCard(photo, textArea, cardBox, learned = readLearned()) {
-	if (learned.length === 0 || (!cardBox && !textArea)) return null;
+// Compares the photo with the cards the phone has learned. Returns { card, suggestions }: card is
+// the learned card the photo clearly shows ({ cardId, name, number, setName, image }), or null;
+// suggestions are the learned cards it looks somewhat like when none is clear, the closest first
+// (see LIKE_CARD_DISTANCE). cardBox and textArea say where the card is in the photo (reader.js);
+// without either, the photo isn't compared at all. learned is what the phone has learned,
+// unless a test brings its own.
+function compareWithLearned(photo, textArea, cardBox, learned = readLearned()) {
+	if (learned.length === 0 || (!cardBox && !textArea)) return { card: null, suggestions: [] };
 	const photoGrids = photoArtworkGrids(photo, textArea, cardBox, true);
 	// The closest photo learned for each card.
 	const closest = new Map();
@@ -53,9 +65,16 @@ function recogniseLearnedCard(photo, textArea, cardBox, learned = readLearned())
 	}
 	const ranked = [...closest.values()].sort((a, b) => a.distance - b.distance);
 	const best = ranked[0];
-	if (best.distance > SAME_CARD_DISTANCE) return null;
-	if (ranked.length > 1 && ranked[1].distance < best.distance * SAME_CARD_GAP) return null;
-	return best.entry;
+	const clear = best.distance <= SAME_CARD_DISTANCE
+		&& (ranked.length === 1 || ranked[1].distance >= best.distance * SAME_CARD_GAP);
+	if (clear) return { card: best.entry, suggestions: [] };
+	const suggestions = ranked.filter((entry) => entry.distance <= LIKE_CARD_DISTANCE).slice(0, MOST_SUGGESTED_CARDS);
+	return { card: null, suggestions: suggestions.map((entry) => entry.entry) };
+}
+
+// The learned card the photo clearly shows, or null (see compareWithLearned).
+function recogniseLearnedCard(photo, textArea, cardBox, learned = readLearned()) {
+	return compareWithLearned(photo, textArea, cardBox, learned).card;
 }
 
 // The card a recognised photo shows, fresh from the database. But when the reader read the name
@@ -68,6 +87,34 @@ async function findLearnedCard(learnedCard, name, numberText, numberGuesses) {
 	const cards = await findCardsById([learnedCard.cardId]);
 	if (cards.length === 0) return null;
 	return { cards: cards, description: { key: "matchLearned", values: {} }, totalCount: 1, exactFound: true, learned: true };
+}
+
+// Adds the learned cards the photo looks somewhat like (the suggestions of compareWithLearned) to
+// what findCards in cards.js found for it, so the photo is compared with them too - unless the
+// name and number were read exactly, which is surer than a look. Returns found with the cards
+// added at the end, and suggestedIds: the suggested cards' ids. When the text found nothing, the
+// suggestions are all there is: suggestedOnly. If the database doesn't answer, found as it was:
+// the suggestions are an extra, not worth failing the search for.
+async function withLearnedSuggestions(found, suggestions) {
+	if (found.exactFound || found.learned || suggestions.length === 0) return found;
+	let suggested;
+	try {
+		suggested = await findCardsById(suggestions.map((entry) => entry.cardId));
+	} catch (problem) {
+		console.error(problem);
+		return found;
+	}
+	if (suggested.length === 0) return found;
+	const extra = suggested.filter((card) => !found.cards.some((other) => other.id === card.id));
+	const suggestedOnly = found.cards.length === 0;
+	return {
+		...found,
+		cards: [...found.cards, ...extra],
+		description: suggestedOnly ? { key: "matchLearnedSuggested", values: {} } : found.description,
+		totalCount: Math.max(found.totalCount, found.cards.length + extra.length),
+		suggestedIds: suggested.map((card) => card.id),
+		suggestedOnly: suggestedOnly,
+	};
 }
 
 // Remembers that this photo shows this card. photoKey tells photos apart: learning another card

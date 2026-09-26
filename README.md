@@ -83,8 +83,13 @@ is already known is taken as a price lookup of some other card, and teaches noth
 (`answersPhoto` in `app.js`). Every new photo is compared with those first. When it looks just like one
 learned card (`SAME_CARD_DISTANCE`) and clearly unlike every other (`SAME_CARD_GAP`), that card
 opens straight away, however badly the text read - unless the reader read another card's name and
-number exactly, because the same picture is printed in several sets. "Cards the app has learned" on
-the Scan screen lists them, each with a Forget button. Tested with `dev_learning_test.html`.
+number exactly, because the same picture is printed in several sets. A photo that only looks
+somewhat like learned cards (`LIKE_CARD_DISTANCE`, in other light or of another copy of the card)
+still gets them as suggestions: they join the cards its text found, and when nothing is clear they go
+first, marked "Seen before" - but they never open by themselves. When nothing could be read, they
+are shown on their own to pick from. Tapping one teaches the app that photo too, so the next one
+like it opens straight away. "Cards the app has learned" on the Scan screen lists them, each with a
+Forget button. Tested with `dev_learning_test.html`.
 
 **Kids mode.** The 🧒 button at the top switches on a mode for children who can't read well
 yet: one big picture to tap for the camera, the card with 1 to 5 Poké Balls for how valuable
@@ -144,7 +149,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `app.js` | The screen: buttons, results, prices |
 | `dev_reading_test.html` | Development tool, not part of the app (see below) |
 | `dev_real_photos_test.html` | Development tool: runs real photos from the private `dev-local/` folder |
-| `dev_learning_test.html` | Development tool: checks that learned cards are recognised, and nothing else is |
+| `dev_learning_test.html` | Development tool: checks that learned cards are recognised or suggested, and nothing else is opened |
 | `dev_special_numbers_test.html` | Development tool: promos, gallery and other lettered numbers (see below) |
 | `dev_fullart_test.html` | Development tool: full-art, gold and illustration-rare cards (see below) |
 

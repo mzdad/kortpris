@@ -50,6 +50,7 @@ const KID_STATUS = {
 	foundOne: "kidFound",
 	bestMatchOpened: "kidFound",
 	learnedOpened: "kidFound",
+	learnedSuggested: "kidPickOne",
 	foundMany: "kidPickOne",
 	foundManyByLook: "kidPickOne",
 	noMatch: "kidNotFound",
@@ -187,6 +188,7 @@ let shownCards = [];              // the cards from the latest search
 let shownDescription = null;      // which kind of search found them: { key, values }
 let selectedCardId = null;        // the card whose prices are open
 let bestMatchId = null;           // the card that looks most like the photo
+let suggestedIds = [];            // learned cards the photo looks somewhat like (learned.js)
 let chosenVersion = null;         // the version picked on the open card ("reverseHolofoil"), or null
 let versionHint = null;           // the version Claude saw in the photo, used until one is picked
 let saveFailed = false;           // the browser refused to save "My cards"
@@ -835,6 +837,8 @@ async function scanPhoto(imageFile, frame = null) {
 
 	searchButton.disabled = false;
 	if (reading.photo) {
+		// The cards the app has learned that this photo looks like (learned.js).
+		const learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null);
 		lastPhoto = {
 			picture: reading.photo,
 			textArea: reading.textArea,
@@ -843,8 +847,12 @@ async function scanPhoto(imageFile, frame = null) {
 			looksReverseHolo: versionHint === "reverseHolofoil",
 			// Tells this photo apart when a card is learned from it (see learnCard in learned.js).
 			key: String(Date.now()),
-			// A card the app has learned that looks just like this photo (learned.js), or null.
-			learnedCard: recogniseLearnedCard(reading.photo, reading.textArea, reading.cardBox || null),
+			// A learned card the photo looks just like, or null...
+			learnedCard: learnedLook.card,
+			// ...or else the learned cards it looks somewhat like, to compare it with too.
+			learnedSuggestions: learnedLook.suggestions,
+			// Whether the text read is worth searching on (see below).
+			textUsable: true,
 			// The card the photo is taken to be, once one was opened for it or learned from it...
 			card: null,
 			// ...and whether that was because the photo looked like a learned card.
@@ -856,12 +864,19 @@ async function scanPhoto(imageFile, frame = null) {
 	scannedNumbers = { shown: reading.number, guesses: reading.numberGuesses || [] };
 	// A learned card is found by its looks, so it doesn't matter how badly the text read.
 	const recognised = lastPhoto !== null && lastPhoto.learnedCard !== null;
+	// Nothing read, or a name the reader isn't sure of and no number: searching on that would show
+	// random cards. But when the photo looks somewhat like cards the app has learned, those are shown.
+	const nothingToSearch = !reading.number && (!reading.name || !reading.nameSure);
+	if (!recognised && nothingToSearch && lastPhoto !== null && lastPhoto.learnedSuggestions.length > 0) {
+		lastPhoto.textUsable = false;
+		await searchForCard();
+		return;
+	}
 	if (!recognised && !reading.name && !reading.number) {
 		hideProgress();
 		setStatus("readFailed", {}, "error");
 		return;
 	}
-	// A name the reader isn't sure of, and no number: searching on it would show random cards.
 	if (!recognised && !reading.nameSure && !reading.number) {
 		hideProgress();
 		setStatus("unsureName", {}, "error");
@@ -915,12 +930,16 @@ async function searchForCard(byViewer = false) {
 	const searchId = ++latestSearchId;
 	// A photo of a card the app has learned opens that card - unless the viewer searches for another.
 	const learnedCard = !byViewer && lastPhoto ? lastPhoto.learnedCard : null;
+	// Learned cards the photo looks somewhat like are compared with it too, or shown on their own
+	// when the text read is no use.
+	const suggestions = !byViewer && lastPhoto ? lastPhoto.learnedSuggestions : [];
+	const useText = byViewer || !lastPhoto || lastPhoto.textUsable;
 	// The viewer's search is their answer about the photo, to learn, when the app couldn't tell which
 	// card the photo shows, or took it for a learned card (it then asks for a search if that's wrong).
 	// Otherwise the photo's card is known, and the viewer is looking up the price of another card.
 	const answersPhoto = byViewer && lastPhoto !== null && (lastPhoto.card === null || lastPhoto.recognised);
 	resultsForPhoto = lastPhoto !== null && (!byViewer || answersPhoto);
-	if (!learnedCard && !canSearch(nameInput.value, numberInput.value)) {
+	if (!learnedCard && suggestions.length === 0 && !canSearch(nameInput.value, numberInput.value)) {
 		hideProgress();
 		setStatus("needNameOrNumber", {}, "error");
 		return;
@@ -938,7 +957,9 @@ async function searchForCard(byViewer = false) {
 		const guesses = numberInput.value.trim() === scannedNumbers.shown ? scannedNumbers.guesses : [];
 		let found = null;
 		if (learnedCard) found = await findLearnedCard(learnedCard, nameInput.value, numberInput.value, guesses);
-		if (!found) found = await findCards(nameInput.value, numberInput.value, lastPhoto !== null, guesses);
+		if (!found && useText) found = await findCards(nameInput.value, numberInput.value, lastPhoto !== null, guesses);
+		if (!found) found = { cards: [], description: null, totalCount: 0, exactFound: false };
+		found = await withLearnedSuggestions(found, suggestions);
 		if (searchId !== latestSearchId) return;   // a newer photo or search took over
 		if (found.learned) {
 			// Show the recognised card's own name and number, whatever was read.
@@ -955,6 +976,12 @@ async function searchForCard(byViewer = false) {
 		if (found.cards.length === 0) {
 			hideProgress();
 			setStatus("noMatch", {}, "error");
+		} else if (found.suggestedOnly) {
+			// Only learned cards the photo looks somewhat like: shown to pick from, but never opened
+			// by themselves, as the text read gave nothing to back them up.
+			hideProgress();
+			setStatus("learnedSuggested");
+			showResults(found.cards, found.description, null, null, found.suggestedIds);
 		} else if (found.cards.length === 1) {
 			hideProgress();
 			setStatus(found.learned ? "learnedOpened" : "foundOne");
@@ -978,18 +1005,19 @@ async function searchForCard(byViewer = false) {
 			hideProgress();
 			// Only trust looks when the reader also found where the card sits in the photo.
 			const cardLocated = lastPhoto.cardBox !== null || lastPhoto.textArea !== null;
-			const pick = pickBestMatch(ranked, cardLocated, found.setSizes, lastPhoto.setName, found.numbersRead, lastPhoto.looksReverseHolo);
-			const cards = pick.cards.slice(0, RESULTS_PAGE_SIZE);
+			const suggested = found.suggestedIds || [];
+			const pick = pickBestMatch(ranked, cardLocated, found.setSizes, lastPhoto.setName, found.numbersRead, lastPhoto.looksReverseHolo, suggested);
+			const cards = firstPageWith(pick.cards, suggested);
 			const best = cards[0].id;
 			if (pick.clear) {
 				setStatus("bestMatchOpened");
 				fixMisreadName(cards[0], guesses);
-				showResults(cards, found.description, best, best);
+				showResults(cards, found.description, best, best, suggested);
 				if (answersPhoto) rememberCard(cards[0]);
 				else if (!byViewer) takeFor(cards[0], false);
 			} else {
 				setStatus("foundManyByLook", { count: cards.length });
-				showResults(cards, found.description, null, best);
+				showResults(cards, found.description, null, best, suggested);
 			}
 		}
 	} catch (error) {
@@ -1000,6 +1028,14 @@ async function searchForCard(byViewer = false) {
 	} finally {
 		if (searchId === latestSearchId) searchButton.disabled = false;
 	}
+}
+
+// The first page of cards to show - with the learned cards the photo looks somewhat like (ids) on
+// it, even when their own pictures look less alike than a page of others.
+function firstPageWith(cards, ids) {
+	const page = cards.slice(0, RESULTS_PAGE_SIZE);
+	const missing = cards.filter((card) => ids.includes(card.id) && !page.includes(card));
+	return [...page.slice(0, RESULTS_PAGE_SIZE - missing.length), ...missing];
 }
 
 // The app opened this card for the latest photo by itself: the photo is taken to be that card.
@@ -1078,12 +1114,14 @@ function showNumberHint(found) {
 
 // openId: the card whose prices open straight away (or null to let the viewer pick).
 // bestId: the card to mark "Best match" (or null).
-function showResults(cards, description, openId, bestId) {
+// suggested: the ids of learned cards to mark "Seen before".
+function showResults(cards, description, openId, bestId, suggested = []) {
 	chosenVersion = null;
 	shownCards = cards;
 	shownDescription = description;
 	selectedCardId = openId;
 	bestMatchId = bestId;
+	suggestedIds = suggested;
 	renderResults();
 	const opened = cards.find((card) => card.id === openId);
 	if (kidsMode && opened) sayCard(opened);
@@ -1094,6 +1132,7 @@ function clearResults() {
 	shownDescription = null;
 	selectedCardId = null;
 	bestMatchId = null;
+	suggestedIds = [];
 	renderResults();
 }
 
@@ -1105,8 +1144,10 @@ function renderResults() {
 	if (selectedCard) detailHtml = kidsMode ? kidCardDetailHtml(selectedCard) : cardDetailHtml(selectedCard);
 	detail.innerHTML = detailHtml;
 
-	results.hidden = shownCards.length < 2;
-	if (shownCards.length < 2) {
+	// A single card is shown open, unless it is only a suggestion (see learnedSuggested).
+	const showList = shownCards.length > 1 || (shownCards.length === 1 && !selectedCard);
+	results.hidden = !showList;
+	if (!showList) {
 		resultsGrid.innerHTML = "";
 		return;
 	}
@@ -1117,7 +1158,8 @@ function renderResults() {
 }
 
 function resultButtonHtml(card) {
-	const badge = card.id === bestMatchId ? `<span class="badge">${t("bestMatch")}</span>` : "";
+	let badge = card.id === bestMatchId ? `<span class="badge">${t("bestMatch")}</span>` : "";
+	if (suggestedIds.includes(card.id)) badge += `<span class="badge seen">${t("seenBefore")}</span>`;
 	// Loaded the same way matcher.js loads it, so each picture downloads only once.
 	return `
 		<button class="result" type="button" data-card-id="${escapeHtml(card.id)}" aria-pressed="${card.id === selectedCardId}">

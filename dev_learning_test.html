@@ -25,30 +25,34 @@
 <code>dev-local/</code> (never published, listed in <code>dev-local/real-photos.json</code>). First every photo is
 learned, as if the viewer had picked its card. Then a made-up second photo of each (tilted, moved, other light,
 blurred, the same every run) must be recognised as its own card. And each photo must <em>not</em> be recognised
-as anything while its own card isn't learned: that is the check against opening the wrong card.</p>
+as anything while its own card isn't learned: that is the check against opening the wrong card. A harder second
+photo of each (other light, a glare, more tilt; every other one also small and soft, so its print can't be read)
+may not be recognised for sure, but its card may still be suggested: then the app's search is run, and should
+show it first. The app must never open a wrong card, with or without suggestions.</p>
 <p id="summary">Running…</p>
 <div class="table-wrap">
 	<table>
-		<thead><tr><th>Second photo</th><th>Card</th><th>Recognised</th><th>Own card not learned</th><th>Distances</th></tr></thead>
+		<thead><tr><th>Second photo</th><th>Card</th><th>Recognised</th><th>Own card not learned</th><th>Distances</th><th>Harder photo</th><th>Harder photo: learned card</th></tr></thead>
 		<tbody id="rows"></tbody>
 	</table>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="storage.js?v=1.28.0"></script>
-<script src="pokemon-names.js?v=1.28.0"></script>
-<script src="card-names.js?v=1.28.0"></script>
-<script src="card-finder.js?v=1.28.0"></script>
-<script src="sparkle.js?v=1.28.0"></script>
-<script src="reader.js?v=1.28.0"></script>
-<script src="cards.js?v=1.28.0"></script>
-<script src="matcher.js?v=1.28.0"></script>
-<script src="learned.js?v=1.28.0"></script>
+<script src="storage.js?v=1.29.0"></script>
+<script src="pokemon-names.js?v=1.29.0"></script>
+<script src="card-names.js?v=1.29.0"></script>
+<script src="card-finder.js?v=1.29.0"></script>
+<script src="sparkle.js?v=1.29.0"></script>
+<script src="reader.js?v=1.29.0"></script>
+<script src="cards.js?v=1.29.0"></script>
+<script src="matcher.js?v=1.29.0"></script>
+<script src="learned.js?v=1.29.0"></script>
 <script>
 "use strict";
 
 const PHOTO_LIST_URL = "dev-local/real-photos.json";
 const RANDOM_SEED = 20260925;
+const HARDER_SEED = 11;
 
 const rows = document.getElementById("rows");
 const summary = document.getElementById("summary");
@@ -67,6 +71,7 @@ async function runAllPhotos() {
 	const only = new URLSearchParams(location.search).get("only");
 	if (only) photos = photos.filter((photo) => only.split(",").some((part) => photo.file.includes(part)));
 	const random = seededRandom(RANDOM_SEED);
+	const harderRandom = seededRandom(HARDER_SEED);
 
 	// 1. Learn every photo, as the app does when the viewer picks its card. The list stays in this
 	// page: the phone's own learned cards (localStorage) are left alone.
@@ -85,18 +90,32 @@ async function runAllPhotos() {
 	}
 
 	// 2. A second photo of each, recognised with everything learned - and with its own card left out.
-	const scores = { total: 0, notLearned: 0, right: 0, wrong: 0, missed: 0, strangerWrong: 0, strangerTotal: 0 };
-	for (const original of originals) {
+	const scores = {
+		total: 0, notLearned: 0, right: 0, wrong: 0, missed: 0, strangerWrong: 0, strangerTotal: 0,
+		strangerSuggested: 0, strangerOpenedWrong: 0,
+		harderRight: 0, harderWrong: 0, harderSuggested: 0, harderFirst: 0, harderOpenedWrong: 0, harderMissed: 0,
+	};
+	for (const [index, original] of originals.entries()) {
 		const { photo } = original;
 		const secondFile = await secondPhoto(original.file, random);
 		const reading = await readCardPhoto(secondFile);
 		const withOwn = recogniseLearnedCard(reading.photo, reading.textArea, reading.cardBox, learned);
 		const others = learned.filter((entry) => entry.cardId !== photo.id);
-		// Neither photo may be taken for another card while its own card isn't learned.
-		const strangers = [
-			recogniseLearnedCard(reading.photo, reading.textArea, reading.cardBox, others),
-			recogniseLearnedCard(original.reading.photo, original.reading.textArea, original.reading.cardBox, others),
-		];
+		// Neither photo may be taken for another card while its own card isn't learned. Another card
+		// may be suggested (it looks somewhat like it), but the app's search mustn't open it.
+		const strangers = [];
+		const strangerNotes = [];
+		for (const strangerReading of [reading, original.reading]) {
+			const look = compareWithLearned(strangerReading.photo, strangerReading.textArea, strangerReading.cardBox, others);
+			strangers.push(look.card);
+			if (look.suggestions.length === 0) continue;
+			scores.strangerSuggested++;
+			const search = await searchLikeTheApp(strangerReading, look.suggestions);
+			const openedWrong = search.opened && search.cards[0].id !== photo.id;
+			if (openedWrong) scores.strangerOpenedWrong++;
+			strangerNotes.push("suggested " + look.suggestions.map((entry) => entry.cardId).join(", ") + ": "
+				+ (openedWrong ? "OPENED " + search.cards[0].id : searchResultText(search, photo.id)));
+		}
 		scores.total++;
 		if (!original.learnedIt) scores.notLearned++;
 		else if (withOwn === null) scores.missed++;
@@ -104,15 +123,66 @@ async function runAllPhotos() {
 		else scores.wrong++;
 		scores.strangerTotal += strangers.length;
 		scores.strangerWrong += strangers.filter(Boolean).length;
-		addRow(secondFile, photo, original.learnedIt, withOwn, strangers, distancesText(reading, learned, photo.id));
+
+		// 3. A harder second photo: recognised, or at least suggested and shown first by the search.
+		const harderFile = await harderPhoto(original.file, harderRandom, index % 2 === 1);
+		const harderReading = await readCardPhoto(harderFile);
+		const harderLook = compareWithLearned(harderReading.photo, harderReading.textArea, harderReading.cardBox, learned);
+		let harder;
+		if (harderLook.card) {
+			const rightCard = harderLook.card.cardId === photo.id;
+			if (rightCard) scores.harderRight++;
+			else scores.harderWrong++;
+			harder = mark(rightCard, "recognised " + harderLook.card.cardId);
+		} else if (harderLook.suggestions.length > 0) {
+			scores.harderSuggested++;
+			const search = await searchLikeTheApp(harderReading, harderLook.suggestions);
+			const first = search.cards.length > 0 && search.cards[0].id === photo.id;
+			if (first) scores.harderFirst++;
+			if (search.opened && !first) scores.harderOpenedWrong++;
+			harder = mark(first, "suggested " + harderLook.suggestions.map((entry) => entry.cardId).join(", ")
+				+ ": " + (search.opened && !first ? "OPENED " + search.cards[0].id : searchResultText(search, photo.id)));
+		} else {
+			scores.harderMissed++;
+			harder = mark(false, "not recognised or suggested");
+		}
+		const harderInfo = { file: harderFile, text: harder, distances: distancesText(harderReading, learned, photo.id) };
+		addRow(secondFile, photo, original.learnedIt, withOwn, strangers, strangerNotes, distancesText(reading, learned, photo.id), harderInfo);
 		summary.textContent = "Second photos… " + scores.total + " of " + originals.length;
 	}
 	const line = "Second photo recognised: " + scores.right + " right, " + scores.wrong + " wrong, " + scores.missed + " not recognised"
 		+ (scores.notLearned ? ", " + scores.notLearned + " couldn't be learned" : "")
-		+ " · own card not learned, taken for another: " + scores.strangerWrong + " of " + scores.strangerTotal;
+		+ " · own card not learned, taken for another: " + scores.strangerWrong + " of " + scores.strangerTotal
+		+ " (another suggested " + scores.strangerSuggested + " times, opened wrongly " + scores.strangerOpenedWrong + ")"
+		+ " · harder second photo: " + scores.harderRight + " recognised, " + scores.harderSuggested + " suggested ("
+		+ scores.harderFirst + " shown first), " + scores.harderMissed + " neither; wrong: "
+		+ (scores.harderWrong + scores.harderOpenedWrong);
 	summary.textContent = line;
 	console.log("LEARNING TEST: " + line);
 	window.testScores = scores;   // lets a script read the result
+}
+
+// What the app does with a photo it doesn't recognise for sure but that looks somewhat like learned
+// cards (scanPhoto and searchForCard in app.js), without the screen. Returns { cards, opened }:
+// the cards in the order shown, and whether the first opens by itself.
+async function searchLikeTheApp(reading, suggestions) {
+	const nothingToSearch = !reading.number && (!reading.name || !reading.nameSure);
+	let found = { cards: [], description: null, totalCount: 0, exactFound: false };
+	if (!nothingToSearch) found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
+	found = await withLearnedSuggestions(found, suggestions);
+	if (found.suggestedOnly) return { cards: found.cards, opened: false };
+	if (found.cards.length <= 1) return { cards: found.cards, opened: found.cards.length === 1 };
+	const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
+	const located = reading.cardBox !== null || reading.textArea !== null;
+	const pick = pickBestMatch(ranked, located, found.setSizes, "", found.numbersRead,
+		Boolean(reading.sparkle && reading.sparkle.reverseHolo), found.suggestedIds || []);
+	return { cards: pick.cards, opened: pick.clear };
+}
+
+function searchResultText(search, rightId) {
+	const at = search.cards.findIndex((card) => card.id === rightId);
+	if (at < 0) return "not found";
+	return (at === 0 ? "first" : "position " + (at + 1)) + (search.opened ? ", opened" : "");
 }
 
 function distancesText(reading, learned, ownId) {
@@ -130,7 +200,7 @@ function distancesText(reading, learned, ownId) {
 		+ "\ngap " + (other.distance / own).toFixed(1) + "\nfound by " + (reading.cardBox ? reading.cardBox.foundBy : "text");
 }
 
-function addRow(file, photo, learnedIt, withOwn, strangers, distances) {
+function addRow(file, photo, learnedIt, withOwn, strangers, strangerNotes, distances, harder) {
 	const tr = document.createElement("tr");
 	const thumb = document.createElement("img");
 	thumb.src = URL.createObjectURL(file);
@@ -139,12 +209,17 @@ function addRow(file, photo, learnedIt, withOwn, strangers, distances) {
 	else if (withOwn === null) recognised = mark(false, "not recognised");
 	else recognised = mark(withOwn.cardId === photo.id, withOwn.cardId);
 	const wrongly = strangers.filter(Boolean).map((entry) => entry.cardId);
+	const harderThumb = document.createElement("img");
+	harderThumb.src = URL.createObjectURL(harder.file);
 	const cells = [
 		thumb,
 		photo.file + "<br>" + photo.id + " · " + photo.name,
 		recognised,
-		mark(wrongly.length === 0, wrongly.length === 0 ? "not recognised (right)" : "taken for " + wrongly.join(", ")),
+		mark(wrongly.length === 0, wrongly.length === 0 ? "not recognised (right)" : "taken for " + wrongly.join(", "))
+			+ strangerNotes.map((note) => "<br><code>" + escapeText(note) + "</code>").join(""),
 		"<code>" + escapeText(distances) + "</code>",
+		harderThumb,
+		harder.text + "<br><code>" + escapeText(harder.distances) + "</code>",
 	];
 	for (const content of cells) {
 		const td = document.createElement("td");
@@ -178,6 +253,49 @@ async function secondPhoto(file, random) {
 	ctx.drawImage(original, -original.width / 2, -original.height / 2);
 	original.close();
 	return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+}
+
+// Harder than secondPhoto: darker or brighter light, warm or cool and with less colour, a glare
+// spot, more tilt. small also shrinks it to a small, soft picture whose print can't be read.
+async function harderPhoto(file, random, small) {
+	const original = await createImageBitmap(file);
+	const canvas = document.createElement("canvas");
+	canvas.width = original.width;
+	canvas.height = original.height;
+	const ctx = canvas.getContext("2d", { willReadFrequently: true });
+	ctx.fillStyle = "#3A3632";
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	const tilt = between(random, -5, 5) * Math.PI / 180;
+	const scale = between(random, 0.84, 1);
+	const shiftX = between(random, -0.04, 0.04) * canvas.width;
+	const shiftY = between(random, -0.04, 0.04) * canvas.height;
+	const brightness = random() < 0.5 ? between(random, 0.62, 0.77) : between(random, 1.15, 1.3);
+	const light = random() < 0.5 ? "sepia(0.35)" : "hue-rotate(-14deg) saturate(0.75)";
+	ctx.filter = "brightness(" + brightness.toFixed(2) + ") contrast(0.88) " + light + " blur(" + (canvas.width / 1200).toFixed(1) + "px)";
+	ctx.translate(canvas.width / 2 + shiftX, canvas.height / 2 + shiftY);
+	ctx.rotate(tilt);
+	ctx.scale(scale, scale);
+	ctx.drawImage(original, -original.width / 2, -original.height / 2);
+	original.close();
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.filter = "none";
+	const glareX = canvas.width * between(random, 0.3, 0.7);
+	const glareY = canvas.height * between(random, 0.25, 0.75);
+	const glareRadius = canvas.width * between(random, 0.1, 0.18);
+	const glare = ctx.createRadialGradient(glareX, glareY, 0, glareX, glareY, glareRadius);
+	glare.addColorStop(0, "rgba(255,255,255,0.55)");
+	glare.addColorStop(1, "rgba(255,255,255,0)");
+	ctx.fillStyle = glare;
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	if (!small) return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+	const shrunk = document.createElement("canvas");
+	shrunk.width = 800;
+	shrunk.height = Math.round(canvas.height * 800 / canvas.width);
+	const shrunkCtx = shrunk.getContext("2d", { willReadFrequently: true });
+	shrunkCtx.imageSmoothingQuality = "high";
+	shrunkCtx.filter = "blur(1px)";
+	shrunkCtx.drawImage(canvas, 0, 0, shrunk.width, shrunk.height);
+	return new Promise((resolve) => shrunk.toBlob(resolve, "image/jpeg", 0.7));
 }
 
 function mark(ok, text) {

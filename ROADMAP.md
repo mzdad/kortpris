@@ -5,6 +5,22 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.29.0
+
+- **1.4 Learned cards as suggestions.** A photo that looks somewhat like a learned card, but not
+  clearly enough to open it (other light, a glare, another copy of the card), now gets that card as
+  a suggestion: it joins the cards the text search found, and when nothing is clear it goes first,
+  marked "Seen before". It never opens by itself. When nothing could be read at all, the suggestions
+  are shown on their own, where before the app gave up. Tapping one teaches the app that photo too,
+  so the next photo like it opens straight away. The line is 0.6 (`LIKE_CARD_DISTANCE`): of the 40
+  real photos with their own card not learned, one came that close to another learned card, and ten
+  within 0.7. In harder made-up second photos of learned cards that weren't recognised for sure, 8 of
+  14 suggested cards moved to first place (from places 2 to 7, or "couldn't read the card"); none
+  moved down, and nothing opened wrongly. At 0.7, wrong suggestions pushed the right card down a place
+  four times. `dev_learning_test.html` now checks harder second photos too: 23 recognised, 4
+  suggested (all 4 shown first), 13 neither, none wrong; and with their own card not learned, another
+  card was suggested twice and never opened.
+
 ## Done in 1.28.0
 
 - **1.3 The names of full-art and gold cards are read.** The strip along the card's top where the
@@ -63,12 +79,11 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 1.4 | **Learned cards as suggestions**: a learned card that looks somewhat like the photo, but not clearly enough to open, is added to the cards the photo is compared with. | Today a learned card either opens or plays no part. | S |
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.6 | **A second look at the number in any photo**: when the reads don't agree, read the number corner again from a slightly bigger and smaller cut of the card. | In 1.26.0 a second cut (the camera frame) turned 11 read numbers into 13. Photos from the phone's own camera have no frame, but could get the same second chance. | S |
 | 1.7 | **The set's code on newer cards**: since Scarlet & Violet, cards print their set's code by the number ("PAL EN 123/193"). Read it with the colours turned around, as it is white on black. | The code names the set exactly; today the set is guessed from its size, which several sets share. In 1.27.0 the "SVP" code was read in only about 1 of 3 tries. | M |
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black. | 8 of 27 full-art numbers weren't read in 1.28.0, and a white-ink copy of the corner read none of them, so it needs something else, like thinning the black edge away first. The name and the look find these cards anyway. | M |
-| 1.9 | **Find the edges of silver-bordered and full-art cards** in photos from the phone's own camera. | The name strip and the number corners need them; 2 of 27 full-art photos had none. The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
+| 1.9 | **Find the edges of silver-bordered and full-art cards** in photos from the phone's own camera. | The name strip and the number corners need them; 2 of 27 full-art photos had none. So do learned cards: of 13 harder made-up second photos neither recognised nor suggested in 1.29.0, 10 had no edges found (yellow borders in harsh light, there). The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
 
 ## 2. Quicker
 

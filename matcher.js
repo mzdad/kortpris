@@ -182,7 +182,9 @@ function isClearWinner(ranked) {
 // - setName: the set's name, when Claude read the card.
 // - numbersRead: every collector number the reader thought possible ("8/64").
 // - looksReverseHolo: the photo sparkles outside the card's picture (see sparkle.js).
-function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead = [], looksReverseHolo = false) {
+// - suggestedIds: learned cards the photo looks somewhat like (see compareWithLearned in
+//   learned.js). When nothing is clear, they go first.
+function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead = [], looksReverseHolo = false, suggestedIds = []) {
 	if (ranked.length === 0) return { cards: [], clear: false };
 	const cards = ranked.map((entry) => entry.card);
 	// Claude names the set. If exactly one candidate is from that set, that settles it.
@@ -231,7 +233,13 @@ function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead
 		if (sparkly.length === 1) return { cards: moveToFront(inOrder, sparkly[0].card), clear: true };
 	}
 
-	return { cards: inOrder, clear: isClearWinner(candidates) };
+	if (isClearWinner(candidates)) return { cards: inOrder, clear: true };
+	// Nothing is clear. A card the viewer has shown the app before, that this photo looks somewhat
+	// like, is then the likeliest: it goes first (the closest look first, if there are several) -
+	// though not sure enough to open. The database's picture can look unlike the viewer's own
+	// card in their light; their earlier photo of it doesn't.
+	const seenBefore = inOrder.filter((card) => suggestedIds.includes(card.id));
+	return { cards: [...seenBefore, ...inOrder.filter((card) => !seenBefore.includes(card))], clear: false };
 }
 
 // Looks for an anniversary reprint and its original among the look-alikes (see STAMP_CORNERS).
