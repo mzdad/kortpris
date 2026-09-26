@@ -162,6 +162,7 @@ const kidsButton = document.getElementById("kids-button");
 const kidStartButton = document.getElementById("kid-start");
 const liveCameraView = document.getElementById("live-camera");
 const cameraVideo = document.getElementById("camera-video");
+const cameraBox = document.getElementById("camera-box");
 const cameraMessage = document.getElementById("camera-message");
 const cameraCloseButton = document.getElementById("camera-close");
 const cameraLightButton = document.getElementById("camera-light");
@@ -209,6 +210,8 @@ let resultsForPhoto = false;
 let liveCamera = null;
 let cameraZoom = chosenCameraZoom();
 let cameraLight = chosenCameraLight();
+// The size and kind of the last photo from the app's camera, shown at the bottom of the page.
+let lastCameraPhoto = null;
 // The number the reader put in the box, and every other number it thought possible.
 let scannedNumbers = { shown: "", guesses: [] };
 
@@ -324,6 +327,16 @@ function applyLanguage() {
 
 function renderFooter() {
 	appVersionText.textContent = t("appVersion", { version: APP_VERSION });
+	// How big the last photo from the app's camera was, and which kind: it helps find out why a
+	// phone's photos read badly.
+	if (lastCameraPhoto) {
+		appVersionText.textContent += " · " + t("cameraPhotoSize", {
+			size: lastCameraPhoto.width + "×" + lastCameraPhoto.height,
+			source: t(lastCameraPhoto.source === "photo" ? "cameraSourcePhoto" : "cameraSourceVideo"),
+		});
+		const note = lastCameraPhoto.photoNote;
+		if (note) appVersionText.textContent += " · " + t(note.key, note.values);
+	}
 	if (shownCurrency() !== currency) {
 		ratesNote.textContent = t("ratesMissing");
 	} else if (ratesDate && currency !== "EUR") {
@@ -396,10 +409,18 @@ async function openLiveCamera() {
 		return;
 	}
 	liveCamera = camera;
+	fitCameraBox();
 	await setLiveCameraSafely();
 	showCameraMessage("cameraHint");
 	renderCameraButtons();
 }
+
+function fitCameraBox() {
+	// The box around the live picture takes the picture's own shape (see .camera-box in style.css).
+	if (cameraVideo.videoWidth > 0) cameraBox.style.setProperty("--video-aspect", String(cameraVideo.videoWidth / cameraVideo.videoHeight));
+}
+// Turning the phone, or the camera changing its picture size, changes the shape.
+cameraVideo.addEventListener("resize", fitCameraBox);
 
 function closeLiveCamera() {
 	if (liveCamera) stopLiveCamera(liveCamera, cameraVideo);
@@ -456,6 +477,7 @@ cameraZoomButton.addEventListener("click", async () => {
 cameraShutterButton.addEventListener("click", async () => {
 	if (!liveCamera || cameraShutterButton.disabled) return;
 	cameraShutterButton.disabled = true;   // one photo per press
+	showCameraMessage("cameraHoldStill");
 	let photo;
 	try {
 		photo = await takeLivePhoto(liveCamera, cameraVideo);
@@ -466,7 +488,9 @@ cameraShutterButton.addEventListener("click", async () => {
 		return;
 	}
 	closeLiveCamera();
-	scanPhoto(photo);
+	lastCameraPhoto = photo;
+	renderFooter();
+	scanPhoto(photo.file);
 });
 
 // Switching to another app stops the camera anyway; close it, so it starts fresh next time.

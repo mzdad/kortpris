@@ -449,11 +449,20 @@ body.camera-open { overflow: hidden; }
 	position: fixed; inset: 0; z-index: 50;
 	background: #000; color: #FFFFFF;
 }
-.camera-video { width: 100%; height: 100%; object-fit: cover; }
-/* A card-shaped frame to fill, with the rest of the picture a little darker. */
+/* The live picture whole, as big as the screen allows (--video-aspect is set by app.js), so the
+   frame shows exactly the part of the photo the card will fill. */
+.camera-stage { position: absolute; inset: 0; display: grid; place-items: center; }
+.camera-box {
+	position: relative;
+	aspect-ratio: var(--video-aspect, 0.5625);
+	width: min(100vw, 100dvh * var(--video-aspect, 0.5625));
+}
+.camera-video { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* A card-shaped frame to fill, with the rest of the picture a little darker. It spans 90% of the
+   picture's width: the more of the picture the card fills, the sharper its tiny print. */
 .camera-frame {
-	position: absolute; left: 50%; top: 46%;
-	width: min(78vw, 60vh * 63 / 88); aspect-ratio: 63 / 88;
+	position: absolute; left: 50%; top: 50%;
+	width: 90%; max-height: 92%; aspect-ratio: 63 / 88;
 	transform: translate(-50%, -50%);
 	border: 3px solid rgba(255, 255, 255, 0.85); border-radius: 14px;
 	box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);

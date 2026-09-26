@@ -29,6 +29,20 @@ const LIVE_PICTURE = {
 	height: { ideal: LIVE_HEIGHT },
 };
 const PHOTO_JPEG_QUALITY = 0.92;
+// Pressing the shutter shakes the phone, and a shaken picture smears the tiny numbers. So after the
+// press, the live picture is looked at this many times over this long, and the sharpest kept.
+const STEADY_LOOKS = 6;
+const STEADY_WATCH_MS = 600;
+// Sharpness is measured on a copy this wide, in the middle part of the picture (shares of it).
+const SHARPNESS_WIDTH = 360;
+const SHARPNESS_AREA = { x0: 0.2, x1: 0.8, y0: 0.2, y1: 0.8 };
+// A live picture is softer than a photo, and the reader can't make out tiny numbers in a soft
+// picture: in the camera lab (version 1.24.1), real cards made slightly soft read 0 of 4 numbers,
+// and 3 of 4 after sharpening like this. Each pixel's brightness is pushed away from its
+// surroundings' (an "unsharp mask"), this much...
+const SHARPEN_AMOUNT = 1.5;
+// ...where the surroundings are a smooth blur of about 1.4 pixels (smoothBlur in reader.js).
+const SHARPEN_RADIUS = 1;
 
 // True when this browser can show a live camera in the page at all. It also needs https
 // (or this computer, while testing).
@@ -70,27 +84,103 @@ async function setLiveCamera(camera, zoom, light) {
 	}
 }
 
-// The photo as a file. Where the browser can, it is the camera's own full-size photo; otherwise
-// (or when that comes out smaller) the live picture as it is.
+// Takes the photo: { file, source, width, height, photoNote }. source is "photo" for the camera's own
+// full-size photo, which browsers with ImageCapture can take, or "video" for the sharpest live
+// picture. photoNote says why the full-size photo wasn't used: a text key from strings.js plus its
+// values, shown at the bottom of the page to find out what a phone does.
 async function takeLivePhoto(camera, video) {
+	// The live pictures first: by the end of them the phone has steadied, which helps the photo too.
+	const steadiest = await sharpestLivePicture(video);
+	let photoNote = { key: "cameraNoPhoto", values: {} };
 	if ("ImageCapture" in window) {
 		try {
 			const photo = await new ImageCapture(camera.track).takePhoto();
 			const size = await createImageBitmap(photo);
-			const bigEnough = size.width * size.height >= video.videoWidth * video.videoHeight;
+			const { width, height } = size;
 			size.close();
-			if (bigEnough) return photo;
+			// Only a photo that is bigger than the live picture, and the same way up as what was on the
+			// screen: a photo turned on its side would hide the card's text from the reader.
+			const bigger = width * height > steadiest.width * steadiest.height;
+			const sameWayUp = (width > height) === (steadiest.width > steadiest.height);
+			if (bigger && sameWayUp) return { file: photo, source: "photo", width: width, height: height, photoNote: null };
+			photoNote = { key: sameWayUp ? "cameraPhotoSmall" : "cameraPhotoSideways", values: { size: width + "×" + height } };
 		} catch (error) {
-			console.error(error);   // the live picture below will do
+			console.error(error);   // the live picture will do
+			photoNote = { key: "cameraPhotoFailed", values: {} };
 		}
 	}
-	const canvas = document.createElement("canvas");
-	canvas.width = video.videoWidth;
-	canvas.height = video.videoHeight;
-	canvas.getContext("2d").drawImage(video, 0, 0);
-	return new Promise((resolve, reject) => {
-		canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("The camera gave no picture"))), "image/jpeg", PHOTO_JPEG_QUALITY);
+	sharpen(steadiest);
+	const file = await new Promise((resolve, reject) => {
+		steadiest.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("The camera gave no picture"))), "image/jpeg", PHOTO_JPEG_QUALITY);
 	});
+	return { file: file, source: "video", width: steadiest.width, height: steadiest.height, photoNote: photoNote };
+}
+
+// The sharpest of a few live pictures over STEADY_WATCH_MS, as a canvas.
+async function sharpestLivePicture(video) {
+	let best = null;
+	let bestSharpness = -1;
+	for (let look = 0; look < STEADY_LOOKS; look++) {
+		if (look > 0) await new Promise((resolve) => setTimeout(resolve, STEADY_WATCH_MS / STEADY_LOOKS));
+		const picture = document.createElement("canvas");
+		picture.width = video.videoWidth;
+		picture.height = video.videoHeight;
+		picture.getContext("2d", { willReadFrequently: true }).drawImage(video, 0, 0);
+		const sharpness = sharpnessOf(picture);
+		if (sharpness > bestSharpness) {
+			best = picture;
+			bestSharpness = sharpness;
+		}
+	}
+	return best;
+}
+
+function sharpen(canvas) {
+	// See SHARPEN_AMOUNT. Brightness only, so the colours stay as they were.
+	const { width, height } = canvas;
+	const ctx = canvas.getContext("2d", { willReadFrequently: true });
+	const image = ctx.getImageData(0, 0, width, height);
+	const pixels = image.data;
+	const brightness = new Float32Array(width * height);
+	for (let i = 0; i < brightness.length; i++) {
+		brightness[i] = 0.299 * pixels[i * 4] + 0.587 * pixels[i * 4 + 1] + 0.114 * pixels[i * 4 + 2];
+	}
+	const surroundings = smoothBlur(brightness, width, height, SHARPEN_RADIUS);
+	for (let i = 0; i < brightness.length; i++) {
+		const push = SHARPEN_AMOUNT * (brightness[i] - surroundings[i]);
+		// The pixels are an Uint8ClampedArray: anything below 0 or above 255 is kept at 0 or 255.
+		pixels[i * 4] += push;
+		pixels[i * 4 + 1] += push;
+		pixels[i * 4 + 2] += push;
+	}
+	ctx.putImageData(image, 0, 0);
+}
+
+function sharpnessOf(picture) {
+	// How much neighbouring pixels differ, on average: a blurred picture has soft edges everywhere.
+	// (The square of each pixel minus the average of its four neighbours.)
+	const width = SHARPNESS_WIDTH;
+	const height = Math.round(picture.height * width / picture.width);
+	const small = document.createElement("canvas");
+	small.width = width;
+	small.height = height;
+	const ctx = small.getContext("2d", { willReadFrequently: true });
+	ctx.drawImage(picture, 0, 0, width, height);
+	const pixels = ctx.getImageData(0, 0, width, height).data;
+	const brightness = (x, y) => {
+		const i = (y * width + x) * 4;
+		return 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+	};
+	let total = 0;
+	let count = 0;
+	for (let y = Math.round(height * SHARPNESS_AREA.y0); y < height * SHARPNESS_AREA.y1; y++) {
+		for (let x = Math.round(width * SHARPNESS_AREA.x0); x < width * SHARPNESS_AREA.x1; x++) {
+			const edge = 4 * brightness(x, y) - brightness(x - 1, y) - brightness(x + 1, y) - brightness(x, y - 1) - brightness(x, y + 1);
+			total += edge * edge;
+			count++;
+		}
+	}
+	return total / count;
 }
 
 // Turns the camera (and its light) off.
