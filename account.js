@@ -12,8 +12,10 @@ const FIREBASE_SDK_BASE = "https://www.gstatic.com/firebasejs/12.19.0/";
 // a made-up address at a domain reserved for examples, where no mail is ever delivered.
 // firestore.rules must use the same domain.
 const USERNAME_EMAIL_DOMAIN = "kortpris.example.com";
-// Firestore: each account's cards are in the document collections/<username>.
+// Firestore: each account's cards are in the document collections/<username>, and the cards the
+// app has learned for it (learned.js) in learned/<username>.
 const CARDS_FOLDER = "collections";
+const LEARNED_FOLDER = "learned";
 // Lowercase letters a-z, digits, - and _. Letters like æ, ø and å can't be in an email address.
 const USERNAME_PATTERN = /^[a-z0-9_-]{3,20}$/;
 
@@ -86,6 +88,24 @@ async function saveAccountCards(username, cards) {
 	const { doc, setDoc, serverTimestamp } = firebase.firestoreModule;
 	await setDoc(doc(firebase.db, CARDS_FOLDER, username), {
 		cards: cards,
+		updatedAt: serverTimestamp(),
+	});
+}
+
+// Like watchAccountCards, for the learned cards' photos.
+function watchAccountLearned(username, onLearned, onProblem) {
+	const { doc, onSnapshot } = firebase.firestoreModule;
+	return onSnapshot(
+		doc(firebase.db, LEARNED_FOLDER, username),
+		(snapshot) => onLearned(snapshot.exists() ? (snapshot.data().photos || []) : []),
+		(error) => onProblem(error),
+	);
+}
+
+async function saveAccountLearned(username, photos) {
+	const { doc, setDoc, serverTimestamp } = firebase.firestoreModule;
+	await setDoc(doc(firebase.db, LEARNED_FOLDER, username), {
+		photos: photos,
 		updatedAt: serverTimestamp(),
 	});
 }

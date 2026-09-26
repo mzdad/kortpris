@@ -4,7 +4,7 @@
 
 const API_URL = "https://api.pokemontcg.io/v2/cards";
 // Only ask for the fields we show, so answers arrive faster on mobile data.
-const CARD_FIELDS = "id,name,number,rarity,set,images,tcgplayer,cardmarket";
+const CARD_FIELDS = "id,name,number,rarity,supertype,set,images,tcgplayer,cardmarket";
 const RESULTS_PAGE_SIZE = 24;
 // With a photo to compare against, a search on the name alone fetches every card with that name
 // (250 is the most the database gives at once): "Pikachu" alone fits over 200, and the right one
@@ -72,8 +72,10 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 	for (const guess of guesses) {
 		const parsed = parseCollectorNumber(guess);
 		const alreadyInAttempts = parsed.number === number && parsed.total === total;
-		if (!parsed.number || !parsed.total || alreadyInAttempts) continue;
-		looserAttempts.push({ query: "number:" + parsed.number + " set.printedTotal:" + parsed.total });
+		if (alreadyInAttempts) continue;
+		// A promo's code alone fits just one card or two ("SWSH193").
+		if (isPromoCode(parsed)) looserAttempts.push({ query: "number:" + parsed.number });
+		else if (parsed.number && parsed.total) looserAttempts.push({ query: "number:" + parsed.number + " set.printedTotal:" + parsed.total });
 	}
 	const pile = new Map();
 	let totalCount = 0;
@@ -118,13 +120,15 @@ async function findExactCards(name, guesses) {
 	if (!nameWord) return null;
 	for (const guess of guesses) {
 		const parsed = parseCollectorNumber(guess);
-		if (!parsed.number || !parsed.total) continue;
-		const query = nameQueryFor(nameWord) + " number:" + parsed.number + " set.printedTotal:" + parsed.total;
+		const promo = isPromoCode(parsed);
+		if (!parsed.number || (!parsed.total && !promo)) continue;
+		let query = nameQueryFor(nameWord) + " number:" + parsed.number;
+		if (!promo) query += " set.printedTotal:" + parsed.total;
 		const page = await fetchCardPage(query, RESULTS_PAGE_SIZE);
 		if (page.cards.length > 0) {
 			return {
 				cards: await withReprints(page.cards),
-				description: { key: "matchExact", values: { name: nameWord, number: parsed.number + "/" + parsed.total } },
+				description: { key: "matchExact", values: { name: nameWord, number: promo ? parsed.number : parsed.number + "/" + parsed.total } },
 				totalCount: page.totalCount,
 				exactFound: true,
 				matchedNumber: guess,
@@ -175,6 +179,11 @@ function isReprintOf(reprint, card) {
 	return isAnniversaryReprint(reprint) && !isAnniversaryReprint(card)
 		&& reprint.name.toLowerCase() === card.name.toLowerCase()
 		&& reprint.number === card.number;
+}
+
+// A Black Star promo's code, like "SWSH193": letters then digits, and no set size.
+function isPromoCode(parsed) {
+	return parsed.total === "" && /^[A-Z]+\d+$/.test(parsed.number);
 }
 
 // True when there is enough to search on: a name, a number, or at least a set size ("?/110").

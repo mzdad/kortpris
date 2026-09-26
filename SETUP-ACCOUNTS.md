@@ -60,6 +60,10 @@ so no emails are ever sent.
 These rules are what keep each child's cards private: only their own account can read
 or change them.
 
+**When `firestore.rules` changes, do this step again.** Version 1.25.0 added a rule for the
+cards the app has learned (kept in the account from then on); until it is published, the list
+of learned cards says the account couldn't be used, and they stay on the phone only.
+
 ---
 
 ## Afterwards

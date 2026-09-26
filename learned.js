@@ -8,7 +8,9 @@
 // What is remembered is the blurry thumbnail of the card's artwork that matcher.js compares cards
 // by, taken from the photo itself. Two photos of the same card look far more alike than a photo
 // and the database's picture: same print, same wear, same sleeve, same kind of light.
-// Kept on this phone only (localStorage); a few hundred cards take well under a megabyte.
+// Kept on the phone (localStorage), and while someone is signed in also in their account
+// (account.js), so it follows them to every phone and survives the phone's browser forgetting it.
+// A few hundred photos take about half a megabyte.
 
 const LEARNED_STORAGE_KEY = "kortpris.learned";
 // The oldest are forgotten after this many photos...
@@ -28,6 +30,12 @@ const SAME_CARD_GAP = 2;
 // On 34 real photos the right card measured 0.11 to 1.94 (the worst in warm lamp light), so this
 // only keeps out the plainly unlike. Which answers count at all is decided in app.js.
 const UNLIKE_CARD_DISTANCE = 2.5;
+
+// The account side. The phone's copy is what the app reads; the account's is kept the same.
+let learnedAccount = null;          // the signed-in username, or null
+let learnedAccountMerged = false;   // this phone's learned cards have gone into that account
+let learnedAccountProblem = null;   // why the account couldn't be read or saved: { key, values }, or null
+let learnedChanged = () => {};      // app.js's redraw, for news that comes later (see whenLearnedChanges)
 
 // Returns the learned card the photo shows: { cardId, name, number, setName, image }, or null
 // when it doesn't look clearly like one. cardBox and textArea say where the card is in the
@@ -68,7 +76,7 @@ async function findLearnedCard(learnedCard, name, numberText, numberGuesses) {
 async function learnCard(card, photo, textArea, cardBox, photoKey) {
 	const seen = await cardInPhoto(card, photo, textArea, cardBox);
 	if (!seen || seen.distance > UNLIKE_CARD_DISTANCE) return false;
-	let learned = readLearned().filter((entry) => entry.photoKey !== photoKey);
+	const learned = readLearned().filter((entry) => entry.photoKey !== photoKey);
 	learned.push({
 		cardId: card.id,
 		name: card.name,
@@ -79,14 +87,85 @@ async function learnCard(card, photo, textArea, cardBox, photoKey) {
 		photoKey: photoKey,
 		learnedAt: Date.now(),
 	});
-	// Only the newest few photos of each card, and of all cards.
-	const sameCard = learned.filter((entry) => entry.cardId === card.id);
-	if (sameCard.length > PHOTOS_PER_CARD) {
-		const tooOld = sameCard.slice(0, sameCard.length - PHOTOS_PER_CARD);
-		learned = learned.filter((entry) => !tooOld.includes(entry));
+	return writeLearned(trimLearned(learned));
+}
+
+// Each photo once (the later copy wins), oldest first, and only the newest few photos of each card
+// (PHOTOS_PER_CARD) and of all cards (MOST_LEARNED_PHOTOS).
+function trimLearned(learned) {
+	const byPhoto = new Map();
+	for (const entry of learned) byPhoto.set(entry.photoKey, entry);
+	const oldestFirst = [...byPhoto.values()].sort((a, b) => a.learnedAt - b.learnedAt);
+	const photosOfCard = new Map();
+	const kept = [];
+	for (let i = oldestFirst.length - 1; i >= 0; i--) {
+		const entry = oldestFirst[i];
+		const photos = (photosOfCard.get(entry.cardId) || 0) + 1;
+		photosOfCard.set(entry.cardId, photos);
+		if (photos <= PHOTOS_PER_CARD) kept.unshift(entry);
 	}
-	learned = learned.slice(-MOST_LEARNED_PHOTOS);
-	return writeStorage(LEARNED_STORAGE_KEY, JSON.stringify(learned));
+	return kept.slice(-MOST_LEARNED_PHOTOS);
+}
+
+// Keeps the learned photos on the phone, and in the account when someone is signed in.
+// Returns true when they were kept somewhere.
+function writeLearned(learned) {
+	const onPhone = writeStorage(LEARNED_STORAGE_KEY, JSON.stringify(learned));
+	const inAccount = learnedAccount !== null && learnedAccountMerged;
+	if (inAccount) saveLearnedInAccount(learned);
+	return onPhone || inAccount;
+}
+
+function saveLearnedInAccount(learned) {
+	// Saved in the background; a problem shows under the list of learned cards.
+	const username = learnedAccount;
+	saveAccountLearned(username, learned).then(() => {
+		if (learnedAccount !== username) return;
+		learnedAccountProblem = null;
+		learnedChanged();
+	}, (error) => {
+		console.error(error);
+		if (learnedAccount !== username) return;
+		learnedAccountProblem = accountProblem(error);
+		learnedChanged();
+	});
+}
+
+// Someone signed in (username), or out (null).
+function useLearnedAccount(username) {
+	learnedAccount = username;
+	learnedAccountMerged = false;
+	learnedAccountProblem = null;
+}
+
+// The signed-in account's learned photos arrived, now or again later (also when another phone
+// changed them).
+function useAccountLearned(photos) {
+	learnedAccountProblem = null;
+	if (!learnedAccountMerged) {
+		// The first time, this phone's learned cards join the account's, and both keep them all.
+		learnedAccountMerged = true;
+		const merged = trimLearned([...photos, ...readLearned()]);
+		writeStorage(LEARNED_STORAGE_KEY, JSON.stringify(merged));
+		const samePhotos = merged.length === photos.length && merged.every((entry) => photos.some((other) => other.photoKey === entry.photoKey));
+		if (!samePhotos) saveLearnedInAccount(merged);
+		return;
+	}
+	// After that the account is right: a card learned or forgotten on another phone shows up here too.
+	writeStorage(LEARNED_STORAGE_KEY, JSON.stringify(trimLearned(photos)));
+}
+
+function learnedAccountFailed(error) {
+	learnedAccountProblem = accountProblem(error);
+}
+
+// Where the learned cards are kept: { account, problem }, for the list's small print.
+function learnedPlace() {
+	return { account: learnedAccount, problem: learnedAccountProblem };
+}
+
+function whenLearnedChanges(redraw) {
+	learnedChanged = redraw;
 }
 
 // The card's artwork as it looks in the photo: { grid, distance }, the thumbnail from the place in
@@ -115,11 +194,11 @@ function learnedCards() {
 }
 
 function forgetLearnedCard(cardId) {
-	writeStorage(LEARNED_STORAGE_KEY, JSON.stringify(readLearned().filter((entry) => entry.cardId !== cardId)));
+	writeLearned(readLearned().filter((entry) => entry.cardId !== cardId));
 }
 
 function forgetAllLearned() {
-	removeStorage(LEARNED_STORAGE_KEY);
+	writeLearned([]);
 }
 
 function readLearned() {

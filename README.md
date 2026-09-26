@@ -7,8 +7,9 @@ Photograph a Pokémon card on your phone and see what it sells for.
 A web page with nothing to install. What happens to a photo:
 
 1. **Photo → text.** [Tesseract.js](https://github.com/naptha/tesseract.js) reads the
-   card's name and collector number (like `4/102`) on the phone itself. The name is
-   checked against all 1025 Pokémon names, so small misreads get corrected. The card is
+   card's name and collector number (like `4/102`, or a promo's code like `SWSH193`) on the
+   phone itself. The name is checked against all 1025 Pokémon names and every Trainer and Energy
+   card's name (`card-names.js`), so small misreads get corrected. The card is
    found in the photo by its yellow border, or, for silver-bordered and foil cards, by its
    shape (`card-finder.js`). The number is then read again from the full-size photo, in the
    two small corners where it is printed, several different ways (one of them with only the
@@ -41,8 +42,10 @@ A web page with nothing to install. What happens to a photo:
    fetched while "Fetch PSA prices automatically" is ticked on the card page, because the free
    plan allows about 50 cards a day; prices fetched in the last day are shown either way.
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
-   value in kroner. A search box narrows the list by name, set, number or version
-   ("jungle holo", "pika", "58") and says what the cards found are worth together.
+   value in kroner. It is split into Pokémon, Trainer cards and Energy cards (the database's
+   "supertype"; cards saved before 1.25.0 are asked for theirs when My cards opens). A search box
+   narrows the list by name, set, number, version or kind ("jungle holo", "pika", "58",
+   "trainer") and says what the cards found are worth together.
    Without an account it is kept in the phone's browser only.
 
 **The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed
@@ -65,7 +68,9 @@ the button when the page can't have a live camera.
 **Learning.** When the app can't tell which card a photo shows (or opens the wrong one) and the
 viewer taps or types the right one, or saves the card the photo found, the app remembers how that
 card's artwork looked in the photo (`learned.js`): the same small colour thumbnail the picture
-comparison uses, about 1,300 bytes, kept on this phone only. A search typed while the photo's card
+comparison uses, about 1,300 bytes, kept on the phone and, while someone is signed in, in their
+account too (`learned/<username>` in Firestore), so it follows them to every phone and isn't lost
+when the phone's browser forgets it. A search typed while the photo's card
 is already known is taken as a price lookup of some other card, and teaches nothing
 (`answersPhoto` in `app.js`). Every new photo is compared with those first. When it looks just like one
 learned card (`SAME_CARD_DISTANCE`) and clearly unlike every other (`SAME_CARD_GAP`), that card
@@ -97,6 +102,8 @@ US$0.03 per photo on the key owner's account. If Claude fails, the built-in read
 over and a notice says why. The key is kept in the phone's browser and sent only to
 Anthropic.
 
+What comes next, and why: [ROADMAP.md](ROADMAP.md).
+
 ## Files
 
 | File | What it does |
@@ -106,6 +113,7 @@ Anthropic.
 | `strings.js` | Every text in English and Danish - edit wordings here |
 | `speech.js` | Reads text aloud with the phone's own voice, picking its most natural one |
 | `pokemon-names.js` | All Pokémon names, used to correct misreads |
+| `card-names.js` | All Trainer and Energy card names, used the same way |
 | `card-finder.js` | Finds where the card is in the photo (yellow border, or shape) |
 | `reader.js` | Photo → name and number |
 | `cards.js` | Searches the price database |

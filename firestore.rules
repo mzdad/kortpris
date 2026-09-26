@@ -14,6 +14,12 @@ service cloud.firestore {
       allow create, update: if isOwner(username) && isValidCollection(request.resource.data);
     }
 
+    // The cards the app has learned for each account (learned.js): only that account again.
+    match /learned/{username} {
+      allow read, delete: if isOwner(username);
+      allow create, update: if isOwner(username) && isValidLearned(request.resource.data);
+    }
+
     // Signed in as the account whose made-up email is <username>@kortpris.example.com
     // (see USERNAME_EMAIL_DOMAIN in account.js).
     function isOwner(username) {
@@ -26,6 +32,14 @@ service cloud.firestore {
       return data.keys().hasOnly(['cards', 'updatedAt'])
         && data.cards is list
         && data.cards.size() <= 5000
+        && data.updatedAt == request.time;
+    }
+
+    // The learned photos, at most as many as learned.js keeps (MOST_LEARNED_PHOTOS).
+    function isValidLearned(data) {
+      return data.keys().hasOnly(['photos', 'updatedAt'])
+        && data.photos is list
+        && data.photos.size() <= 300
         && data.updatedAt == request.time;
     }
   }

@@ -10,11 +10,17 @@ const COLLECTION_STORAGE_KEY = "kortpris.collection";
 const REFRESH_BATCH_SIZE = 25;
 
 // Each saved card looks like:
-// { id, version, name, setName, number, image, count, priceEur, updatedAt, priceUsd }
+// { id, version, name, setName, number, image, count, priceEur, updatedAt, priceUsd, kind }
 // version is which print it is, like "reverseHolofoil" (cards saved before versions existed
 // have none). The same card in two versions is two entries, because their prices differ.
 // Only what "My cards" shows is kept, so even a big collection fits in the browser's storage.
+// kind is the database's "supertype": "Pokémon", "Trainer" or "Energy" (see CARD_KINDS). Cards
+// saved before version 1.25.0 have none until fillMissingKinds has asked the database.
 let collection = loadCollection();
+// "My cards" is split into these, in this order.
+const CARD_KINDS = ["Pokémon", "Trainer", "Energy"];
+// fillMissingKinds has run: once per visit is enough, even when the database didn't answer.
+let kindsAsked = false;
 // When someone is signed in, their cards live in their account instead of on this phone.
 let accountName = null;           // the signed-in username, or null
 let accountCardsLoaded = false;   // the account's cards have arrived from Firebase
@@ -116,6 +122,7 @@ function addToCollection(card, version) {
 			number: collectorNumber(card),
 			image: card.images.small,
 			count: 1,
+			kind: card.supertype,
 			...pricesOf(card, version),
 		});
 	}
@@ -150,10 +157,43 @@ async function refreshCollectionPrices() {
 		for (const card of await fetchCards(query, REFRESH_BATCH_SIZE)) {
 			for (const entry of collection.filter((saved) => saved.id === card.id)) {
 				Object.assign(entry, pricesOf(card, entry.version));
+				entry.kind = card.supertype;
 			}
 		}
 	}
 	saveCollection();
+}
+
+// Which part of "My cards" a saved card goes in: one of CARD_KINDS. Cards saved before kinds were
+// kept are guessed from their name until fillMissingKinds knows better.
+function cardKind(entry) {
+	if (CARD_KINDS.includes(entry.kind)) return entry.kind;
+	const name = entry.name || "";
+	if (ENERGY_NAMES.includes(name)) return "Energy";
+	// Before the word "Energy": "Energy Removal" is a Trainer card.
+	if (TRAINER_NAMES.includes(name)) return "Trainer";
+	if (/\benergy\b/i.test(name)) return "Energy";
+	return "Pokémon";
+}
+
+// Asks the database what kind each card saved without one is, and saves the answers. Returns true
+// when something changed.
+async function fillMissingKinds() {
+	if (kindsAsked || !collectionReady()) return false;
+	kindsAsked = true;
+	const ids = [...new Set(collection.filter((entry) => !entry.kind).map((entry) => entry.id))];
+	if (ids.length === 0) return false;
+	let changed = false;
+	for (let start = 0; start < ids.length; start += REFRESH_BATCH_SIZE) {
+		for (const card of await findCardsById(ids.slice(start, start + REFRESH_BATCH_SIZE))) {
+			for (const entry of collection.filter((saved) => saved.id === card.id)) {
+				entry.kind = card.supertype;
+				changed = true;
+			}
+		}
+	}
+	if (changed) saveCollection();
+	return changed;
 }
 
 function collectionTotals(entries = collection) {

@@ -72,6 +72,9 @@ const KID_SPOKEN = {
 	kidTryLater: "sayTryLater",
 };
 
+// The text key for each kind of card, the group names in "My cards" (CARD_KINDS in collection.js).
+const KIND_TEXT_KEYS = { "Pokémon": "kindPokemon", "Trainer": "kindTrainer", "Energy": "kindEnergy" };
+
 // TCGplayer splits prices by print version: [its name for the version, our text key].
 const TCGPLAYER_VARIANTS = [
 	["holofoil", "holofoil"],
@@ -130,6 +133,7 @@ const learnedCount = document.getElementById("learned-count");
 const learnedList = document.getElementById("learned-list");
 const learnedNone = document.getElementById("learned-none");
 const forgetAllButton = document.getElementById("forget-all-learned");
+const learnedWhere = document.getElementById("learned-where");
 const notice = document.getElementById("notice");
 const claudeSettings = document.getElementById("claude-settings");
 const claudeState = document.getElementById("claude-state");
@@ -195,6 +199,7 @@ let accountsReady = false;        // Firebase has started
 let accountMessage = null;        // { key, values, tone } shown under the account form, or null
 let passwordsShown = false;       // the password boxes show their letters
 let stopWatchingCards = null;     // stops listening for the signed-in account's cards
+let stopWatchingLearned = null;   // stops listening for the signed-in account's learned cards
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
@@ -577,6 +582,9 @@ detail.addEventListener("change", (event) => {
 for (const button of viewButtons) {
 	button.addEventListener("click", () => showView(button.dataset.view));
 }
+
+// News about the learned cards that comes later, like the account refusing to save them.
+whenLearnedChanges(renderLearned);
 
 // The cards the app has learned: each can be forgotten, or all of them.
 learnedSettings.addEventListener("click", (event) => {
@@ -1017,9 +1025,10 @@ function fixMisreadName(card, guesses) {
 }
 
 function sameCollectorNumber(card, numberText) {
+	// A promo's code ("SWSH193") has no set size to compare.
 	const read = parseCollectorNumber(numberText);
 	const printed = parseCollectorNumber(card.number + "/" + card.set.printedTotal);
-	return read.number !== "" && read.number === printed.number && read.total === printed.total;
+	return read.number !== "" && read.number === printed.number && (read.total === printed.total || isPromoCode(read));
 }
 
 function onlySetSizeFits(card, numberText) {
@@ -1560,6 +1569,15 @@ function renderLearned() {
 	learnedNone.hidden = cards.length > 0;
 	forgetAllButton.hidden = cards.length === 0;
 	learnedList.innerHTML = cards.map(learnedCardHtml).join("");
+	// Where they are kept, and why the account couldn't keep them, if it couldn't.
+	const place = learnedPlace();
+	let where = place.account ? t("learnedInAccount", { name: place.account }) : t("learnedOnPhone");
+	if (place.account && place.problem) {
+		// Refused by Firebase: its rules (firestore.rules) don't know about learned cards yet.
+		const problem = place.problem.key === "permissionDenied" ? t("learnedRulesMissing") : t(place.problem.key, place.problem.values);
+		where = t("learnedAccountFailed", { name: place.account }) + " " + problem;
+	}
+	learnedWhere.textContent = where;
 }
 
 function learnedCardHtml(card) {
@@ -1639,7 +1657,11 @@ function showView(view) {
 	scanView.hidden = view !== "scan";
 	collectionView.hidden = view !== "collection";
 	for (const button of viewButtons) button.setAttribute("aria-pressed", String(button.dataset.view === view));
-	if (view === "collection") renderCollection();
+	if (view === "collection") {
+		renderCollection();
+		// Cards saved before their kind was kept are put in the right group once the database says.
+		fillMissingKinds().then((changed) => { if (changed) renderCollection(); }, (error) => console.error(error));
+	}
 }
 
 function renderCollection() {
@@ -1662,7 +1684,17 @@ function renderCollection() {
 	const shown = sorted.filter((entry) => matchesSearch(entry, query));
 	collectionSearchRow.hidden = collection.length === 0;
 	collectionSearchNote.textContent = searchNote(query, shown);
-	collectionList.innerHTML = shown.map(savedCardHtml).join("");
+	// A group for each kind of card, with its cards most valuable first; empty groups are left out.
+	collectionList.innerHTML = CARD_KINDS.map((kind) => {
+		const entries = shown.filter((entry) => cardKind(entry) === kind);
+		if (entries.length === 0) return "";
+		const count = entries.reduce((total, entry) => total + entry.count, 0);
+		return `
+			<section class="collection-group">
+				<h3 class="group-title">${t(KIND_TEXT_KEYS[kind])} <span class="count">${count}</span></h3>
+				<ul class="collection-list">${entries.map(savedCardHtml).join("")}</ul>
+			</section>`;
+	}).join("");
 }
 
 function matchesSearch(entry, query) {
@@ -1670,7 +1702,8 @@ function matchesSearch(entry, query) {
 	// "pika" finds every Pikachu, "jungle holo" the holo cards from Jungle, "58" card 58/102.
 	const words = searchableText(query).split(/\s+/).filter(Boolean);
 	const versionName = entry.version ? t(entry.version) : "";
-	const cardText = searchableText([entry.name, entry.setName, entry.number, versionName].join(" "));
+	const kindName = t(KIND_TEXT_KEYS[cardKind(entry)]);
+	const cardText = searchableText([entry.name, entry.setName, entry.number, versionName, kindName].join(" "));
 	return words.every((word) => cardText.includes(word));
 }
 
@@ -1754,6 +1787,26 @@ function handleAccountChange(username) {
 		stopWatchingCards();
 		stopWatchingCards = null;
 	}
+	// The learned cards follow the account too (learned.js).
+	if (stopWatchingLearned) {
+		stopWatchingLearned();
+		stopWatchingLearned = null;
+	}
+	useLearnedAccount(username);
+	if (username) {
+		stopWatchingLearned = watchAccountLearned(
+			username,
+			(photos) => {
+				useAccountLearned(photos);
+				renderLearned();
+			},
+			(error) => {
+				console.error(error);
+				learnedAccountFailed(error);
+				renderLearned();
+			},
+		);
+	}
 	if (username) {
 		useAccountCollection(username);
 		stopWatchingCards = watchAccountCards(
@@ -1772,6 +1825,7 @@ function handleAccountChange(username) {
 	} else {
 		usePhoneCollection();
 	}
+	renderLearned();
 	claimPhoneClaudeKey();
 	// The Claude box now shows another account (or none): nothing typed or said there carries over.
 	claudeKeyInput.value = "";

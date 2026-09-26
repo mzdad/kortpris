@@ -20,6 +20,13 @@ const MIN_TEXT_LINES = 3;
 // and names this long or longer may have two.
 const MIN_FUZZY_NAME_LETTERS = 4;
 const LONG_NAME_LETTERS = 7;
+// Trainer and Energy names are often longer ("Double Colorless Energy"): one more typo is allowed
+// for every this many letters beyond LONG_NAME_LETTERS, and they can be up to this many words.
+const LETTERS_PER_EXTRA_TYPO = 8;
+const MAX_NAME_WORDS = 7;
+// "Evolves from Galarian Linoone": after "from", up to this many words name the Pokémon this one
+// evolves from - not this one.
+const MAX_EVOLVES_FROM_WORDS = 3;
 // A name with its start or end cut off still counts if this share of it was read ("Umbreo").
 const PARTIAL_NAME_SHARE = 0.6;
 // The collector number is looked for among the lines in this bottom share of the card's text,
@@ -93,8 +100,11 @@ const NOT_NAME_WORDS = new Set([
 	"ABILITY", "POWER", "WEAKNESS", "RESISTANCE", "RETREAT", "COST", "ILLUS", "NO",
 ]);
 
-// The name list (pokemon-names.js) in the plain-letters form used for comparing.
+// The name lists (pokemon-names.js, card-names.js) in the plain-letters form used for comparing.
 const POKEMON_KEYS = POKEMON_NAMES.map((name) => ({ name: name, key: lettersOnly(name) }));
+const OTHER_CARD_KEYS = [...TRAINER_NAMES, ...ENERGY_NAMES].map((name) => ({ name: name, key: lettersOnly(name) }));
+// Black Star promo cards have a code instead of a number out of a set size: "SWSH193", "SM60".
+const PROMO_NUMBER = /(?<![A-Za-z])(SWSH|HGSS|SM|XY|BW|DP)\s?(\d{1,3})(?!\d)/gi;
 
 let ocrWorkerPromise = null;
 // Whoever is reading a photo right now gets Tesseract's progress reports.
@@ -283,7 +293,9 @@ function guessCardName(lines, textArea, maxMistakes = Infinity) {
 	// The name is the biggest text near the top of the card. Only the top part counts,
 	// because further down some cards print their attack names even bigger.
 	const zoneBottom = textArea ? textArea.y0 + (textArea.y1 - textArea.y0) * NAME_ZONE_SHARE : Infinity;
-	let best = { text: "", size: 0, sure: false };
+	// rank: 2 for a known Pokémon name, which always wins; 1 for a known Trainer or Energy card's
+	// name; 0 for other text.
+	let best = { text: "", size: 0, sure: false, rank: 0 };
 	for (const line of lines) {
 		const words = nameWordsOnLine(line);
 		if (words.length === 0) continue;
@@ -293,39 +305,51 @@ function guessCardName(lines, textArea, maxMistakes = Infinity) {
 		const tallest = Math.max(...words.map((word) => word.height));
 		const size = line.rowAttributes ? line.rowAttributes.rowHeight : tallest;
 
-		// A known Pokémon name always beats text that isn't one.
 		const pokemon = findPokemonName(words.map((word) => word.text), maxMistakes);
 		if (pokemon) {
-			if (!best.sure || size > best.size) best = { text: pokemon, size: size, sure: true };
+			if (best.rank < 2 || size > best.size) best = { text: pokemon, size: size, sure: true, rank: 2 };
 			continue;
 		}
-		if (best.sure) continue;
+		if (best.rank === 2) continue;
 
-		// Not a Pokémon (maybe a Trainer card): remember the biggest confident text, just in case.
+		// A Trainer or Energy card. Their names can hold words that are left out above ("Item
+		// Finder", "Pokémon Center"), so the whole line is compared.
+		const otherCard = findOtherCardName(nameWordsOnLine(line, true).map((word) => word.text), maxMistakes);
+		if (otherCard) {
+			if (best.rank < 1 || size > best.size) best = { text: otherCard, size: size, sure: true, rank: 1 };
+			continue;
+		}
+		if (best.rank === 1) continue;
+
+		// No known name: remember the biggest confident text, just in case.
 		const plainWords = words.filter((word) =>
 			word.confidence >= MIN_WORD_CONFIDENCE && word.height >= tallest * NAME_SIZE_RATIO);
 		const text = plainWords.map((word) => word.text).join(" ");
-		if (lettersOnly(text).length >= 3 && size > best.size) best = { text: text, size: size, sure: false };
+		if (lettersOnly(text).length >= 3 && size > best.size) best = { text: text, size: size, sure: false, rank: 0 };
 	}
 	return best;
 }
 
-function nameWordsOnLine(line) {
+// The words on a line that could be the card's name. keepAllWords keeps the words that are never
+// part of a Pokémon's name (NOT_NAME_WORDS), for Trainer names like "Item Finder".
+function nameWordsOnLine(line, keepAllWords = false) {
 	const kept = [];
-	let skipNext = false;
+	let evolvesFromWords = 0;   // words still to skip after "from"
 	for (const word of line.words || []) {
 		const text = cleanWord(word.text);
 		const upper = text.toUpperCase();
-		if (skipNext) {
-			skipNext = false;
-			continue;
-		}
-		// "Evolves from Charmeleon": the word after "from" is the previous Pokémon, not this one.
+		// "Evolves from Galarian Linoone": the words after "from", up to a Pokémon's name, are the
+		// Pokémon this one evolves from, not this one.
 		if (upper === "FROM") {
-			skipNext = true;
+			evolvesFromWords = MAX_EVOLVES_FROM_WORDS;
 			continue;
 		}
-		if (!text || word.confidence < MIN_NAME_CONFIDENCE || NOT_NAME_WORDS.has(upper)) continue;
+		if (evolvesFromWords > 0) {
+			evolvesFromWords = matchPokemonName(text) ? 0 : evolvesFromWords - 1;
+			continue;
+		}
+		if (!text || word.confidence < MIN_NAME_CONFIDENCE) continue;
+		if (!keepAllWords && NOT_NAME_WORDS.has(upper)) continue;
 		kept.push({
 			text: text,
 			confidence: word.confidence,
@@ -359,6 +383,47 @@ function findPokemonName(words, maxMistakes = Infinity) {
 		}
 	}
 	return best ? best.name : "";
+}
+
+function findOtherCardName(words, maxMistakes = Infinity) {
+	// Checks every run of neighbouring words against the Trainer and Energy names. The longest
+	// run that matches wins ("Double Colorless Energy" over "Colorless Energy"), then the one with
+	// the fewest mistakes.
+	let best = null;
+	for (let start = 0; start < words.length; start++) {
+		const end = Math.min(words.length, start + MAX_NAME_WORDS);
+		for (let stop = start + 1; stop <= end; stop++) {
+			const match = matchOtherCardName(words.slice(start, stop).join(" "));
+			if (!match || match.mistakes > maxMistakes) continue;
+			// A short name ("Bill", "Cook") only counts on a line of its own, the way a Trainer's name
+			// is printed: the same word in other text isn't the card's name.
+			if (match.letters < LONG_NAME_LETTERS && (start > 0 || stop < words.length)) continue;
+			if (!best || match.letters > best.letters || (match.letters === best.letters && match.mistakes < best.mistakes)) best = match;
+		}
+	}
+	return best ? best.name : "";
+}
+
+function matchOtherCardName(text) {
+	// Like matchPokemonName, but for Trainer and Energy names: { name, mistakes, letters }, or null.
+	// Names cut short don't count here: "Professor" is the start of too many of them.
+	const read = lettersOnly(text);
+	if (read.length < 3) return null;
+	// Short names must be read exactly: with one letter wrong, "Seen" would be the Trainer "Seer".
+	const allowed = read.length >= LONG_NAME_LETTERS ? 2 + Math.floor((read.length - LONG_NAME_LETTERS) / LETTERS_PER_EXTRA_TYPO) : 0;
+	let best = null;
+	let tied = false;
+	for (const card of OTHER_CARD_KEYS) {
+		const mistakes = read === card.key ? 0 : editDistance(read, card.key, allowed);
+		if (mistakes > allowed) continue;
+		if (!best || mistakes < best.mistakes) {
+			best = { name: card.name, mistakes: mistakes, letters: read.length };
+			tied = false;
+		} else if (mistakes === best.mistakes) {
+			tied = true;
+		}
+	}
+	return best && !tied ? best : null;
 }
 
 function matchPokemonName(text) {
@@ -651,6 +716,10 @@ function numberCandidates(text) {
 		// is still worth keeping: the search can compare the photo with every card of that size.
 		const number = /^0+$/.test(match[1]) ? UNREAD_NUMBER : match[1];
 		found.push({ number: number + "/" + match[2], sawSlash: true });
+	}
+	// A Black Star promo's code: "SWSH193". It is as sure a sign of the number as a "/".
+	for (const match of cleaned.matchAll(PROMO_NUMBER)) {
+		found.push({ number: match[1].toUpperCase() + match[2], sawSlash: true });
 	}
 	// The "/" can also vanish altogether ("4102") or turn into a digit ("107130").
 	for (const digits of cleaned.match(/(?<!\d)\d{4,6}(?!\d)/g) || []) {
