@@ -5,6 +5,28 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.32.0
+
+- **5.1 The app runs on TCGdex.** pokemontcg.io, where every card, picture and price came from, is
+  being shut down; TCGdex is free, needs no key, and answers web pages directly. A search is now a
+  question or two of about 0.2 seconds (the cards with the name, and those with each number read)
+  instead of up to a dozen lookups, each sent twice and often failing; the app itself works out
+  which cards fit. Prices are asked for one card at a time, as it opens, and are from the same
+  day: the reverse holo Legendary Collection Pikachu went from €197 (dated February) to €570, the
+  average of the last 30 days. Saved and learned cards are given TCGdex's ids once, in the
+  background, on the phone and in the account (`card-ids.js` pairs the two databases' 175 sets;
+  "base6-86" is "lc-86"). Cards TCGdex has no picture of borrow the old database's. The card page no
+  longer offers a "reverse holo" price for cards never printed that way (Cardmarket lists one for
+  Base Set Charizard), as TCGdex lists each card's prints. The PSA relay now gets the card's
+  TCGplayer number from the app, and still answers the old way for older app versions. Tested:
+  the 40 real photos exactly as before (40 shown first, 38 opened, 0 wrong, 31 numbers read);
+  special numbers as before (18 read, 24 first, 22 opened, 0 wrong); full-art as before (22
+  names, 20 numbers, 26 opened, 0 wrong); fake photos 14 first, 12 opened (13 before), 0 wrong:
+  a Pikachu whose same-picture Base Set 2 twin came within half its distance no longer opens by
+  itself. Not solved: the 30th Classic Collection reprints have no pictures in TCGdex yet (the old
+  database's are used); the Cardmarket link (Cardmarket's own "Products?idProduct=" form) couldn't
+  be tried from here, as Cardmarket stops robots.
+
 ## Done in 1.31.0 and 1.31.1
 
 - **2.7 The free database's daily allowance, in part.** Without a key the card database allows
@@ -118,10 +140,10 @@ L = several sessions).
 |---|---|---|---|
 | 2.1 | **Recognise learned cards before reading the text.** Finding the card takes a moment; reading the text takes 5 to 20 seconds. | A card the app knows would open in 1 to 2 seconds instead of after the reading. | S |
 | 2.2 | **Start the text reader when the page opens**, not at the first photo. | The first scan of a visit waits for a few megabytes to download. | S |
-| 2.3 | **Remember database answers for a day** on the phone. | The free price database fails about half its requests, and each retry costs time. Scanning a card twice, or opening My cards, would not ask again. | S |
+| 2.3 | **Remember database answers for a day** on the phone. | Scanning a card twice, or opening My cards, would not ask again. Worth less since 1.32.0: TCGdex answers in about 0.2 seconds and seldom fails. | S |
 | 2.4 | **Read the number first, the name only when needed.** | Name and number are read one after the other. A clear number alone finds the card. | M |
 | 2.5 | **Compare fewer pictures**: when only the name is known, the app compares the photo with up to 250 cards' pictures. Using the set size read, or learned cards, narrows that down. | The slowest searches are these. | M |
-| 2.6 | **A paid price database (Scrydex)**, from the makers of the free one. | Faster and fresher prices, and it doesn't fail half the time. Costs money: your decision. | M |
+| 2.6 | **A paid card database (Scrydex)**, from the makers of pokemontcg.io. | Graded prices and picture recognition built in. Costs money (from $29 a month, September 2026): your decision. Since 1.32.0 the free TCGdex (5.1) is quick, reliable and up to date. | M |
 
 ## 3. Smoother
 
@@ -144,9 +166,9 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 5.1 | **Move to TCGdex before 1 March 2027.** The trial (27 September 2026) says yes; the rebuild plan is below. | pokemontcg.io, where every card, picture and price comes from, is being shut down. The paid alternative is Scrydex (2.6). | L |
+| 5.2 | **Pictures for the cards TCGdex has none of.** The gallery, vault and some promo cards borrow the old database's pictures, which may go when it does (March 2027). | Without a picture a card can't be compared with a photo, and shows a grey "?". Check again closer to March 2027: TCGdex may have them by then. | S |
 
-**The TCGdex trial (27 September 2026).** TCGdex (api.tcgdex.net) is free, needs no key, and answers
+**The TCGdex trial (27 September 2026)**, before 5.1 was done. TCGdex (api.tcgdex.net) is free, needs no key, and answers
 web pages directly, pictures included. Of 40 requests none failed (pokemontcg.io fails about half),
 at about 0.1 seconds per card and 0.2 per name search. Its prices are from the same day, where
 pokemontcg.io's Cardmarket prices were months old: Cardmarket (with the reverse holo prices) and
@@ -173,5 +195,5 @@ handle:
 
 ## Not planned
 
-- **Non-English cards.** The free database has English cards only.
+- **Non-English cards.** The reader and its name lists are English only (TCGdex has other languages, not Danish).
 - **Grading a card's condition from the photo.** Too unreliable for prices that differ this much.

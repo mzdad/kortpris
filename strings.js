@@ -66,6 +66,7 @@ const STRINGS = {
 		showingFirst: " Showing the first {count}.",
 
 		noPrices: "Nobody has sold this card on Cardmarket or TCGplayer recently, so there is no price yet.",
+		pricesFailed: "The price database didn't answer, so the prices can't be shown right now. Search again in a moment.",
 		soldOnEbay: "See what it has sold for on eBay",
 		notYours: "Not your card? Fix the name or number above and press Search.",
 		ungraded: "These are prices for ungraded cards. A scratched, bent or faded card sells for less.",
@@ -380,6 +381,7 @@ const STRINGS = {
 		showingFirst: " Viser de første {count}.",
 
 		noPrices: "Ingen har solgt kortet på Cardmarket eller TCGplayer for nylig, så der er ingen pris endnu.",
+		pricesFailed: "Prisdatabasen svarede ikke, så priserne kan ikke vises lige nu. Søg igen om lidt.",
 		soldOnEbay: "Se, hvad det er solgt for på eBay",
 		notYours: "Ikke dit kort? Ret navn eller nummer ovenfor, og tryk på Søg.",
 		ungraded: "Priserne gælder ugraderede kort. Et ridset, bøjet eller falmet kort sælges for mindre.",

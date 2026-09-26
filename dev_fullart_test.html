@@ -34,27 +34,50 @@ column says what the name strip (see <code>readNameStrip</code> in <code>reader.
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.31.1"></script>
-<script src="card-names.js?v=1.31.1"></script>
-<script src="card-finder.js?v=1.31.1"></script>
-<script src="sparkle.js?v=1.31.1"></script>
-<script src="reader.js?v=1.31.1"></script>
-<script src="cards.js?v=1.31.1"></script>
-<script src="matcher.js?v=1.31.1"></script>
+<script src="pokemon-names.js?v=1.32.0"></script>
+<script src="card-names.js?v=1.32.0"></script>
+<script src="card-finder.js?v=1.32.0"></script>
+<script src="sparkle.js?v=1.32.0"></script>
+<script src="reader.js?v=1.32.0"></script>
+<script src="storage.js?v=1.32.0"></script>
+<script src="card-ids.js?v=1.32.0"></script>
+<script src="cards.js?v=1.32.0"></script>
+<script src="matcher.js?v=1.32.0"></script>
 <script>
 "use strict";
 
 // Special illustration rares, illustration rares, gold hyper rares and full arts from Scarlet &
 // Violet; full-art EX and GX, rainbow and gold secret rares from Black & White to Sword & Shield.
-const TEST_CARD_IDS = [
-	"sv4pt5-239", "sv9-185", "sv3pt5-200", "sv8-237", "sv8pt5-162",
-	"sv2-204", "sv4-196", "sv3-226", "sv6-184",
-	"sv4pt5-244", "me1-188", "sv6pt5-96", "sv3-230",
-	"sv3pt5-187", "sv6-203", "sv5-187",
-	"xy2-103", "xy4-117", "bw6-121", "sm4-102",
-	"sm8-227", "swsh7-213", "swsh3-193",
-	"sm3-162", "sm12-269",
-	"swsh12pt5gg-GG30", "swsh7-215",
+// Each card by TCGdex's id, and by its old id (pokemontcg.io), whose big picture the fake photo is
+// made from: the photos stay the same as before the app moved to TCGdex (version 1.32.0).
+const TEST_CARDS = [
+	{ id: "sv04.5-239", oldId: "sv4pt5-239" },
+	{ id: "sv09-185", oldId: "sv9-185" },
+	{ id: "sv03.5-200", oldId: "sv3pt5-200" },
+	{ id: "sv08-237", oldId: "sv8-237" },
+	{ id: "sv08.5-162", oldId: "sv8pt5-162" },
+	{ id: "sv02-204", oldId: "sv2-204" },
+	{ id: "sv04-196", oldId: "sv4-196" },
+	{ id: "sv03-226", oldId: "sv3-226" },
+	{ id: "sv06-184", oldId: "sv6-184" },
+	{ id: "sv04.5-244", oldId: "sv4pt5-244" },
+	{ id: "me01-188", oldId: "me1-188" },
+	{ id: "sv06.5-096", oldId: "sv6pt5-96" },
+	{ id: "sv03-230", oldId: "sv3-230" },
+	{ id: "sv03.5-187", oldId: "sv3pt5-187" },
+	{ id: "sv06-203", oldId: "sv6-203" },
+	{ id: "sv05-187", oldId: "sv5-187" },
+	{ id: "xy2-103", oldId: "xy2-103" },
+	{ id: "xy4-117", oldId: "xy4-117" },
+	{ id: "bw6-121", oldId: "bw6-121" },
+	{ id: "sm4-102", oldId: "sm4-102" },
+	{ id: "sm8-227", oldId: "sm8-227" },
+	{ id: "swsh7-213", oldId: "swsh7-213" },
+	{ id: "swsh3-193", oldId: "swsh3-193" },
+	{ id: "sm3-162", oldId: "sm3-162" },
+	{ id: "sm12-269", oldId: "sm12-269" },
+	{ id: "swsh12.5gg-GG30", oldId: "swsh12pt5gg-GG30" },
+	{ id: "swsh7-215", oldId: "swsh7-215" },
 ];
 // A fairly kind phone photo. The database's pictures are only 1024 pixels tall.
 const PHOTO_WIDTH = 3000;
@@ -80,13 +103,14 @@ const summary = document.getElementById("summary");
 runAllTests();
 
 async function runAllTests() {
-	const cards = await findCardsById(TEST_CARD_IDS);
+	const cards = await findCardsById(TEST_CARDS.map((test) => test.id));
 	const random = seededRandom(RANDOM_SEED);
 	const scores = { total: 0, name: 0, number: 0, first: 0, openedRight: 0, openedWrong: 0 };
 	const allRows = [];
 	for (const card of cards) {
 		// Every card's photo is made, so ?only= gives each the same photo as a full run.
-		const photo = await makeFakePhoto(await loadImage(card.images.large), random);
+		const oldId = TEST_CARDS.find((test) => test.id === card.id).oldId;
+		const photo = await makeFakePhoto(await loadImage(hiresImageUrl(oldId)), random);
 		if (only && !only.split(",").some((part) => card.id.includes(part))) continue;
 		const row = await testOnePhoto(card, photo);
 		allRows.push({ id: card.id, ...row });
@@ -118,7 +142,8 @@ async function testOnePhoto(card, photo) {
 	const nameOk = reading.nameSure && words(reading.name).length > 0
 		&& words(reading.name).every((word) => words(card.name).includes(word));
 	const read = parseCollectorNumber(reading.number || "");
-	const numberOk = numberSpellings(read.number).includes(card.number)
+	// TCGdex writes some numbers with zeros in front ("096"), so they are compared as the reader's are.
+	const numberOk = numberSpellings(read.number).includes(parseCollectorNumber(card.number).number)
 		&& (read.total === String(card.set.printedTotal) || isPromoCode(read));   // "GG30/GG70" has no plain set size
 	let foundAt = -1;
 	let opened = false;   // would the app open a card's prices without asking?
@@ -201,6 +226,11 @@ async function makeFakePhoto(cardImage, random) {
 	}
 	ctx.putImageData(pixels, 0, 0);
 	return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+}
+
+function hiresImageUrl(cardId) {
+	const dash = cardId.lastIndexOf("-");
+	return "https://images.pokemontcg.io/" + cardId.slice(0, dash) + "/" + cardId.slice(dash + 1) + "_hires.png";
 }
 
 function loadImage(url) {

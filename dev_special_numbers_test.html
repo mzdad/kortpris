@@ -34,45 +34,47 @@ scores the result. The last column shows how the number corners were read.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.31.1"></script>
-<script src="card-names.js?v=1.31.1"></script>
-<script src="card-finder.js?v=1.31.1"></script>
-<script src="sparkle.js?v=1.31.1"></script>
-<script src="reader.js?v=1.31.1"></script>
-<script src="cards.js?v=1.31.1"></script>
-<script src="matcher.js?v=1.31.1"></script>
+<script src="pokemon-names.js?v=1.32.0"></script>
+<script src="card-names.js?v=1.32.0"></script>
+<script src="card-finder.js?v=1.32.0"></script>
+<script src="sparkle.js?v=1.32.0"></script>
+<script src="reader.js?v=1.32.0"></script>
+<script src="storage.js?v=1.32.0"></script>
+<script src="card-ids.js?v=1.32.0"></script>
+<script src="cards.js?v=1.32.0"></script>
+<script src="matcher.js?v=1.32.0"></script>
 <script>
 "use strict";
 
 // printed: what the card's corner says. number: the database's number for it.
 const TEST_CARDS = [
-	{ id: "svp-1", printed: "SVP EN 001", number: "1" },
-	{ id: "svp-27", printed: "SVP EN 027", number: "27" },
-	{ id: "svp-50", printed: "SVP EN 050", number: "50" },
-	{ id: "svp-160", printed: "SVP EN 160", number: "160" },
-	{ id: "swsh12pt5gg-GG01", printed: "GG01/GG70", number: "GG01" },
-	{ id: "swsh12pt5gg-GG44", printed: "GG44/GG70", number: "GG44" },
-	{ id: "swsh9tg-TG05", printed: "TG05/TG30", number: "TG05" },
-	{ id: "swsh11tg-TG12", printed: "TG12/TG30", number: "TG12" },
-	{ id: "sma-SV1", printed: "SV1/SV94", number: "SV1" },
-	{ id: "sma-SV49", printed: "SV49/SV94", number: "SV49" },
-	{ id: "swsh45sv-SV001", printed: "SV001/SV122", number: "SV001" },
-	{ id: "swsh45sv-SV107", printed: "SV107/SV122", number: "SV107" },
-	{ id: "g1-RC1", printed: "RC1/RC32", number: "RC1" },
-	{ id: "g1-RC25", printed: "RC25/RC32", number: "RC25" },
-	{ id: "bw11-RC5", printed: "RC5/RC25", number: "RC5" },
-	{ id: "ecard2-H1", printed: "H1/H32", number: "H1" },
-	{ id: "ecard3-H10", printed: "H10/H32", number: "H10" },
-	{ id: "xyp-XY01", printed: "XY01", number: "XY01" },
-	{ id: "xyp-XY124", printed: "XY124", number: "XY124" },
-	{ id: "smp-SM01", printed: "SM01", number: "SM01" },
-	{ id: "smp-SM210", printed: "SM210", number: "SM210" },
-	{ id: "bwp-BW004", printed: "BW004", number: "BW004" },
-	{ id: "bwp-BW50", printed: "BW50", number: "BW50" },
-	{ id: "dpp-DP01", printed: "DP01", number: "DP01" },
-	{ id: "hsp-HGSS01", printed: "HGSS01", number: "HGSS01" },
-	{ id: "swshp-SWSH001", printed: "SWSH001", number: "SWSH001" },
-	{ id: "swshp-SWSH050", printed: "SWSH050", number: "SWSH050" },
+	{ id: "svp-001", oldId: "svp-1", printed: "SVP EN 001", number: "1" },
+	{ id: "svp-027", oldId: "svp-27", printed: "SVP EN 027", number: "27" },
+	{ id: "svp-050", oldId: "svp-50", printed: "SVP EN 050", number: "50" },
+	{ id: "svp-160", oldId: "svp-160", printed: "SVP EN 160", number: "160" },
+	{ id: "swsh12.5gg-GG01", oldId: "swsh12pt5gg-GG01", printed: "GG01/GG70", number: "GG01" },
+	{ id: "swsh12.5gg-GG44", oldId: "swsh12pt5gg-GG44", printed: "GG44/GG70", number: "GG44" },
+	{ id: "swsh9tg-TG05", oldId: "swsh9tg-TG05", printed: "TG05/TG30", number: "TG05" },
+	{ id: "swsh11tg-TG12", oldId: "swsh11tg-TG12", printed: "TG12/TG30", number: "TG12" },
+	{ id: "sma-SV1", oldId: "sma-SV1", printed: "SV1/SV94", number: "SV1" },
+	{ id: "sma-SV49", oldId: "sma-SV49", printed: "SV49/SV94", number: "SV49" },
+	{ id: "swsh4.5sv-SV001", oldId: "swsh45sv-SV001", printed: "SV001/SV122", number: "SV001" },
+	{ id: "swsh4.5sv-SV107", oldId: "swsh45sv-SV107", printed: "SV107/SV122", number: "SV107" },
+	{ id: "g1-RC1", oldId: "g1-RC1", printed: "RC1/RC32", number: "RC1" },
+	{ id: "g1-RC25", oldId: "g1-RC25", printed: "RC25/RC32", number: "RC25" },
+	{ id: "bw11-RC5", oldId: "bw11-RC5", printed: "RC5/RC25", number: "RC5" },
+	{ id: "ecard2-H01", oldId: "ecard2-H1", printed: "H1/H32", number: "H1" },
+	{ id: "ecard3-H10", oldId: "ecard3-H10", printed: "H10/H32", number: "H10" },
+	{ id: "xyp-XY01", oldId: "xyp-XY01", printed: "XY01", number: "XY01" },
+	{ id: "xyp-XY124", oldId: "xyp-XY124", printed: "XY124", number: "XY124" },
+	{ id: "smp-SM01", oldId: "smp-SM01", printed: "SM01", number: "SM01" },
+	{ id: "smp-SM210", oldId: "smp-SM210", printed: "SM210", number: "SM210" },
+	{ id: "bwp-BW04", oldId: "bwp-BW004", printed: "BW004", number: "BW004" },
+	{ id: "bwp-BW50", oldId: "bwp-BW50", printed: "BW50", number: "BW50" },
+	{ id: "dpp-DP01", oldId: "dpp-DP01", printed: "DP01", number: "DP01" },
+	{ id: "hgssp-HGSS01", oldId: "hsp-HGSS01", printed: "HGSS01", number: "HGSS01" },
+	{ id: "swshp-SWSH001", oldId: "swshp-SWSH001", printed: "SWSH001", number: "SWSH001" },
+	{ id: "swshp-SWSH050", oldId: "swshp-SWSH050", printed: "SWSH050", number: "SWSH050" },
 ];
 // A fairly kind phone photo: the database's pictures are only 1024 pixels tall, so the tiny
 // print already has far less detail than in a real photo.
@@ -103,7 +105,7 @@ async function runAllTests() {
 	const allRows = [];
 	for (const card of TEST_CARDS) {
 		// Every card's photo is made, so ?only= gives each the same photo as a full run.
-		const photo = await makeFakePhoto(await loadImage(hiresImageUrl(card.id)), random);
+		const photo = await makeFakePhoto(await loadImage(hiresImageUrl(card.oldId)), random);
 		if (!cards.includes(card)) continue;
 		const row = await testOnePhoto(card, photo);
 		allRows.push({ id: card.id, ...row });
@@ -205,6 +207,8 @@ async function makeFakePhoto(cardImage, random) {
 	return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
 }
 
+// The fake photos are made from the old card database's big pictures (pokemontcg.io), by the card's
+// old id, so they stay the same photos as before the app moved to TCGdex (version 1.32.0).
 function hiresImageUrl(cardId) {
 	const dash = cardId.lastIndexOf("-");
 	return "https://images.pokemontcg.io/" + cardId.slice(0, dash) + "/" + cardId.slice(dash + 1) + "_hires.png";

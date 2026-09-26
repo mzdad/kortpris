@@ -92,10 +92,12 @@ function sparkleArea(cardBox, textArea) {
 	return null;
 }
 
-// True when this card was printed as a reverse holo, going by the price database. TCGplayer's
-// list of prints is trusted first: Cardmarket gives some cards from before reverse holos existed
-// a "reverse holo" price anyway (Base Set 2 Dratini, 2000: €0.29, below its normal price).
+// True when this card was printed as a reverse holo. The card database lists each card's prints
+// (card.variants); without that list, TCGplayer's prices are trusted first: Cardmarket gives some
+// cards from before reverse holos existed a "reverse holo" price anyway (Base Set 2 Dratini, 2000:
+// €0.29, below its normal price).
 function hasReverseHolo(card) {
+	if (card.variants && Object.keys(card.variants).length > 0) return Boolean(card.variants.reverse);
 	const tcgplayer = (card.tcgplayer && card.tcgplayer.prices) || {};
 	if (Object.keys(tcgplayer).length > 0) return Boolean(tcgplayer.reverseHolofoil);
 	const cardmarket = (card.cardmarket && card.cardmarket.prices) || {};

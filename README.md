@@ -23,9 +23,13 @@ A web page with nothing to install. What happens to a photo:
    they don't, the corners are cut out again from the card's box made a tenth bigger, and then
    moved up a little: the box is never found exactly, and tiny print cut out a little
    differently often reads differently (`NUMBER_RECUTS`).
-2. **Text → card.** The name and number are looked up in the free
-   [Pokémon TCG API](https://pokemontcg.io); every number the reader thought possible is
-   tried, and the database says which one exists. A right number also finds a card whose
+2. **Text → card.** The name and number are looked up in [TCGdex](https://tcgdex.dev), a free
+   card database that web pages may ask directly: the cards with that name and those with each
+   number read come in one quick question each (`cards.js`), and every number the reader thought
+   possible is tried against them. (Until version 1.32.0 the app used the Pokémon TCG API,
+   pokemontcg.io, which is being shut down. Cards saved or learned before then are given TCGdex's
+   ids once, by `card-ids.js`, which also lends TCGdex's cards without a picture the old
+   database's.) A right number also finds a card whose
    name was misread, and the name is then corrected. If no number fits, the candidates are sorted by
    how much their picture looks like the photo, and a clear winner opens by itself. Cards
    with the very same picture (a holo and its plain print) are told apart by the number:
@@ -132,7 +136,8 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `card-names.js` | All Trainer and Energy card names, used the same way |
 | `card-finder.js` | Finds where the card is in the photo (yellow border, or shape) |
 | `reader.js` | Photo → name and number |
-| `cards.js` | Searches the price database |
+| `cards.js` | Searches the card database (TCGdex), and asks for the prices of the cards shown |
+| `card-ids.js` | The old database's set ids and TCGdex's, and the 30th Celebration reprints' numbers |
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
@@ -213,17 +218,17 @@ illustration-rare cards, whose name and number are printed on the artwork.
 
 ## Things to know
 
-- **The free API is unreliable.** In September 2026, about half of all requests failed on
-  the first try. The page sends every lookup twice at once and tries up to 6 times before
-  giving up - except when the database says "too many requests" (429): asking again would only
-  make that last longer, so the app says so instead.
-- **The free API has a daily allowance, and is being shut down.** Without a key it allows 1,000
-  lookups a day and 30 a minute per internet connection, which a busy day of scanning (or of
-  testing: 26 September 2026) can use up; never run two test pages at once. It no longer gives out
-  keys, and the ones it gave stop working on 1 March 2027, so the app has to move to another card
-  database before then (see ROADMAP.md).
-- **Cardmarket prices can be weeks or months old** in this API. The page shows the date
-  and labels anything older than two weeks.
+- **TCGdex gives prices one card at a time**, so a search finds cards without them, and the app
+  asks for the prices of a card as it opens (`withPrices`). Its Cardmarket and TCGplayer prices are
+  from the same day.
+- **Some cards have no picture in TCGdex** (in September 2026: the Galarian Gallery, the Shiny
+  Vaults, the Trainer Galleries, some promos): those borrow the old database's picture, and a card
+  neither has shows a grey "?". A card without a picture can still be found by its number.
+- **TCGdex's picture server refuses pictures whose address has an ending** like `?readable`
+  (it then sends its permission twice), so its addresses are used as they are (`readablePictureUrl`).
+- **The old database, pokemontcg.io, is being shut down** (its keys stop working on 1 March 2027)
+  and allowed 1,000 lookups a day per internet connection without a key. Its picture server still
+  lends pictures (see above), and the test pages make their fake photos from its big pictures, so
+  they stay the same photos as before the move.
 - **Prices are for ungraded cards.** Condition changes the value a lot.
-- The API's makers now run a paid successor, [Scrydex](https://scrydex.com), which has
-  fresher data. It would be the upgrade path if the free one gets worse.
+- [Scrydex](https://scrydex.com), from the old database's makers, is a paid alternative.

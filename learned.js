@@ -129,12 +129,50 @@ async function learnCard(card, photo, textArea, cardBox, photoKey) {
 		name: card.name,
 		number: card.number + "/" + card.set.printedTotal,
 		setName: card.set.name,
-		image: card.images.small,
+		image: card.images ? card.images.small : null,
 		thumbnail: packThumbnail(seen.grid),
 		photoKey: photoKey,
 		learnedAt: Date.now(),
+		db: CARD_DATABASE,
 	});
 	return writeLearned(trimLearned(learned));
+}
+
+// Cards learned before version 1.32.0 have the old card database's ids: they get TCGdex's once,
+// like saved cards (see moveSavedCardsToTcgdex in collection.js). Returns true when something
+// changed.
+let movingLearned = false;
+async function moveLearnedToTcgdex() {
+	if (movingLearned) return false;
+	const old = readLearned().filter((entry) => entry.db !== CARD_DATABASE);
+	if (old.length === 0) return false;
+	movingLearned = true;
+	try {
+		const current = await currentCardIds([...new Set(old.map((entry) => entry.cardId))]);
+		const cards = await findCardsById([...new Set(current.values())]);
+		// Read again: the list may have changed while the database was asked.
+		const learned = readLearned();
+		let changed = false;
+		for (const entry of learned) {
+			if (entry.db === CARD_DATABASE) continue;
+			const card = cards.find((found) => found.id === current.get(entry.cardId));
+			if (!card) continue;
+			Object.assign(entry, {
+				oldId: entry.cardId,
+				cardId: card.id,
+				name: card.name,
+				number: collectorNumber(card),
+				setName: card.set.name,
+				image: card.images ? card.images.small : entry.image,
+				db: CARD_DATABASE,
+			});
+			changed = true;
+		}
+		if (changed) writeLearned(learned);
+		return changed;
+	} finally {
+		movingLearned = false;
+	}
 }
 
 // Each photo once (the later copy wins), oldest first, and only the newest few photos of each card
@@ -219,7 +257,7 @@ function whenLearnedChanges(redraw) {
 // the photo most like the card's own picture, and how far it is from that picture. null when the
 // card's place in the photo isn't known.
 async function cardInPhoto(card, photo, textArea, cardBox) {
-	if (!cardBox && !textArea) return null;
+	if ((!cardBox && !textArea) || !card.images) return null;
 	const picture = await loadPicture(card.images.small);
 	const cardGrid = colourGrid(picture, artworkOf({ x0: 0, y0: 0, x1: picture.width, y1: picture.height }));
 	let best = { grid: null, distance: Infinity };

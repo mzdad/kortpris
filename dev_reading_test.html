@@ -33,26 +33,28 @@ The fake photos are the same on every run, so scores can be compared before and 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.31.1"></script>
-<script src="card-names.js?v=1.31.1"></script>
-<script src="card-finder.js?v=1.31.1"></script>
-<script src="sparkle.js?v=1.31.1"></script>
-<script src="reader.js?v=1.31.1"></script>
-<script src="cards.js?v=1.31.1"></script>
-<script src="matcher.js?v=1.31.1"></script>
+<script src="pokemon-names.js?v=1.32.0"></script>
+<script src="card-names.js?v=1.32.0"></script>
+<script src="card-finder.js?v=1.32.0"></script>
+<script src="sparkle.js?v=1.32.0"></script>
+<script src="reader.js?v=1.32.0"></script>
+<script src="storage.js?v=1.32.0"></script>
+<script src="card-ids.js?v=1.32.0"></script>
+<script src="cards.js?v=1.32.0"></script>
+<script src="matcher.js?v=1.32.0"></script>
 <script>
 "use strict";
 
 // Real cards from different eras. "number" is what is printed in the corner.
 const TEST_CARDS = [
-	{ id: "base1-4", name: "Charizard", number: "4/102" },
-	{ id: "base1-58", name: "Pikachu", number: "58/102" },
-	{ id: "neo1-9", name: "Lugia", number: "9/111" },
-	{ id: "xy12-11", name: "Charizard", number: "11/108" },
-	{ id: "swsh1-65", name: "Pikachu", number: "065/202" },
-	{ id: "swsh7-215", name: "Umbreon VMAX", number: "215/203" },
-	{ id: "sv3pt5-25", name: "Pikachu", number: "025/165" },
-	{ id: "me1-1", name: "Bulbasaur", number: "001/132" },
+	{ id: "base1-4", oldId: "base1-4", name: "Charizard", number: "4/102" },
+	{ id: "base1-58", oldId: "base1-58", name: "Pikachu", number: "58/102" },
+	{ id: "neo1-9", oldId: "neo1-9", name: "Lugia", number: "9/111" },
+	{ id: "xy12-11", oldId: "xy12-11", name: "Charizard", number: "11/108" },
+	{ id: "swsh1-65", oldId: "swsh1-65", name: "Pikachu", number: "065/202" },
+	{ id: "swsh7-215", oldId: "swsh7-215", name: "Umbreon VMAX", number: "215/203" },
+	{ id: "sv03.5-025", oldId: "sv3pt5-25", name: "Pikachu", number: "025/165" },
+	{ id: "me01-001", oldId: "me1-1", name: "Bulbasaur", number: "001/132" },
 ];
 
 // How rough each fake photo is. Blur is in pixels of the 3000 x 4000 photo.
@@ -78,7 +80,7 @@ async function runAllTests() {
 	const scores = { total: 0, name: 0, number: 0, found: 0, first: 0, openedRight: 0, openedWrong: 0 };
 	const allRows = [];
 	for (const card of TEST_CARDS) {
-		const cardImage = await loadImage(hiresImageUrl(card.id));
+		const cardImage = await loadImage(hiresImageUrl(card.oldId));
 		for (const [levelName, level] of Object.entries(LEVELS)) {
 			const photo = await makeFakePhoto(cardImage, level, random);
 			const row = await testOnePhoto(card, levelName, photo);
@@ -216,6 +218,8 @@ async function makeFakePhoto(cardImage, level, random) {
 	return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", level.jpegQuality));
 }
 
+// The fake photos are made from the old card database's big pictures (pokemontcg.io), by the card's
+// old id, so they stay the same photos as before the app moved to TCGdex (version 1.32.0).
 function hiresImageUrl(cardId) {
 	const dash = cardId.lastIndexOf("-");
 	return "https://images.pokemontcg.io/" + cardId.slice(0, dash) + "/" + cardId.slice(dash + 1) + "_hires.png";

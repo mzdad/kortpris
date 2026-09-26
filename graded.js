@@ -2,7 +2,9 @@
 
 // PSA prices: what a card sold for on eBay after PSA graded its condition (10 = perfect).
 // No free price database the page can ask has them, so they come through the Kortpris relay
-// (relay/psa-prices.js, on Cloudflare), which holds the price service's secret key.
+// (relay/psa-prices.js, on Cloudflare), which holds the price service's secret key. The price
+// service knows a card by its TCGplayer product number, which comes with the card's prices
+// (card.tcgplayer.productId, see withPrices in cards.js).
 
 // Where the relay is online. Empty = no relay: the card page then only links to eBay.
 const PSA_RELAY_URL = "https://kortpris-psa.kortpris.workers.dev/";
@@ -73,7 +75,8 @@ function gradedPricesAvailable() {
 // The PSA prices of a card as far as they are known now. When they aren't, they are fetched -
 // only while fetchPsaPrices is on - and onReady() is called once they arrive (or once it's
 // clear they can't). state "off" means not known and not fetched.
-function gradedPricesOf(cardId, onReady) {
+function gradedPricesOf(card, onReady) {
+	const cardId = card.id;
 	const known = gradedByCard.get(cardId);
 	const retry = known && (known.state === "failed" || known.state === "usedUp") && Date.now() - known.at > GRADED_RETRY_MS;
 	if (!known || retry) {
@@ -83,17 +86,20 @@ function gradedPricesOf(cardId, onReady) {
 			gradedByCard.set(cardId, { state: "done", grades: kept.grades, at: kept.at });
 		} else if (!fetchPsaPrices) {
 			return { state: "off", grades: [] };
+		} else if (!(card.tcgplayer && card.tcgplayer.productId)) {
+			// Not sold on TCGplayer, so the price service doesn't know it either: nothing to ask.
+			gradedByCard.set(cardId, { state: "done", grades: [], at: Date.now() });
 		} else {
 			gradedByCard.set(cardId, { state: "loading", grades: [], at: Date.now() });
-			fetchGradedPrices(cardId).then(onReady);
+			fetchGradedPrices(cardId, card.tcgplayer.productId).then(onReady);
 		}
 	}
 	return gradedByCard.get(cardId);
 }
 
-async function fetchGradedPrices(cardId) {
+async function fetchGradedPrices(cardId, productId) {
 	try {
-		const response = await fetch(PSA_RELAY_URL + "?card=" + encodeURIComponent(cardId));
+		const response = await fetch(PSA_RELAY_URL + "?product=" + encodeURIComponent(productId));
 		const answer = await response.json();
 		noteAllowance(answer);
 		if (response.status === 429) {

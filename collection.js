@@ -6,8 +6,10 @@
 // run after every file has loaded, so the order of the <script> tags doesn't matter.
 
 const COLLECTION_STORAGE_KEY = "kortpris.collection";
-// Prices are updated this many cards at a time: the database answers one group per request.
+// Saved cards are asked for this many at a time, and then their prices this many at a time: the
+// database gives prices one card at a time (see withPrices in cards.js).
 const REFRESH_BATCH_SIZE = 25;
+const PRICE_REQUESTS_AT_ONCE = 6;
 
 // Each saved card looks like:
 // { id, version, name, setName, number, image, count, priceEur, updatedAt, priceUsd, kind }
@@ -120,13 +122,68 @@ function addToCollection(card, version) {
 			name: card.name,
 			setName: card.set.name,
 			number: collectorNumber(card),
-			image: card.images.small,
+			image: card.images ? card.images.small : null,
 			count: 1,
 			kind: card.supertype,
+			db: CARD_DATABASE,
 			...pricesOf(card, version),
 		});
 	}
 	return saveCollection();
+}
+
+// Cards saved before version 1.32.0 have the old card database's ids (pokemontcg.io). They get
+// TCGdex's once, with its picture, set name and number, and are marked db: "tcgdex"; the old id is
+// kept as oldId, just in case. A card TCGdex doesn't have keeps its old id, and is tried again next
+// time. Returns true when something changed.
+let movingSavedCards = false;
+async function moveSavedCardsToTcgdex() {
+	if (movingSavedCards || !collectionReady()) return false;
+	const oldIds = [...new Set(collection.filter((entry) => entry.db !== CARD_DATABASE).map((entry) => entry.id))];
+	if (oldIds.length === 0) return false;
+	movingSavedCards = true;
+	try {
+		const current = await currentCardIds(oldIds);
+		const cards = await findCardsById([...new Set(current.values())]);
+		// The list may have been read again meanwhile (signing in or out, another phone): the cards
+		// in it now are the ones translated - by their old id, which fits any list.
+		if (!collectionReady()) return false;
+		let changed = false;
+		for (const entry of collection) {
+			if (entry.db === CARD_DATABASE) continue;
+			const card = cards.find((found) => found.id === current.get(entry.id));
+			if (!card) continue;
+			Object.assign(entry, {
+				oldId: entry.id,
+				id: card.id,
+				name: card.name,
+				setName: card.set.name,
+				number: collectorNumber(card),
+				image: card.images ? card.images.small : entry.image,
+				kind: card.supertype,
+				db: CARD_DATABASE,
+			});
+			changed = true;
+		}
+		if (!changed) return false;
+		collection = sameCardsTogether(collection);
+		saveCollection();
+		return true;
+	} finally {
+		movingSavedCards = false;
+	}
+}
+
+function sameCardsTogether(entries) {
+	// The same card in the same version once, with the counts added up: a card saved both before
+	// and after the move to TCGdex.
+	const together = [];
+	for (const entry of entries) {
+		const same = together.find((kept) => kept.id === entry.id && (kept.version || null) === (entry.version || null));
+		if (same) same.count += entry.count;
+		else together.push(entry);
+	}
+	return together;
 }
 
 // change is +1 or -1. At zero the card leaves the list.
@@ -149,12 +206,13 @@ function pricesOf(card, version) {
 }
 
 async function refreshCollectionPrices() {
-	// Asks for the saved cards a group at a time: "(id:base1-4 OR id:xy12-11 OR ...)".
 	const ids = [...new Set(collection.map((saved) => saved.id))];   // each card once, even if saved in two versions
 	for (let start = 0; start < ids.length; start += REFRESH_BATCH_SIZE) {
-		const group = ids.slice(start, start + REFRESH_BATCH_SIZE);
-		const query = "(" + group.map((id) => "id:" + id).join(" OR ") + ")";
-		for (const card of await fetchCards(query, REFRESH_BATCH_SIZE)) {
+		const cards = await findCardsById(ids.slice(start, start + REFRESH_BATCH_SIZE));
+		for (let at = 0; at < cards.length; at += PRICE_REQUESTS_AT_ONCE) {
+			await Promise.all(cards.slice(at, at + PRICE_REQUESTS_AT_ONCE).map((card) => withPrices(card)));
+		}
+		for (const card of cards) {
 			for (const entry of collection.filter((saved) => saved.id === card.id)) {
 				Object.assign(entry, pricesOf(card, entry.version));
 				entry.kind = card.supertype;

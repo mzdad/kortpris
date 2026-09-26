@@ -5,8 +5,11 @@
 // Cloudflare secret named PPT_API_KEY, never written in this file - asks for the app, and
 // hands back only the PSA prices of one card.
 //
-// Ask:    GET https://<this relay>/?card=base6-86        (the card's id in pokemontcg.io)
-// Answer: { card, grades: [{ grade: "10", count, median, average }, ...], found,
+// Ask:    GET https://<this relay>/?product=88075   (the card's TCGplayer product number, which
+//         the app gets from TCGdex with the card's prices)
+//     or  GET https://<this relay>/?card=base6-86   (its id in pokemontcg.io: the app before
+//         version 1.32.0, while that database lasts)
+// Answer: { card or product, grades: [{ grade: "10", count, median, average }, ...], found,
 //           cardsLeft, resetsAt }
 //         Prices are in US dollars: what the card sold for on eBay in that PSA grade.
 //         cardsLeft is how many more cards can be looked up today; resetsAt when that refills.
@@ -23,8 +26,9 @@ const TCGPLAYER_LINK = "https://prices.pokemontcg.io/tcgplayer/";
 // Only the app may use this relay, so strangers can't use up the day's credits from a web page.
 const ALLOWED_ORIGINS = ["https://mzdad.github.io", "http://localhost:8765"];
 const REMEMBER_SECONDS = 24 * 60 * 60;
-// Card ids look like "base6-86", "swsh7-215" or "me55c-106m".
+// Card ids look like "base6-86", "swsh7-215" or "me55c-106m"; TCGplayer's product numbers are digits.
 const CARD_ID_SHAPE = /^[a-z0-9.]+-[A-Za-z0-9]+$/;
+const PRODUCT_SHAPE = /^\d{1,9}$/;
 // The free plan's credits a day, refilled at midnight UTC, and what one card costs. The price
 // service says how many credits are left with every answer; the relay keeps the latest report
 // (under CREDITS_KEY) so the app can show it without spending anything.
@@ -42,18 +46,21 @@ export default {
 		const url = new URL(request.url);
 		if (url.searchParams.get("credits") === "1") return reply(await allowance(env), 200, allowOrigin);
 
+		const productId = url.searchParams.get("product") || "";
 		const cardId = url.searchParams.get("card") || "";
-		if (!CARD_ID_SHAPE.test(cardId)) return reply({ error: "card id missing or odd" }, 400, allowOrigin);
+		if (productId ? !PRODUCT_SHAPE.test(productId) : !CARD_ID_SHAPE.test(cardId)) {
+			return reply({ error: "product number or card id missing or odd" }, 400, allowOrigin);
+		}
 		const raw = url.searchParams.get("raw") === "1";   // the price service's own answer, for checking
 
 		// Asked already today: the remembered answer costs no credits.
-		const memoryKey = (raw ? "raw:" : "card:") + cardId;
+		const memoryKey = (raw ? "raw:" : "") + (productId ? "product:" + productId : "card:" + cardId);
 		const remembered = env.REMEMBERED ? await env.REMEMBERED.get(memoryKey) : null;
 		if (remembered) return reply({ ...JSON.parse(remembered), ...(await allowance(env)) }, 200, allowOrigin);
 
 		let answer;
 		try {
-			answer = await gradedPrices(cardId, env, raw);
+			answer = await gradedPrices(productId, cardId, env, raw);
 		} catch (problem) {
 			// Not remembered: the next ask tries again. 429 = the day's credits are used up.
 			const status = problem.usedUp ? 429 : 502;
@@ -66,9 +73,9 @@ export default {
 	},
 };
 
-async function gradedPrices(cardId, env, raw) {
+async function gradedPrices(knownProductId, cardId, env, raw) {
 	if (!env.PPT_API_KEY) throw new Error("the relay has no PPT_API_KEY secret");
-	const productId = await tcgplayerProductId(cardId);
+	const productId = knownProductId || await tcgplayerProductId(cardId);
 
 	const address = PRICE_API + "?tcgPlayerId=" + productId + "&includeEbay=true&limit=1";
 	const response = await fetch(address, { headers: { Authorization: "Bearer " + env.PPT_API_KEY } });
@@ -85,7 +92,7 @@ async function gradedPrices(cardId, env, raw) {
 	const body = await response.json();
 	if (raw) return body;
 	const grades = psaGrades(body);
-	return { card: cardId, found: grades.length > 0, grades: grades };
+	return { ...(knownProductId ? { product: knownProductId } : { card: cardId }), found: grades.length > 0, grades: grades };
 }
 
 async function tcgplayerProductId(cardId) {

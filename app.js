@@ -8,7 +8,7 @@ const APP_VERSION = new URL(document.currentScript.src).searchParams.get("v") ||
 // Prices older than this get an "out of date" label.
 const STALE_AFTER_DAYS = 14;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const EXAMPLE_CARD_IMAGE = "https://images.pokemontcg.io/base1/4_hires.png";
+const EXAMPLE_CARD_IMAGE = "https://assets.tcgdex.net/en/base/base1/4/high.png";
 // Where the phone remembers the chosen language between visits.
 const LANGUAGE_STORAGE_KEY = "kortpris.language";
 // Claude's word for a card's finish, and the version (price) that goes with it.
@@ -225,6 +225,7 @@ let lastCameraPhoto = null;
 let scannedNumbers = { shown: "", guesses: [] };
 
 applyLanguage();
+moveOldCardsToTcgdex();
 
 // Today's exchange rates arrive a moment after the page; then every price is drawn again.
 loadRates().then(() => {
@@ -556,17 +557,35 @@ exampleButton.addEventListener("click", async () => {
 	}
 });
 
-resultsGrid.addEventListener("click", (event) => {
+resultsGrid.addEventListener("click", async (event) => {
 	const button = event.target.closest(".result");
 	if (!button) return;
-	selectedCardId = button.dataset.cardId;
+	const card = shownCards.find((shown) => shown.id === button.dataset.cardId);
+	if (!card) return;
+	// The card opens with its prices, which the database gives one card at a time (see withPrices).
+	button.setAttribute("aria-busy", "true");
+	await loadPrices(card);
+	button.removeAttribute("aria-busy");
+	if (!shownCards.includes(card)) return;   // a new search took over meanwhile
+	selectedCardId = card.id;
 	chosenVersion = null;
 	renderResults();
 	scrollToDetail();
-	const card = shownCards.find((shown) => shown.id === selectedCardId);
 	if (resultsForPhoto) rememberCard(card);   // the viewer's answer: this is the card in the photo
 	if (kidsMode) sayCard(card);
 });
+
+// Adds the card's prices before it opens (see withPrices in cards.js). When the database doesn't
+// answer, the card opens without them, and says so.
+async function loadPrices(card) {
+	try {
+		await withPrices(card);
+	} catch (error) {
+		console.error(error);
+		card.pricesFailed = true;
+	}
+	return card;
+}
 
 detail.addEventListener("click", (event) => {
 	const card = shownCards.find((shown) => shown.id === selectedCardId);
@@ -966,7 +985,7 @@ async function searchForCard(byViewer = false) {
 		if (found.learned) {
 			// Show the recognised card's own name and number, whatever was read.
 			nameInput.value = found.cards[0].name;
-			numberInput.value = found.cards[0].number + "/" + found.cards[0].set.printedTotal;
+			numberInput.value = collectorNumber(found.cards[0]);
 			scannedNumbers.shown = numberInput.value;
 		}
 		// Another of the guesses was the right number: show that one.
@@ -985,6 +1004,8 @@ async function searchForCard(byViewer = false) {
 			setStatus("learnedSuggested");
 			showResults(found.cards, found.description, null, null, found.suggestedIds);
 		} else if (found.cards.length === 1) {
+			await loadPrices(found.cards[0]);
+			if (searchId !== latestSearchId) return;
 			hideProgress();
 			setStatus(found.learned ? "learnedOpened" : "foundOne");
 			if (!found.exactFound) fixMisreadName(found.cards[0], guesses);
@@ -1012,6 +1033,8 @@ async function searchForCard(byViewer = false) {
 			const cards = firstPageWith(pick.cards, suggested);
 			const best = cards[0].id;
 			if (pick.clear) {
+				await loadPrices(cards[0]);
+				if (searchId !== latestSearchId) return;
 				setStatus("bestMatchOpened");
 				fixMisreadName(cards[0], guesses);
 				showResults(cards, found.description, best, best, suggested);
@@ -1166,7 +1189,7 @@ function resultButtonHtml(card) {
 	// Loaded the same way matcher.js loads it, so each picture downloads only once.
 	return `
 		<button class="result" type="button" data-card-id="${escapeHtml(card.id)}" aria-pressed="${card.id === selectedCardId}">
-			<img class="card-image" src="${escapeHtml(readablePictureUrl(card.images.small))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
+			<img class="card-image" src="${escapeHtml(readablePictureUrl(card.images && card.images.small))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
 			${badge}
 			<span class="result-name">${escapeHtml(card.name)}</span>
 			<span class="result-set">${escapeHtml(card.set.name)}<br><span class="mono">${escapeHtml(collectorNumber(card))}</span></span>
@@ -1205,7 +1228,7 @@ function cardDetailHtml(card) {
 
 	return `
 		<div class="detail-head">
-			<img class="card-image" src="${escapeHtml(readablePictureUrl(card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
+			<img class="card-image" src="${escapeHtml(readablePictureUrl(card.images && card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
 			<div>
 				<div class="name-row">
 					<h2 class="detail-name">${escapeHtml(card.name)}</h2>
@@ -1214,7 +1237,7 @@ function cardDetailHtml(card) {
 				<p class="detail-meta">${meta.join(" · ")}</p>
 			</div>
 		</div>
-		${versionsHtml(versions, version.key)}
+		${versionsHtml(versions, version.key, card.pricesFailed)}
 		${versions.length === 0 ? `<p>${storeLinkHtml(ebaySoldUrl(card, version), t("soldOnEbay"))}</p>` : ""}
 		${own}
 		${cardmarketTableHtml(card.cardmarket)}
@@ -1250,8 +1273,13 @@ function cardVersions(card) {
 			versions.push({ key: textKey, eur: null, usd: price.market > 0 ? price.market : null });
 		}
 	}
+	// Cardmarket has a "reverse holo" price for some cards never printed that way (Base Set Charizard):
+	// the database's list of a card's prints (card.variants) says whether there is one.
 	const reverse = firstPrice(cardmarket, CARDMARKET_REVERSE);
-	if (reverse !== null) findOrAddVersion(versions, ["reverseHolofoil"], "reverseHolofoil").eur = reverse;
+	const knowsPrints = card.variants && Object.keys(card.variants).length > 0;
+	if (reverse !== null && (!knowsPrints || card.variants.reverse)) {
+		findOrAddVersion(versions, ["reverseHolofoil"], "reverseHolofoil").eur = reverse;
+	}
 	const regular = firstPrice(cardmarket, CARDMARKET_REGULAR);
 	if (regular !== null) findOrAddVersion(versions, REGULAR_VERSIONS, "normal").eur = regular;
 	return versions;
@@ -1284,8 +1312,9 @@ function versionOf(card, pickedKey = chosenVersion || versionHint) {
 		|| { key: "normal", eur: null, usd: null };
 }
 
-function versionsHtml(versions, chosenKey) {
-	if (versions.length === 0) return `<p class="note">${t("noPrices")}</p>`;
+// pricesFailed: the database didn't answer when the card's prices were asked for.
+function versionsHtml(versions, chosenKey, pricesFailed = false) {
+	if (versions.length === 0) return `<p class="note">${t(pricesFailed ? "pricesFailed" : "noPrices")}</p>`;
 	const choosing = versions.length > 1;
 	const tiles = versions.map((version) => {
 		// The big price in whole kroner (the exact amounts are in the small print below it).
@@ -1425,7 +1454,7 @@ function gradedPricesHtml(card) {
 			${t("gradedFetchToggle")}
 		</label>
 		${left}`;
-	const known = gradedPricesOf(card.id, () => renderResults());
+	const known = gradedPricesOf(card, () => renderResults());
 	if (known.state === "off") return toggle + `<p class="note">${t("gradedOff")}</p>`;
 	if (known.state === "usedUp") return toggle + `<p class="note">${t("gradedUsedUp", { time: clockTime(psaRefillTime()) })}</p>`;
 	if (known.state === "loading") return toggle + `<p class="note">${t("gradedLoading")}</p>`;
@@ -1506,7 +1535,7 @@ function kidCardDetailHtml(card) {
 	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
 	return `
 		<div class="kid-card">
-			<img class="card-image kid-card-image" src="${escapeHtml(readablePictureUrl(card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
+			<img class="card-image kid-card-image" src="${escapeHtml(readablePictureUrl(card.images && card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
 			<div class="name-row">
 				<h2 class="detail-name">${escapeHtml(card.name)}</h2>
 				${readAloudButtonHtml()}
@@ -1845,6 +1874,13 @@ function savedCardHtml(entry) {
 		</li>`;
 }
 
+// Saved and learned cards from before version 1.32.0 get TCGdex's ids (see collection.js and
+// learned.js). Quietly: if the database doesn't answer, it is tried again the next time.
+function moveOldCardsToTcgdex() {
+	moveSavedCardsToTcgdex().then((changed) => { if (changed) renderCollection(); }, (error) => console.error(error));
+	moveLearnedToTcgdex().then((changed) => { if (changed) renderLearned(); }, (error) => console.error(error));
+}
+
 // ---------- Accounts ----------
 
 function handleAccountChange(username) {
@@ -1864,6 +1900,7 @@ function handleAccountChange(username) {
 			(photos) => {
 				useAccountLearned(photos);
 				renderLearned();
+				moveOldCardsToTcgdex();
 			},
 			(error) => {
 				console.error(error);
@@ -1881,6 +1918,7 @@ function handleAccountChange(username) {
 				renderCollection();
 				renderResults();
 				renderAccount();
+				moveOldCardsToTcgdex();
 			},
 			(error) => {
 				console.error(error);
@@ -1899,6 +1937,7 @@ function handleAccountChange(username) {
 	renderCollection();
 	renderResults();
 	renderClaudeSettings();   // shown only while signed in, with that account's key
+	moveOldCardsToTcgdex();   // the phone's cards were read again (an account's follow when they arrive)
 }
 
 function renderAccount() {

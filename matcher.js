@@ -78,7 +78,7 @@ async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = (
 		let distance = Infinity;   // a picture that doesn't load goes last
 		let corners = null;
 		try {
-			const picture = await loadPicture(card.images.small);
+			const picture = await loadPicture(card.images && card.images.small);
 			const wholeCard = { x0: 0, y0: 0, x1: picture.width, y1: picture.height };
 			distance = closestGridDistance(photoGrids, colourGrid(picture, artworkOf(wholeCard)));
 			if (photoCorners) corners = cornerDistance(photoCorners, picture, wholeCard);
@@ -389,15 +389,39 @@ function shrink(source, box, width, height) {
 	return result;
 }
 
+// Shown for a card neither database has a picture of: a plain grey card.
+const NO_PICTURE = "data:image/svg+xml," + encodeURIComponent(
+	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 245 342"><rect width="245" height="342" rx="12" fill="#9AA5B4"/>'
+	+ '<text x="122" y="200" font-family="sans-serif" font-size="110" text-anchor="middle" fill="#EDF0F5">?</text></svg>');
+// A picture that doesn't load is asked for once more after this long: the picture servers have
+// short hiccups ("no available server", September 2026).
+const PICTURE_RETRY_MS = 600;
+// Where TCGdex's pictures are (see readablePictureUrl).
+const TCGDEX_PICTURES = "https://assets.tcgdex.net/";
+
 // The address to use for a card picture everywhere in the app, together with
 // crossorigin="anonymous". The browser only lets a page read a picture's pixels when it was
 // fetched that way. A copy cached from a plain fetch of the same address would be refused,
-// so the added ending (which the image server ignores) keeps the two kinds apart.
+// so the added ending (which the image server ignores) keeps the two kinds apart. TCGdex's
+// picture server always allows reading - but given such an ending, it says so twice, and browsers
+// then refuse the picture (September 2026) - so its addresses stay as they are.
+// A card without any picture (url null) gets NO_PICTURE.
 function readablePictureUrl(url) {
-	return url + "?readable";
+	if (!url) return NO_PICTURE;
+	return url.startsWith(TCGDEX_PICTURES) ? url : url + "?readable";
 }
 
-function loadPicture(url) {
+async function loadPicture(url) {
+	if (!url) throw new Error("This card has no picture");
+	try {
+		return await loadPictureOnce(url);
+	} catch (problem) {
+		await new Promise((resolve) => setTimeout(resolve, PICTURE_RETRY_MS));
+		return loadPictureOnce(url);
+	}
+}
+
+function loadPictureOnce(url) {
 	// Waits for the "load" event rather than picture.decode(): browsers put decode() on hold
 	// while the page is hidden (say, the phone switched to another app), and never give up.
 	return new Promise((resolve, reject) => {
