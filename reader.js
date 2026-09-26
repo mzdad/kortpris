@@ -113,7 +113,26 @@ const NOT_NAME_WORDS = new Set([
 const POKEMON_KEYS = POKEMON_NAMES.map((name) => ({ name: name, key: lettersOnly(name) }));
 const OTHER_CARD_KEYS = [...TRAINER_NAMES, ...ENERGY_NAMES].map((name) => ({ name: name, key: lettersOnly(name) }));
 // Black Star promo cards have a code instead of a number out of a set size: "SWSH193", "SM60".
-const PROMO_NUMBER = /(?<![A-Za-z])(SWSH|HGSS|SM|XY|BW|DP)\s?(\d{1,3})(?!\d)/gi;
+// A few cards of older sets are numbered the same way: "SH10", "SL1", "RT1", "AR1".
+const PROMO_NUMBER = /(?<![A-Za-z])(SWSH|HGSS|SM|XY|BW|DP|SH|SL|RT|AR)\s?(\d{1,3}|0\d{3})(?!\d)/gi;
+// Scarlet & Violet promos print their set's code, the language and the number: "SVP EN 001".
+// The code sits white on black in a little box, and is only now and then read.
+const SVP_NUMBER = /SVP[^\d\/]{0,6}?(\d{1,3})(?![\d\/])/g;
+// Sets within a set, numbered with letters on both sides of the "/": "GG01/GG70" is card 1 of
+// Crown Zenith's Galarian Gallery. Tiny letters are often misread as digits ("6Go1/6670"), so
+// these numbers are recognised by their set size after the "/", which is always one of these.
+// digits: how many digits the number is padded to ("GG01"), or 0 when it isn't ("SV1").
+const LETTERED_SETS = [
+	{ letters: "GG", total: "70", digits: 2 },    // Crown Zenith Galarian Gallery
+	{ letters: "TG", total: "30", digits: 2 },    // Trainer Gallery, Brilliant Stars to Silver Tempest
+	{ letters: "SV", total: "122", digits: 3 },   // Shining Fates Shiny Vault
+	{ letters: "SV", total: "94", digits: 0 },    // Hidden Fates Shiny Vault
+	{ letters: "RC", total: "32", digits: 0 },    // Generations Radiant Collection
+	{ letters: "RC", total: "25", digits: 0 },    // Legendary Treasures Radiant Collection
+	{ letters: "H", total: "32", digits: 0 },     // Aquapolis and Skyridge holos
+];
+// What those tiny capital letters are misread as.
+const LETTER_LOOKALIKES = { G: "G6Cc", T: "T71I", S: "S5s$", V: "VvY", R: "Rr", C: "CcG(", H: "H" };
 
 let ocrWorkerPromise = null;
 // Whoever is reading a photo right now gets Tesseract's progress reports.
@@ -758,6 +777,16 @@ function numberCandidates(text) {
 	// A slash in tiny print can come out as an apostrophe: "13'64" is 13/64. Only straight
 	// between digits, so a height like "4' 11"" stays what it is.
 	cleaned = cleaned.replace(/(?<=\d)['’](?=\d)/g, "/");
+	const found = [];
+	// "GG01/GG70", "TG05/TG30", "SV1/SV94" first: their letters would otherwise be taken for
+	// digits, or cut off ("G05/TG30"). Each one found is blanked out, so it counts once.
+	for (const set of LETTERED_SETS) {
+		cleaned = cleaned.replace(letteredNumberPattern(set), (whole, before) => {
+			const number = letteredNumber(before, set);
+			if (number) found.push({ number: set.letters + number + "/" + set.letters + set.total, sawSlash: true });
+			return " ";
+		});
+	}
 	cleaned = fixDigitLookalikes(cleaned);
 	// Numbers printed near the collector number that are never it: Pokédex numbers ("#157",
 	// "No. 157"), levels ("LV. 57") and years ("©1995-2000").
@@ -765,10 +794,9 @@ function numberCandidates(text) {
 		.replace(/(#|No\.?\s*|LV\.?\s*)\d+/gi, " ")
 		.replace(/(?<!\d)(19|20)\d\d(?!\d)/g, " ");
 
-	const found = [];
-	// "4/102", "006/198", "TG05/TG30". Tiny print can turn the "/" into "|" or "\".
+	// "4/102", "006/198". Tiny print can turn the "/" into "|" or "\".
 	for (const match of cleaned.matchAll(/([A-Z]{0,3}\d{1,3})\s*[\/|\\]\s*([A-Z]{0,3}\d{2,3})(?!\d)/g)) {
-		if (Number(match[2]) > MAX_SET_SIZE) continue;   // plain digits only; "TG30" gives NaN
+		if (Number(match[2]) > MAX_SET_SIZE) continue;   // plain digits only; "RT30" gives NaN
 		// No card is number 0, so "0/110" is a misread number - but the set size after the "/"
 		// is still worth keeping: the search can compare the photo with every card of that size.
 		const number = /^0+$/.test(match[1]) ? UNREAD_NUMBER : match[1];
@@ -776,13 +804,44 @@ function numberCandidates(text) {
 	}
 	// A Black Star promo's code: "SWSH193". It is as sure a sign of the number as a "/".
 	for (const match of cleaned.matchAll(PROMO_NUMBER)) {
-		found.push({ number: match[1].toUpperCase() + match[2], sawSlash: true });
+		// No promo has four digits: "SWSH0001" is SWSH001 with a misread zero too many.
+		const digits = match[2].length === 4 ? match[2].slice(1) : match[2];
+		found.push({ number: match[1].toUpperCase() + digits, sawSlash: true });
+	}
+	for (const match of cleaned.matchAll(SVP_NUMBER)) {
+		found.push({ number: "SVP" + match[1], sawSlash: true });
 	}
 	// The "/" can also vanish altogether ("4102") or turn into a digit ("107130").
 	for (const digits of cleaned.match(/(?<!\d)\d{4,6}(?!\d)/g) || []) {
 		for (const number of splitNumberAndTotal(digits)) found.push({ number: number, sawSlash: false });
 	}
 	return found;
+}
+
+function letteredNumberPattern(set) {
+	// "6Go1/6670" for GG70: whatever was read before the "/", then the set's letters (or their
+	// lookalikes) and its size. After the size may come the rarity symbol, read as one more
+	// character ("RC1/RC320").
+	const letters = set.letters.split("").map((letter) => "[" + LETTER_LOOKALIKES[letter] + "]").join("");
+	return new RegExp("([A-Za-z0-9!$]{1,6})\\s?[\\/|\\\\]\\s?" + letters + "\\s?" + set.total + "[0-9@®©*]?(?![0-9])", "g");
+}
+
+function letteredNumber(before, set) {
+	// The number is the end of what was read before the "/", digits and digit lookalikes: "6Go1"
+	// is 01 of GG01, "RCS" is 5 of RC5. Returns "" when that doesn't make a number of this set.
+	const most = set.digits || 2;
+	let digits = "";
+	for (let i = before.length - 1; i >= 0 && digits.length < most; i--) {
+		const character = before[i];
+		const digit = /\d/.test(character) ? character : DIGIT_LOOKALIKES[character];
+		if (!digit) break;
+		// Before a number that isn't padded may come the set's own letters: the "S" of "SV1" is no 5.
+		if (set.digits === 0 && set.letters.includes(character.toUpperCase())) break;
+		digits = digit + digits;
+	}
+	if (set.digits > 0 && digits.length !== set.digits) return "";
+	if (digits === "" || Number(digits) === 0 || Number(digits) > Number(set.total)) return "";
+	return digits;
 }
 
 // Letters that tiny digits are often misread as.

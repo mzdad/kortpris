@@ -19,6 +19,9 @@ const RETRY_DELAY_MS = 400;
 // these sets, so a search on the number never finds them - they are added next to their
 // originals instead (see withReprints), and the photo decides which one it is (matcher.js).
 const ANNIVERSARY_REPRINT_SETS = ["me55c"];   // 30th Celebration: Classic Collection (2026)
+// Promo sets whose cards print a code before a plain number: "SVP EN 001" is card 1 of the
+// Scarlet & Violet Black Star promos, which the database numbers just "1" in set "svp".
+const PROMO_SET_CODES = { SVP: "svp" };
 
 // The reprints, fetched once: the sets are small (30 cards).
 let reprintsPromise = null;
@@ -37,8 +40,9 @@ let reprintsPromise = null;
 // matcher.js.
 async function findCards(name, numberText, withPhoto = false, numberGuesses = []) {
 	const nameWord = longestWord(name);
-	const { number, total } = parseCollectorNumber(numberText);
-	const attempts = buildSearchAttempts(nameWord, number, total);
+	const parsedNumber = parseCollectorNumber(numberText);
+	const { number, total } = parsedNumber;
+	const attempts = buildSearchAttempts(nameWord, parsedNumber);
 
 	// Without a photo: the first search that finds anything wins.
 	if (!withPhoto) {
@@ -71,11 +75,10 @@ async function findCards(name, numberText, withPhoto = false, numberGuesses = []
 	// "Pokéman" means the name is the misread part.
 	for (const guess of guesses) {
 		const parsed = parseCollectorNumber(guess);
-		const alreadyInAttempts = parsed.number === number && parsed.total === total;
+		const alreadyInAttempts = parsed.number === number && parsed.total === total && parsed.set === parsedNumber.set;
 		if (alreadyInAttempts) continue;
 		// A promo's code alone fits just one card or two ("SWSH193").
-		if (isPromoCode(parsed)) looserAttempts.push({ query: "number:" + parsed.number });
-		else if (parsed.number && parsed.total) looserAttempts.push({ query: "number:" + parsed.number + " set.printedTotal:" + parsed.total });
+		if (isPromoCode(parsed) || (parsed.number && parsed.total)) looserAttempts.push({ query: numberQuery(parsed) });
 	}
 	const pile = new Map();
 	let totalCount = 0;
@@ -120,15 +123,12 @@ async function findExactCards(name, guesses) {
 	if (!nameWord) return null;
 	for (const guess of guesses) {
 		const parsed = parseCollectorNumber(guess);
-		const promo = isPromoCode(parsed);
-		if (!parsed.number || (!parsed.total && !promo)) continue;
-		let query = nameQueryFor(nameWord) + " number:" + parsed.number;
-		if (!promo) query += " set.printedTotal:" + parsed.total;
-		const page = await fetchCardPage(query, RESULTS_PAGE_SIZE);
+		if (!parsed.number || (!parsed.total && !isPromoCode(parsed))) continue;
+		const page = await fetchCardPage(nameQueryFor(nameWord) + " " + numberQuery(parsed), RESULTS_PAGE_SIZE);
 		if (page.cards.length > 0) {
 			return {
 				cards: await withReprints(page.cards),
-				description: { key: "matchExact", values: { name: nameWord, number: promo ? parsed.number : parsed.number + "/" + parsed.total } },
+				description: { key: "matchExact", values: { name: nameWord, number: shownNumber(parsed) } },
 				totalCount: page.totalCount,
 				exactFound: true,
 				matchedNumber: guess,
@@ -181,9 +181,43 @@ function isReprintOf(reprint, card) {
 		&& reprint.number === card.number;
 }
 
-// A Black Star promo's code, like "SWSH193": letters then digits, and no set size.
+// A Black Star promo's code, like "SWSH193" or "SVP 001": letters then digits, and no set size.
+// Also the numbers of a set within a set, "GG01/GG70": their set size isn't the whole set's.
 function isPromoCode(parsed) {
-	return parsed.total === "" && /^[A-Z]+\d+$/.test(parsed.number);
+	return parsed.total === "" && (parsed.set !== "" || /^[A-Z]+\d+$/.test(parsed.number));
+}
+
+function numberQuery(parsed) {
+	// The database query for a collector number, with the set size when there is one.
+	const query = cardNumberQuery(parsed);
+	return parsed.total ? query + " set.printedTotal:" + parsed.total : query;
+}
+
+function cardNumberQuery(parsed) {
+	// The card's own number, from any set - or from the one set its promo code names.
+	if (parsed.set) return "set.id:" + parsed.set + " number:" + parsed.number;
+	const spellings = numberSpellings(parsed.number);
+	if (spellings.length === 1) return "number:" + parsed.number;
+	return "(" + spellings.map((spelling) => "number:" + spelling).join(" OR ") + ")";
+}
+
+function numberSpellings(number) {
+	// A promo code with one zero more or less, as tiny print easily gains or loses one: "XY001"
+	// is XY01, "SWSH0001" is SWSH001. Plain numbers have only the one spelling.
+	const code = number.match(/^([A-Z]+)(\d+)$/);
+	if (!code) return [number];
+	const letters = code[1];
+	const digits = code[2];
+	const spellings = [number];
+	if (digits.startsWith("0")) spellings.push(letters + digits.slice(1));
+	if (digits.length === 2) spellings.push(letters + "0" + digits);
+	return spellings;
+}
+
+function shownNumber(parsed) {
+	// A number as the texts show it: "4/102", "SWSH193", "SVP 1".
+	if (parsed.set) return parsed.set.toUpperCase() + " " + parsed.number;
+	return parsed.total ? parsed.number + "/" + parsed.total : parsed.number;
 }
 
 // True when there is enough to search on: a name, a number, or at least a set size ("?/110").
@@ -205,11 +239,16 @@ function longestWord(name) {
 
 function parseCollectorNumber(text) {
 	// "4/102" becomes number "4" and total "102". Plain digits lose their leading
-	// zeros ("006" -> "6") because the database stores them that way.
+	// zeros ("006" -> "6") because the database stores them that way. set is the database's set
+	// when a promo code names one: "SVP EN 001" is number "1" of set "svp".
 	const [numberPart = "", totalPart = ""] = text.toUpperCase().replace(/\s+/g, "").split("/");
+	const promo = numberPart.match(/^([A-Z]+?)(?:EN)?(\d+)$/);
+	if (promo && PROMO_SET_CODES[promo[1]] && totalPart === "") {
+		return { number: String(Number(promo[2])), total: "", set: PROMO_SET_CODES[promo[1]] };
+	}
 	const number = /^\d+$/.test(numberPart) ? String(Number(numberPart)) : numberPart.replace(/[^A-Z0-9]/g, "");
 	const total = /^\d+$/.test(totalPart) ? String(Number(totalPart)) : "";
-	return { number, total };
+	return { number, total, set: "" };
 }
 
 function nameQueryFor(nameWord) {
@@ -217,22 +256,23 @@ function nameQueryFor(nameWord) {
 	return 'name:"' + nameWord + '*"';
 }
 
-function buildSearchAttempts(nameWord, number, total) {
+function buildSearchAttempts(nameWord, parsed) {
 	// Each attempt is a database query plus the text explaining what it found.
 	const nameQuery = nameQueryFor(nameWord);
-	const shownNumber = total ? number + "/" + total : number;
+	const { number, total } = parsed;
+	const shown = shownNumber(parsed);
 	const attempts = [];
 	if (nameWord && number && total) {
 		attempts.push({
-			query: nameQuery + " number:" + number + " set.printedTotal:" + total,
-			description: { key: "matchExact", values: { name: nameWord, number: shownNumber } },
+			query: nameQuery + " " + numberQuery(parsed),
+			description: { key: "matchExact", values: { name: nameWord, number: shown } },
 			exact: true,
 		});
 	}
 	if (nameWord && number) {
 		attempts.push({
-			query: nameQuery + " number:" + number,
-			description: { key: "matchAnySet", values: { name: nameWord, number: number } },
+			query: nameQuery + " " + cardNumberQuery(parsed),
+			description: { key: "matchAnySet", values: { name: nameWord, number: shownNumber({ ...parsed, total: "" }) } },
 		});
 	}
 	if (nameWord && total) {
@@ -244,10 +284,10 @@ function buildSearchAttempts(nameWord, number, total) {
 	}
 	if (number && total) {
 		attempts.push({
-			query: "number:" + number + " set.printedTotal:" + total,
+			query: numberQuery(parsed),
 			description: nameWord
-				? { key: "matchNumberNameMissed", values: { name: nameWord, number: shownNumber } }
-				: { key: "matchNumberOnly", values: { number: shownNumber } },
+				? { key: "matchNumberNameMissed", values: { name: nameWord, number: shown } }
+				: { key: "matchNumberOnly", values: { number: shown } },
 		});
 	}
 	// The last two are "loose": they can fit a great many cards.
@@ -260,8 +300,8 @@ function buildSearchAttempts(nameWord, number, total) {
 	}
 	if (!nameWord && number && !total) {
 		attempts.push({
-			query: "number:" + number,
-			description: { key: "matchNumberNoTotal", values: { number: number } },
+			query: cardNumberQuery(parsed),
+			description: { key: "matchNumberNoTotal", values: { number: shown } },
 			loose: true,
 		});
 	}

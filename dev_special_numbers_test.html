@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kortpris special numbers test</title>
+<style>
+	body { font: 14px/1.45 system-ui, sans-serif; margin: 0; padding: 16px; background: #EDF0F5; color: #141C28; }
+	h1 { font-size: 1.3rem; margin: 0 0 4px; }
+	p { margin: 0 0 12px; max-width: 75ch; }
+	#summary { font-weight: 700; font-size: 1.05rem; }
+	.table-wrap { overflow-x: auto; }
+	table { border-collapse: collapse; background: #fff; }
+	th, td { padding: 6px 10px; border-bottom: 1px solid #D6DCE6; text-align: left; vertical-align: top; }
+	th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #586579; }
+	.pass { color: #1E7A4C; font-weight: 700; }
+	.fail { color: #B3261E; font-weight: 700; }
+	code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Kortpris special numbers test</h1>
+<p>Development tool, not part of the app. Cards whose number isn't "number/set size": Black Star promos
+("SWSH050", "SVP EN 001"), Galarian and Trainer Gallery ("GG01/GG70", "TG05/TG30"), Shiny Vault
+("SV1/SV94"), Radiant Collection ("RC1/RC32") and Aquapolis/Skyridge holos ("H1/H32"). It makes a fake
+phone photo of each from the database's own picture, runs it through the app's reader and search, and
+scores the result. The last column shows how the number corners were read.</p>
+<p id="summary">Running…</p>
+<div class="table-wrap">
+	<table>
+		<thead><tr><th>Card</th><th>Printed</th><th>Number read</th><th>Found</th><th>Seconds</th><th>Number corners read as</th></tr></thead>
+		<tbody id="rows"></tbody>
+	</table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
+<script src="pokemon-names.js?v=1.27.0"></script>
+<script src="card-names.js?v=1.27.0"></script>
+<script src="card-finder.js?v=1.27.0"></script>
+<script src="sparkle.js?v=1.27.0"></script>
+<script src="reader.js?v=1.27.0"></script>
+<script src="cards.js?v=1.27.0"></script>
+<script src="matcher.js?v=1.27.0"></script>
+<script>
+"use strict";
+
+// printed: what the card's corner says. number: the database's number for it.
+const TEST_CARDS = [
+	{ id: "svp-1", printed: "SVP EN 001", number: "1" },
+	{ id: "svp-27", printed: "SVP EN 027", number: "27" },
+	{ id: "svp-50", printed: "SVP EN 050", number: "50" },
+	{ id: "svp-160", printed: "SVP EN 160", number: "160" },
+	{ id: "swsh12pt5gg-GG01", printed: "GG01/GG70", number: "GG01" },
+	{ id: "swsh12pt5gg-GG44", printed: "GG44/GG70", number: "GG44" },
+	{ id: "swsh9tg-TG05", printed: "TG05/TG30", number: "TG05" },
+	{ id: "swsh11tg-TG12", printed: "TG12/TG30", number: "TG12" },
+	{ id: "sma-SV1", printed: "SV1/SV94", number: "SV1" },
+	{ id: "sma-SV49", printed: "SV49/SV94", number: "SV49" },
+	{ id: "swsh45sv-SV001", printed: "SV001/SV122", number: "SV001" },
+	{ id: "swsh45sv-SV107", printed: "SV107/SV122", number: "SV107" },
+	{ id: "g1-RC1", printed: "RC1/RC32", number: "RC1" },
+	{ id: "g1-RC25", printed: "RC25/RC32", number: "RC25" },
+	{ id: "bw11-RC5", printed: "RC5/RC25", number: "RC5" },
+	{ id: "ecard2-H1", printed: "H1/H32", number: "H1" },
+	{ id: "ecard3-H10", printed: "H10/H32", number: "H10" },
+	{ id: "xyp-XY01", printed: "XY01", number: "XY01" },
+	{ id: "xyp-XY124", printed: "XY124", number: "XY124" },
+	{ id: "smp-SM01", printed: "SM01", number: "SM01" },
+	{ id: "smp-SM210", printed: "SM210", number: "SM210" },
+	{ id: "bwp-BW004", printed: "BW004", number: "BW004" },
+	{ id: "bwp-BW50", printed: "BW50", number: "BW50" },
+	{ id: "dpp-DP01", printed: "DP01", number: "DP01" },
+	{ id: "hsp-HGSS01", printed: "HGSS01", number: "HGSS01" },
+	{ id: "swshp-SWSH001", printed: "SWSH001", number: "SWSH001" },
+	{ id: "swshp-SWSH050", printed: "SWSH050", number: "SWSH050" },
+];
+// A fairly kind phone photo: the database's pictures are only 1024 pixels tall, so the tiny
+// print already has far less detail than in a real photo.
+const PHOTO_WIDTH = 3000;
+const PHOTO_HEIGHT = 4000;
+const TABLE_COLOURS = ["#8B6B4A", "#5E6670", "#2E3440"];
+const RANDOM_SEED = 7;
+// ?only=svp,GG runs just the cards whose id contains one of these.
+const only = new URLSearchParams(location.search).get("only");
+
+// Every text read in the number corners, to show how the special numbers come out.
+const cornerTexts = [];
+const realNumberCandidates = window.numberCandidates;
+window.numberCandidates = function (text) {
+	cornerTexts.push(text.replace(/\s+/g, " ").trim());
+	return realNumberCandidates(text);
+};
+
+const rows = document.getElementById("rows");
+const summary = document.getElementById("summary");
+
+runAllTests();
+
+async function runAllTests() {
+	const cards = only ? TEST_CARDS.filter((card) => only.split(",").some((part) => card.id.includes(part))) : TEST_CARDS;
+	const random = seededRandom(RANDOM_SEED);
+	const scores = { total: 0, number: 0, first: 0, openedRight: 0, openedWrong: 0 };
+	const allRows = [];
+	for (const card of TEST_CARDS) {
+		// Every card's photo is made, so ?only= gives each the same photo as a full run.
+		const photo = await makeFakePhoto(await loadImage(hiresImageUrl(card.id)), random);
+		if (!cards.includes(card)) continue;
+		const row = await testOnePhoto(card, photo);
+		allRows.push({ id: card.id, ...row });
+		scores.total++;
+		if (row.numberOk) scores.number++;
+		if (row.foundAt === 0) scores.first++;
+		if (row.opened && row.foundAt === 0) scores.openedRight++;
+		if (row.opened && row.foundAt !== 0) scores.openedWrong++;
+		summary.textContent = "Running… " + scores.total + " of " + cards.length;
+	}
+	const line = "Number read " + scores.number + "/" + scores.total
+		+ " · shown first " + scores.first + "/" + scores.total
+		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong";
+	summary.textContent = line;
+	console.log("SPECIAL NUMBERS TEST: " + line);
+	window.testScores = scores;   // lets a script read the result
+	window.testRows = allRows;
+}
+
+async function testOnePhoto(card, photo) {
+	const started = performance.now();
+	cornerTexts.length = 0;
+	const reading = await readCardPhoto(photo);
+	const texts = cornerTexts.slice();
+	// Right when the number read names the card's number ("BW0004" does name BW004).
+	const numberOk = numberSpellings(parseCollectorNumber(reading.number || "").number).includes(card.number);
+	let foundAt = -1;
+	let opened = false;   // would the app open a card's prices without asking?
+	let error = "";
+	try {
+		// The same steps as the app (searchForCard in app.js), without the screen.
+		const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
+		const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
+		const located = reading.cardBox !== null || reading.textArea !== null;
+		const pick = found.cards.length === 1
+			? { cards: found.cards, clear: true }
+			: pickBestMatch(ranked, located, found.setSizes, "", found.numbersRead, Boolean(reading.sparkle && reading.sparkle.reverseHolo));
+		foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
+		opened = pick.cards.length > 0 && pick.clear;
+	} catch (problem) {
+		error = String(problem);
+	}
+	const row = { name: reading.name, number: reading.number, numberOk, foundAt, opened, seconds: (performance.now() - started) / 1000 };
+	addRow(card, row, texts, error);
+	return row;
+}
+
+function addRow(card, row, texts, error) {
+	const found = error || (row.foundAt < 0 ? "not found" : "position " + (row.foundAt + 1) + (row.opened ? ", opened" : ""));
+	const cells = [
+		card.id + "<br>" + safe(row.name || "(no name)"),
+		card.printed,
+		mark(row.numberOk, row.number || "(nothing)"),
+		mark(row.foundAt === 0 && row.opened, found) + (row.opened && row.foundAt !== 0 ? " <b>WRONG</b>" : ""),
+		row.seconds.toFixed(1),
+		"<code>" + safe(texts.filter((text) => text.length < 160).join(" ‖ ")) + "</code>",
+	];
+	const tr = document.createElement("tr");
+	tr.innerHTML = cells.map((content) => "<td>" + content + "</td>").join("");
+	rows.append(tr);
+}
+
+function mark(ok, text) {
+	return `<span class="${ok ? "pass" : "fail"}">${ok ? "PASS" : "FAIL"}</span> <code>${safe(text)}</code>`;
+}
+
+function safe(text) {
+	return String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+}
+
+// ---------- Fake phone photos ----------
+
+async function makeFakePhoto(cardImage, random) {
+	const canvas = document.createElement("canvas");
+	canvas.width = PHOTO_WIDTH;
+	canvas.height = PHOTO_HEIGHT;
+	const ctx = canvas.getContext("2d", { willReadFrequently: true });
+	ctx.fillStyle = TABLE_COLOURS[Math.floor(random() * TABLE_COLOURS.length)];
+	ctx.fillRect(0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
+	// The card: a little smaller than the photo, slightly off-centre and tilted, a little soft.
+	const cardHeight = PHOTO_HEIGHT * between(random, 0.78, 0.86);
+	const cardWidth = cardHeight * cardImage.width / cardImage.height;
+	ctx.save();
+	ctx.translate(PHOTO_WIDTH / 2 + between(random, -0.04, 0.04) * PHOTO_WIDTH, PHOTO_HEIGHT / 2 + between(random, -0.03, 0.03) * PHOTO_HEIGHT);
+	ctx.rotate(between(random, -2, 2) * Math.PI / 180);
+	ctx.imageSmoothingQuality = "high";
+	ctx.filter = "blur(1.5px)";
+	ctx.drawImage(cardImage, -cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight);
+	ctx.restore();
+	// Camera speckle.
+	const pixels = ctx.getImageData(0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
+	for (let i = 0; i < pixels.data.length; i += 4) {
+		const speck = (random() - 0.5) * 10;
+		pixels.data[i] += speck;
+		pixels.data[i + 1] += speck;
+		pixels.data[i + 2] += speck;
+	}
+	ctx.putImageData(pixels, 0, 0);
+	return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+}
+
+function hiresImageUrl(cardId) {
+	const dash = cardId.lastIndexOf("-");
+	return "https://images.pokemontcg.io/" + cardId.slice(0, dash) + "/" + cardId.slice(dash + 1) + "_hires.png";
+}
+
+function loadImage(url) {
+	// The "load" event, not decode(): decode() stalls while the page is hidden.
+	return new Promise((resolve, reject) => {
+		const image = new Image();
+		image.crossOrigin = "anonymous";   // allowed by the image server, and keeps the canvas readable
+		image.onload = () => resolve(image);
+		image.onerror = () => reject(new Error("Card picture didn't load: " + url));
+		image.src = url;
+	});
+}
+
+function between(random, low, high) {
+	return low + random() * (high - low);
+}
+
+function seededRandom(seed) {
+	// Mulberry32: a tiny random number generator that gives the same sequence for the same seed.
+	return function () {
+		seed |= 0;
+		seed = (seed + 0x6D2B79F5) | 0;
+		let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+		x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+		return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+	};
+}
+</script>
+</body>
+</html>

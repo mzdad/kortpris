@@ -1043,10 +1043,12 @@ function fixMisreadName(card, guesses) {
 }
 
 function sameCollectorNumber(card, numberText) {
-	// A promo's code ("SWSH193") has no set size to compare.
+	// A promo's code ("SWSH193") has no set size to compare, but may name the set ("SVP 001").
 	const read = parseCollectorNumber(numberText);
 	const printed = parseCollectorNumber(card.number + "/" + card.set.printedTotal);
-	return read.number !== "" && read.number === printed.number && (read.total === printed.total || isPromoCode(read));
+	if (read.set && read.set !== card.set.id) return false;
+	return read.number !== "" && numberSpellings(read.number).includes(printed.number)
+		&& (read.total === printed.total || isPromoCode(read));
 }
 
 function onlySetSizeFits(card, numberText) {

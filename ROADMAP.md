@@ -5,6 +5,20 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.27.0
+
+- **1.2 Special numbers are read.** Scarlet & Violet promos ("SVP EN 001") are looked for in their
+  own set. Numbers of a set within a set are recognised by the set size after the "/", even when
+  their tiny letters are misread as digits ("6Go1/6670" is GG01/GG70): Galarian Gallery, Trainer
+  Gallery ("TG05/TG30"), both Shiny Vaults ("SV1/SV94", "SV001/SV122"), Radiant Collection
+  ("RC1/RC32") and the Aquapolis and Skyridge holos ("H1/H32"). Old one-off codes ("SH10", "SL1",
+  "RT1", "AR1") count as promo codes, and a promo code read with a zero too many or too few
+  ("XY001", "SWSH0001") still finds its card. In fake photos of 27 such cards: 18 numbers read
+  (10 before), 22 opened by themselves (20), none wrong; a Trainer Gallery card that wasn't found
+  at all now opens (`dev_special_numbers_test.html`). Not solved: the "SVP" code is printed white
+  on black and is only read now and then, so most of these promos still open by their look alone
+  (which works). Mega Evolution promos ("MEP") aren't in the free database yet.
+
 ## Done in 1.26.0
 
 - **1.1 The camera frame is the card's outline.** A photo from the app's camera tells the reader
@@ -32,11 +46,11 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 1.2 | **Newer promo and gallery numbers**: Scarlet & Violet promos ("SVP EN 001"), Galarian Gallery ("GG01/GG70"). | They read as nothing today, like "SWSH193" did. | S |
 | 1.3 | **Full-art and gold cards**: the name and number sit on the artwork. | The reader loses text on busy backgrounds; the "ink only" copy used for numbers could help names too. | M |
 | 1.4 | **Learned cards as suggestions**: a learned card that looks somewhat like the photo, but not clearly enough to open, is added to the cards the photo is compared with. | Today a learned card either opens or plays no part. | S |
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.6 | **A second look at the number in any photo**: when the reads don't agree, read the number corner again from a slightly bigger and smaller cut of the card. | In 1.26.0 a second cut (the camera frame) turned 11 read numbers into 13. Photos from the phone's own camera have no frame, but could get the same second chance. | S |
+| 1.7 | **The set's code on newer cards**: since Scarlet & Violet, cards print their set's code by the number ("PAL EN 123/193"). Read it with the colours turned around, as it is white on black. | The code names the set exactly; today the set is guessed from its size, which several sets share. In 1.27.0 the "SVP" code was read in only about 1 of 3 tries. | M |
 
 ## 2. Quicker
 

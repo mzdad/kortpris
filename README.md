@@ -7,8 +7,11 @@ Photograph a Pokémon card on your phone and see what it sells for.
 A web page with nothing to install. What happens to a photo:
 
 1. **Photo → text.** [Tesseract.js](https://github.com/naptha/tesseract.js) reads the
-   card's name and collector number (like `4/102`, or a promo's code like `SWSH193`) on the
-   phone itself. The name is checked against all 1025 Pokémon names and every Trainer and Energy
+   card's name and collector number (like `4/102`, or a promo's code like `SWSH193` or
+   `SVP EN 001`) on the phone itself. Numbers of a set within a set, like `GG01/GG70` (Galarian
+   Gallery) or `TG05/TG30` (Trainer Gallery), are recognised by the set size after the "/", as
+   their tiny letters are often misread as digits: "6Go1/6670" is GG01 (`LETTERED_SETS` in
+   `reader.js`). The name is checked against all 1025 Pokémon names and every Trainer and Energy
    card's name (`card-names.js`), so small misreads get corrected. The card is
    found in the photo by its yellow border, or, for silver-bordered and foil cards, by its
    shape (`card-finder.js`). The number is then read again from the full-size photo, in the
@@ -139,14 +142,15 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `dev_reading_test.html` | Development tool, not part of the app (see below) |
 | `dev_real_photos_test.html` | Development tool: runs real photos from the private `dev-local/` folder |
 | `dev_learning_test.html` | Development tool: checks that learned cards are recognised, and nothing else is |
+| `dev_special_numbers_test.html` | Development tool: promos, gallery and other lettered numbers (see below) |
 
 ## Publishing a change
 
 Every push to `main` goes live within a minute or two. Before pushing, raise the version
-number `?v=...` on our own files in `index.html` (and in the three `dev_` test pages), for example:
+number `?v=...` on our own files in `index.html` (and in the four `dev_` test pages), for example:
 
 ```bash
-sed -i 's/?v=1.10.0/?v=1.10.1/g' index.html dev_reading_test.html dev_real_photos_test.html dev_learning_test.html
+sed -i 's/?v=1.10.0/?v=1.10.1/g' index.html dev_reading_test.html dev_real_photos_test.html dev_learning_test.html dev_special_numbers_test.html
 ```
 
 The page shows that number at the bottom ("Kortpris version 1.10.0"), so it's easy to check which
@@ -188,6 +192,10 @@ sent through a chat app are shrunk to half the size or less on the way.
 
 The number scores in the fake-photo test are pessimistic: the fakes are made from 1024-pixel card
 pictures, so their tiny print has far less detail than a real phone photo.
+
+<http://localhost:8765/dev_special_numbers_test.html> does the same for 27 cards with unusual
+numbers: Black Star promos, Galarian and Trainer Gallery, Shiny Vault, Radiant Collection and the
+Aquapolis/Skyridge holos. `?only=svp,GG` runs just some of them.
 
 ## Things to know
 
