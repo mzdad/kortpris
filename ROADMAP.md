@@ -144,7 +144,32 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 5.1 | **Move to another card database before 1 March 2027.** First a trial of TCGdex (free, no key, open to web pages): can it find everything the app needs, fast and reliably? Then the app's search is rebuilt on it. | pokemontcg.io, where every card, picture and price comes from, is being shut down. TCGdex has Cardmarket and TCGplayer prices updated daily (pokemontcg.io's Cardmarket prices were months old). Some of its set ids differ (Legendary Collection is "lc", not "base6"), so saved and learned cards must be translated. The paid alternative is Scrydex (2.6). | L |
+| 5.1 | **Move to TCGdex before 1 March 2027.** The trial (27 September 2026) says yes; the rebuild plan is below. | pokemontcg.io, where every card, picture and price comes from, is being shut down. The paid alternative is Scrydex (2.6). | L |
+
+**The TCGdex trial (27 September 2026).** TCGdex (api.tcgdex.net) is free, needs no key, and answers
+web pages directly, pictures included. Of 40 requests none failed (pokemontcg.io fails about half),
+at about 0.1 seconds per card and 0.2 per name search. Its prices are from the same day, where
+pokemontcg.io's Cardmarket prices were months old: Cardmarket (with the reverse holo prices) and
+TCGplayer per version, and each card says which versions exist (normal, reverse, holo, 1st
+edition). It has 220 sets, newer ones than pokemontcg.io and the Mega Evolution promos (MEP), and
+the gallery and vault cards as small sets of their own whose size is the number after the "/"
+("GG30/GG70" is Crown Zenith Galarian Gallery, 70 cards). Its differences, which the rebuild must
+handle:
+
+- Searching: its GraphQL search finds cards by name (any part of it) and number, with each card's
+  set and set size, in one question; the set size is then checked by the app. Every set's name,
+  size and release date comes in one more question, kept on the phone. Prices come one card at a
+  time, so only for the cards shown. Its digital TCG Pocket sets (series "tcgp") are left out.
+- Ids: many are the same ("base1-4", "swsh7-215"), some not: Legendary Collection is "lc-86", 151
+  is "sv03.5-025" and Mega Evolution "me01-001" (three digits), the galleries are "swsh12.5gg-GG30"
+  and "swsh4.5sv-SV001". Saved and learned cards keep their set's name and number, so they can be
+  translated once, and so must the test pages' card lists.
+- The 30th Classic Collection reprints are numbered 1 to 30 there, not with their original's
+  number, and had no pictures yet ten days after release: their check must go by name, and wait for
+  the pictures.
+- The PSA relay finds a card's TCGplayer number through pokemontcg.io, which is going too; TCGdex
+  gives that number itself. The Cardmarket link must be checked in a browser (Cardmarket refused a
+  test from the command line).
 
 ## Not planned
 
