@@ -5,6 +5,17 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.32.1
+
+- **Updates reach the phone at once, and the move to TCGdex brings today's prices.** After 1.32.0
+  the total in My cards didn't change on your phone. Most likely it still ran the version before:
+  a phone may keep the start page for up to ten minutes (GitHub Pages), and the test browser did
+  just that. Now the app asks for the newest start page as it opens, and when that is another
+  version, loads again, once. And the cards translated to TCGdex (see 5.1) get today's prices at
+  the same time, so the total is right without pressing "Update prices": 5,706 kr became 11,507
+  kr in the test browser's made-up collection. Also: cards saved before versions were kept now
+  get their main version's price, not the one last picked on the Scan screen.
+
 ## Done in 1.32.0
 
 - **5.1 The app runs on TCGdex.** pokemontcg.io, where every card, picture and price came from, is
@@ -149,7 +160,7 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 3.1 | **Install it as an app** (home screen icon, opens full screen, starts instantly, My cards works without internet). | Feels like a real app; files load from the phone. Also stops updates from mixing old and new files. | M |
+| 3.1 | **Install it as an app** (home screen icon, opens full screen, starts instantly, My cards works without internet). | Feels like a real app; files load from the phone. (Since 1.32.1 the app already loads a newer version as it opens.) | M |
 | 3.2 | **Take the photo by itself** when the card fills the frame and the phone is still. | No button to press; great for kids. The steadiness measure exists already. | M |
 | 3.3 | **Scan several cards in a row**: after each card, "Save and next" goes straight back to the camera. | Adding a stack of cards to My cards is many taps today. | S |
 | 3.4 | **My cards: sort and filter** (by value, set, name, newest) and share the list. | The list grows long. | M |

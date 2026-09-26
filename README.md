@@ -172,7 +172,10 @@ sed -i 's/?v=1.10.0/?v=1.10.1/g' index.html dev_reading_test.html dev_real_photo
 
 The page shows that number at the bottom ("Kortpris version 1.10.0"), so it's easy to check which
 version a phone has. It also makes browsers fetch a matching set of files, instead of mixing
-new ones with old cached copies, which could break the app for up to ten minutes.
+new ones with old cached copies, which could break the app for up to ten minutes. A phone may
+still keep the start page itself for up to ten minutes (GitHub Pages) and open the version from
+before an update, so the app asks for the newest start page as it opens, and loads again, once,
+when that names another version (`reloadIfNewerVersion` in `app.js`).
 
 ## Run it on the computer
 

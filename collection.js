@@ -132,10 +132,18 @@ function addToCollection(card, version) {
 	return saveCollection();
 }
 
+// Adds their prices to these cards, a few at a time (see withPrices in cards.js).
+async function withPricesOf(cards) {
+	for (let at = 0; at < cards.length; at += PRICE_REQUESTS_AT_ONCE) {
+		await Promise.all(cards.slice(at, at + PRICE_REQUESTS_AT_ONCE).map((card) => withPrices(card)));
+	}
+}
+
 // Cards saved before version 1.32.0 have the old card database's ids (pokemontcg.io). They get
-// TCGdex's once, with its picture, set name and number, and are marked db: "tcgdex"; the old id is
-// kept as oldId, just in case. A card TCGdex doesn't have keeps its old id, and is tried again next
-// time. Returns true when something changed.
+// TCGdex's once, with its picture, set name and number - and today's prices, as the old database's
+// were often months old - and are marked db: "tcgdex"; the old id is kept as oldId, just in case. A
+// card TCGdex doesn't have keeps its old id, and is tried again next time. Returns true when
+// something changed.
 let movingSavedCards = false;
 async function moveSavedCardsToTcgdex() {
 	if (movingSavedCards || !collectionReady()) return false;
@@ -145,6 +153,11 @@ async function moveSavedCardsToTcgdex() {
 	try {
 		const current = await currentCardIds(oldIds);
 		const cards = await findCardsById([...new Set(current.values())]);
+		try {
+			await withPricesOf(cards);
+		} catch (error) {
+			console.error(error);   // those without prices keep their old ones until "Update prices"
+		}
 		// The list may have been read again meanwhile (signing in or out, another phone): the cards
 		// in it now are the ones translated - by their old id, which fits any list.
 		if (!collectionReady()) return false;
@@ -163,6 +176,7 @@ async function moveSavedCardsToTcgdex() {
 				kind: card.supertype,
 				db: CARD_DATABASE,
 			});
+			if (card.pricesLoaded) Object.assign(entry, pricesOf(card, entry.version));
 			changed = true;
 		}
 		if (!changed) return false;
@@ -196,8 +210,9 @@ function changeSavedCount(cardId, version, change) {
 }
 
 function pricesOf(card, version) {
-	// The saved version's prices: Cardmarket in euros, TCGplayer in dollars.
-	const chosen = versionOf(card, version);
+	// The saved version's prices: Cardmarket in euros, TCGplayer in dollars. A card saved before
+	// versions were kept gets its main version's, not the one last picked on the Scan screen.
+	const chosen = versionOf(card, version || null);
 	return {
 		priceEur: chosen.eur,
 		updatedAt: card.cardmarket ? card.cardmarket.updatedAt : null,
@@ -209,9 +224,7 @@ async function refreshCollectionPrices() {
 	const ids = [...new Set(collection.map((saved) => saved.id))];   // each card once, even if saved in two versions
 	for (let start = 0; start < ids.length; start += REFRESH_BATCH_SIZE) {
 		const cards = await findCardsById(ids.slice(start, start + REFRESH_BATCH_SIZE));
-		for (let at = 0; at < cards.length; at += PRICE_REQUESTS_AT_ONCE) {
-			await Promise.all(cards.slice(at, at + PRICE_REQUESTS_AT_ONCE).map((card) => withPrices(card)));
-		}
+		await withPricesOf(cards);
 		for (const card of cards) {
 			for (const entry of collection.filter((saved) => saved.id === card.id)) {
 				Object.assign(entry, pricesOf(card, entry.version));

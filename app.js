@@ -225,7 +225,10 @@ let lastCameraPhoto = null;
 let scannedNumbers = { shown: "", guesses: [] };
 
 applyLanguage();
-moveOldCardsToTcgdex();
+// A newer version is loaded first, if there is one; then cards saved before 1.32.0 are translated.
+reloadIfNewerVersion().then((reloading) => {
+	if (!reloading) moveOldCardsToTcgdex();
+});
 
 // Today's exchange rates arrive a moment after the page; then every price is drawn again.
 loadRates().then(() => {
@@ -1874,9 +1877,32 @@ function savedCardHtml(entry) {
 		</li>`;
 }
 
+// A phone may keep the start page for up to ten minutes (GitHub Pages), and then opens the version
+// from before an update - with its old ways of finding cards and prices. So the newest start page is
+// asked for, and when it names another version, the page is loaded again: once, so it can never go
+// round in circles. Returns true when it is loading again.
+const UPDATE_TRIED_KEY = "kortpris.updateTried";
+let reloadingForUpdate = false;
+async function reloadIfNewerVersion() {
+	if (APP_VERSION === "dev") return false;
+	try {
+		// cache "reload" also puts the newest start page in the phone's kept copy.
+		const response = await fetch(location.pathname, { cache: "reload" });
+		const newest = ((await response.text()).match(/app\.js\?v=([0-9.]+)/) || [])[1];
+		if (!newest || newest === APP_VERSION || sessionStorage.getItem(UPDATE_TRIED_KEY) === newest) return false;
+		sessionStorage.setItem(UPDATE_TRIED_KEY, newest);
+		reloadingForUpdate = true;
+		location.reload();
+		return true;
+	} catch (error) {
+		return false;   // offline, or the browser's storage is blocked: this version, as it is
+	}
+}
+
 // Saved and learned cards from before version 1.32.0 get TCGdex's ids (see collection.js and
 // learned.js). Quietly: if the database doesn't answer, it is tried again the next time.
 function moveOldCardsToTcgdex() {
+	if (reloadingForUpdate) return;
 	moveSavedCardsToTcgdex().then((changed) => { if (changed) renderCollection(); }, (error) => console.error(error));
 	moveLearnedToTcgdex().then((changed) => { if (changed) renderLearned(); }, (error) => console.error(error));
 }
