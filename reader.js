@@ -95,6 +95,17 @@ const NUMBER_READS = [
 	{ cardWidth: 3750, ink: "soft", mode: "numberBlock" },
 	{ cardWidth: 2400, ink: "hard", mode: "numberScattered" },
 ];
+// When the reads of the card's own cut don't agree, the number places are read again from other
+// cuts of the card, in turn, until two reads agree: its box a tenth bigger around its middle, then
+// moved up a little (a share of its height). The box is never found exactly, and tiny print cut out
+// a little differently often reads differently. On 62 photos of real cards whose first reads didn't
+// agree (40 photos and 120 made-up variants of them), the right number came first in 39 instead of
+// 21, and was among the guesses in 46 instead of 33 (version 1.30.0). A cut a twentieth bigger, one
+// moved down and one enlarged more did less.
+const NUMBER_RECUTS = [
+	{ scale: 1.1, up: 0 },
+	{ scale: 1, up: 0.012 },
+];
 // Black-ink-only copies: a pixel this dark compared to the background around it (or darker)
 // turns black, and this light turns white; "hard" copies cut at one point instead.
 const INK_BLACK_AT = 0.45;
@@ -210,10 +221,17 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null) {
 		if (inkName.sure) name = inkName;
 	}
 
-	// The frame is a second place to look for the number when the card's own edges were used: tiny
-	// print read from a slightly different cut often comes out differently (see readCollectorNumbers).
-	const secondBox = framed && cardBox !== framed ? framed : null;
-	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead, view, secondBox);
+	// Other cuts of the card to read the number from when the first reads don't agree: the card's
+	// own box a little changed (NUMBER_RECUTS), then the camera's frame - both only when the card's
+	// own edges were found. Tiny print cut out differently often reads differently. (In 34 made-up
+	// camera pictures, reading the frame first gave one right number fewer: when two cuts read two
+	// numbers once each, the earlier one wins.)
+	const otherCuts = [];
+	if (cardBox && cardBox !== framed) {
+		otherCuts.push(...NUMBER_RECUTS.map((recut) => recutBox(cardBox, recut)));
+		if (framed) otherCuts.push(framed);
+	}
+	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead, view, otherCuts);
 	original.close();   // the full-size photo takes a lot of memory; it isn't needed any more
 	const textArea = boxInPhoto(firstRead.textArea, view);
 	return {
@@ -640,7 +658,7 @@ function lettersOnly(text) {
 
 // ---------- The collector number ----------
 
-async function readCollectorNumbers(worker, original, photo, cardBox, page, view, secondBox = null) {
+async function readCollectorNumbers(worker, original, photo, cardBox, page, view, otherCuts = []) {
 	// The number is tiny print along the card's bottom edge, too small to read in the whole
 	// photo, so that part is read again, enlarged - cut from the full-size original, which has
 	// far more detail. Tiny print is often misread, so this returns every number that seems
@@ -651,11 +669,12 @@ async function readCollectorNumbers(worker, original, photo, cardBox, page, view
 	if (cardBox) {
 		guesses = await readNumberPlaces(worker, original, scaleBox(cardBox, toOriginal));
 	}
-	// Not sure yet, and there is another place the card may be (the camera's frame): read there too.
-	// In made-up camera pictures of 17 real cards, the card's own edges gave 11 right numbers, the
-	// frame alone 14, and they were often different ones (version 1.26.0).
-	if (secondBox && !twoReadsAgree(guesses)) {
-		guesses.push(...await readNumberPlaces(worker, original, scaleBox(secondBox, toOriginal)));
+	// Not sure yet: read the number places again from the other cuts of the card, in turn, until
+	// two reads agree (see NUMBER_RECUTS). In 34 made-up camera pictures of real cards, the right
+	// number came first in 27, where 1.29.0 - which read only the camera's frame again - had 23.
+	for (const box of otherCuts) {
+		if (twoReadsAgree(guesses)) break;
+		guesses.push(...await readNumberPlaces(worker, original, scaleBox(box, toOriginal), guesses));
 	}
 	if (!sawWholeNumber(guesses) && page.textArea) {
 		// Without the card's outline, or when the number wasn't where the outline says, the
@@ -674,10 +693,11 @@ async function readCollectorNumbers(worker, original, photo, cardBox, page, view
 	return likeliestNumbers(guesses).slice(0, MAX_NUMBER_GUESSES);
 }
 
-async function readNumberPlaces(worker, original, card) {
+async function readNumberPlaces(worker, original, card, earlier = []) {
 	// Reads the windows where the number can be (card is the card's box in the original),
-	// in each of the ways in NUMBER_READS. When two reads agree on a number with its "/",
-	// that is as sure as reading gets, and the remaining ways are skipped to save time.
+	// in each of the ways in NUMBER_READS. When two reads agree on a number with its "/" - two of
+	// these, or one of these and one of the earlier guesses (from another cut of the card) - that
+	// is as sure as reading gets, and the remaining ways are skipped to save time.
 	const guesses = [];
 	const cardWidth = card.x1 - card.x0;
 	const cardHeight = card.y1 - card.y0;
@@ -695,7 +715,7 @@ async function readNumberPlaces(worker, original, card) {
 			const result = await worker.recognize(closeUp);
 			guesses.push(...oncePerNumber(numberCandidates(result.data.text || "")));
 		}
-		if (twoReadsAgree(guesses)) break;
+		if (twoReadsAgree([...earlier, ...guesses])) break;
 	}
 	return guesses;
 }
@@ -749,6 +769,16 @@ function sawWholeNumber(guesses) {
 
 function scaleBox(box, scale) {
 	return { x0: box.x0 * scale, x1: box.x1 * scale, y0: box.y0 * scale, y1: box.y1 * scale };
+}
+
+function recutBox(box, recut) {
+	// The card's box made recut.scale times as big around its middle, and moved up by recut.up of
+	// its height (see NUMBER_RECUTS).
+	const width = (box.x1 - box.x0) * recut.scale;
+	const height = (box.y1 - box.y0) * recut.scale;
+	const centreX = (box.x0 + box.x1) / 2;
+	const centreY = (box.y0 + box.y1) / 2 - (box.y1 - box.y0) * recut.up;
+	return { x0: centreX - width / 2, x1: centreX + width / 2, y0: centreY - height / 2, y1: centreY + height / 2 };
 }
 
 // A copy of a close-up with only the black printed ink left, for reading small print on a

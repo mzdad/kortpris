@@ -19,7 +19,10 @@ A web page with nothing to install. What happens to a photo:
    cards the name sits on the artwork, where a read of the whole card often loses it
    (`readNameStrip`). The number is then read again from the full-size photo, in the
    two small corners where it is printed, several different ways (one of them with only the
-   black ink kept, which hides coloured backgrounds and glitter).
+   black ink kept, which hides coloured backgrounds and glitter), until two reads agree. When
+   they don't, the corners are cut out again from the card's box made a tenth bigger, and then
+   moved up a little: the box is never found exactly, and tiny print cut out a little
+   differently often reads differently (`NUMBER_RECUTS`).
 2. **Text → card.** The name and number are looked up in the free
    [Pokémon TCG API](https://pokemontcg.io); every number the reader thought possible is
    tried, and the database says which one exists. A right number also finds a card whose

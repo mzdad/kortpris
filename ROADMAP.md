@@ -5,6 +5,22 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.30.0
+
+- **1.6 A second look at the number in any photo.** When the reads of the number corners don't
+  agree, the corners are cut out again from the card's box made a tenth bigger, and then moved up a
+  little, until two reads agree: the box is never found exactly, and tiny print cut out a little
+  differently often reads differently. In photos from the app's camera, the white frame comes after
+  these. The 40 real photos: 31 numbers read (27 before). Of 62 photos whose first reads didn't agree
+  (the real ones, and made-up variants of them), the right number came first in 39 instead of 21,
+  and was among the guesses in 46 instead of 33. Made-up camera pictures: 27 of 34 (23). Full-art
+  cards: 20 of 27 (19). Special numbers and the fake photos: as before. Nothing opened wrongly in
+  the real photos and special numbers; the searches of the fake and full-art photos couldn't be run
+  again, as the database's daily allowance was used up (see 2.7). It costs about a second, only on
+  the photos whose reads don't agree (about a third of them). A cut a
+  twentieth bigger, one moved down and one enlarged more did less; reading the camera's frame first
+  lost a number.
+
 ## Done in 1.29.0
 
 - **1.4 Learned cards as suggestions.** A photo that looks somewhat like a learned card, but not
@@ -80,7 +96,6 @@ L = several sessions).
 | | What | Why | Size |
 |---|---|---|---|
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
-| 1.6 | **A second look at the number in any photo**: when the reads don't agree, read the number corner again from a slightly bigger and smaller cut of the card. | In 1.26.0 a second cut (the camera frame) turned 11 read numbers into 13. Photos from the phone's own camera have no frame, but could get the same second chance. | S |
 | 1.7 | **The set's code on newer cards**: since Scarlet & Violet, cards print their set's code by the number ("PAL EN 123/193"). Read it with the colours turned around, as it is white on black. | The code names the set exactly; today the set is guessed from its size, which several sets share. In 1.27.0 the "SVP" code was read in only about 1 of 3 tries. | M |
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black. | 8 of 27 full-art numbers weren't read in 1.28.0, and a white-ink copy of the corner read none of them, so it needs something else, like thinning the black edge away first. The name and the look find these cards anyway. | M |
 | 1.9 | **Find the edges of silver-bordered and full-art cards** in photos from the phone's own camera. | The name strip and the number corners need them; 2 of 27 full-art photos had none. So do learned cards: of 13 harder made-up second photos neither recognised nor suggested in 1.29.0, 10 had no edges found (yellow borders in harsh light, there). The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
@@ -95,6 +110,7 @@ L = several sessions).
 | 2.4 | **Read the number first, the name only when needed.** | Name and number are read one after the other. A clear number alone finds the card. | M |
 | 2.5 | **Compare fewer pictures**: when only the name is known, the app compares the photo with up to 250 cards' pictures. Using the set size read, or learned cards, narrows that down. | The slowest searches are these. | M |
 | 2.6 | **A paid price database (Scrydex)**, from the makers of the free one. | Faster and fresher prices, and it doesn't fail half the time. Costs money: your decision. | M |
+| 2.7 | **Don't use up the free database's daily allowance**: a free key for it, kept in the relay like the PSA key, and no retrying when it says "too many requests" (429). | Without a key it allows 1,000 lookups a day and 30 a minute per internet connection. The app sends each lookup twice and retries failures, so a busy day uses it up, and then no card is found on that connection until it resets: the tests did that on 26 September 2026. The key needs a free account at pokemontcg.io: yours to make. | S |
 
 ## 3. Smoother
 
