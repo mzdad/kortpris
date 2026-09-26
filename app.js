@@ -59,6 +59,7 @@ const KID_STATUS = {
 	needNameOrNumber: "kidNotFound",
 	claudeNotACard: "kidNotFound",
 	apiDown: "kidTryLater",
+	apiTooMany: "kidTryLater",
 	exampleFailed: "kidTryLater",
 };
 // ...with a picture, so it can be understood without reading...
@@ -771,7 +772,8 @@ collectionSummary.addEventListener("click", async (event) => {
 		refreshMessage = "pricesUpdated";
 	} catch (error) {
 		console.error(error);
-		refreshMessage = "refreshFailed";
+		// Asked too often today from this internet connection (see askOnce in cards.js).
+		refreshMessage = error.tooManyLookups ? "apiTooMany" : "refreshFailed";
 	}
 	refreshingPrices = false;
 	renderCollection();
@@ -1024,7 +1026,8 @@ async function searchForCard(byViewer = false) {
 		console.error(error);
 		if (searchId !== latestSearchId) return;
 		hideProgress();
-		setStatus("apiDown", {}, "error");
+		// Asked too often today from this internet connection (see askOnce in cards.js).
+		setStatus(error.tooManyLookups ? "apiTooMany" : "apiDown", {}, "error");
 	} finally {
 		if (searchId === latestSearchId) searchButton.disabled = false;
 	}
@@ -1793,7 +1796,7 @@ function collectionSummaryHtml(totals) {
 	const countText = totals.cards === 1 ? t("cardCountOne") : t("cardCount", { count: totals.cards });
 	const unpriced = totals.unpriced > 0 ? `<p class="fineprint">${t("notInTotal", { count: totals.unpriced })}</p>` : "";
 	const message = refreshMessage
-		? `<span class="${refreshMessage === "refreshFailed" ? "status error" : "note"}">${t(refreshMessage)}</span>`
+		? `<span class="${refreshMessage === "pricesUpdated" ? "note" : "status error"}">${t(refreshMessage)}</span>`
 		: "";
 	return `
 		<span class="stat-label">${t("totalValue")}</span>

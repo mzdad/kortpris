@@ -1,7 +1,9 @@
-# Settings for Cloudflare's "wrangler" tool, which puts psa-prices.js online.
-# The price service's key is NOT here: it is a Cloudflare secret (wrangler secret put PPT_API_KEY).
+# Settings for Cloudflare's "wrangler" tool, which puts relay.js online.
+# The keys are NOT here: they are Cloudflare secrets (wrangler secret put PPT_API_KEY, for PSA
+# prices, and wrangler secret put TCG_API_KEY, for the card database).
+# The name is from when the relay only fetched PSA prices; it is part of the relay's address.
 name = "kortpris-psa"
-main = "psa-prices.js"
+main = "relay.js"
 compatibility_date = "2026-09-01"
 workers_dev = true
 

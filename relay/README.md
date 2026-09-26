@@ -1,6 +1,36 @@
-# Kortpris PSA relay
+# Kortpris relay
 
-A tiny program on Cloudflare Workers (free plan) that fetches PSA prices for the app.
+A tiny program on Cloudflare Workers (free plan), `relay.js`, that holds two keys a public web
+page can't: it fetches PSA prices for the app, and searches the card database with its key.
+Its address is still `kortpris-psa`, from when it only did PSA prices.
+
+## Card searches (`/cards`)
+
+The card database ([pokemontcg.io](https://pokemontcg.io)) allows 1,000 lookups a day and 30 a
+minute per internet connection without a key. A scan takes from a few lookups to about 25 (the app
+asks twice at once, and again when the database fails), so a busy day can use it up, and then no card
+is found on that connection until it resets. With a free key it allows 20,000 a day. Its makers
+ask for the key to be kept out of web pages, so the relay holds it, as the secret `TCG_API_KEY`.
+
+`GET <relay>/cards?q=...&orderBy=...&pageSize=...&select=...` passes the app's search on with the
+key and hands back the database's own answer, failures included (the app asks again, as it would
+without the relay). Without the key it answers 503, and the app asks the database directly
+(`fetchCardPage` in `cards.js`); it does the same when the relay refuses or can't be reached, and
+leaves the relay alone for 10 minutes.
+
+Adding the key (once):
+
+1. Make a free account at <https://dev.pokemontcg.io> and copy the API key it shows.
+2. In PowerShell, in this folder:
+   ```
+   npx.cmd --yes wrangler@latest secret put TCG_API_KEY --name kortpris-psa
+   ```
+   Paste the key when it asks, and press Enter. Nothing else changes: the app uses the key the
+   next time it is opened (an app left open tries the relay again within 10 minutes).
+3. Check: `curl "https://kortpris-psa.kortpris.workers.dev/cards?q=name:Pikachu&pageSize=1" -H "Origin: https://mzdad.github.io"`
+   should answer with a card, not "the relay has no TCG_API_KEY secret".
+
+## PSA prices
 
 **Why it exists.** PSA prices (what a card sold for on eBay in each PSA grade) come from
 [PokemonPriceTracker](https://www.pokemonpricetracker.com). Their API needs a secret key, and it
@@ -23,7 +53,7 @@ today; they refill at midnight UTC). The relay keeps the latest one in KV under 
 `cardsLeft` and `resetsAt` to its own answers, and `?credits=1` returns just those, for free.
 When the credits are used up, the relay answers 429.
 
-## Setting it up (once)
+## Setting it up (once, done 2026-09-25)
 
 1. Make a free account on pokemonpricetracker.com and copy its API key.
 2. Make a free account on cloudflare.com. Open **Workers & Pages** once; if it asks for a
@@ -43,5 +73,5 @@ When the credits are used up, the relay answers 429.
 
 ## Changing it
 
-Edit `psa-prices.js`, then `npx wrangler deploy` again. `npx wrangler tail` shows its log live.
+Edit `relay.js`, then `npx wrangler deploy` again. `npx wrangler tail` shows its log live.
 `?card=<id>&raw=1` returns the price service's own answer, to check what it sends.

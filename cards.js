@@ -3,6 +3,13 @@
 // Finds cards, with their prices, in the free Pokémon TCG API (pokemontcg.io).
 
 const API_URL = "https://api.pokemontcg.io/v2/cards";
+// The app's relay (relay/relay.js) asks the database with a free key: 20,000 lookups a day for
+// the whole app, where without one each internet connection gets 1,000 (and 30 a minute) - which
+// a busy day of scanning can use up. "" = no relay: always ask the database directly.
+const CARDS_RELAY_URL = "https://kortpris-psa.kortpris.workers.dev/cards";
+// When the relay can't help (it has no key yet, the key's day is used up, or it can't be
+// reached), the database is asked directly, and the relay is left alone this long.
+const RELAY_REST_MS = 10 * 60 * 1000;
 // Only ask for the fields we show, so answers arrive faster on mobile data.
 const CARD_FIELDS = "id,name,number,rarity,supertype,set,images,tcgplayer,cardmarket";
 const RESULTS_PAGE_SIZE = 24;
@@ -25,6 +32,8 @@ const PROMO_SET_CODES = { SVP: "svp" };
 
 // The reprints, fetched once: the sets are small (30 cards).
 let reprintsPromise = null;
+// Until when the relay is left alone (see RELAY_REST_MS).
+let relayRestsUntil = 0;
 
 // Searches for the card with this name and collector number ("4/102").
 // Tries the most exact search first, then looser ones in case the photo was misread.
@@ -313,33 +322,63 @@ async function fetchCards(query, pageSize) {
 }
 
 // Returns { cards, totalCount }: the first pageSize matching cards, newest first,
-// and how many cards match altogether.
+// and how many cards match altogether. Asked through the relay when it can help, otherwise
+// straight from the database. Throws an error marked tooManyLookups when the database says this
+// internet connection has asked too often (see askOnce).
 async function fetchCardPage(query, pageSize) {
-	const url = API_URL
-		+ "?q=" + encodeURIComponent(query)
+	const search = "?q=" + encodeURIComponent(query)
 		+ "&orderBy=-set.releaseDate"
 		+ "&pageSize=" + pageSize
 		+ "&select=" + CARD_FIELDS;
+	if (CARDS_RELAY_URL && Date.now() >= relayRestsUntil) {
+		try {
+			return await askUntilAnswered(CARDS_RELAY_URL + search, true);
+		} catch (problem) {
+			if (!problem.relayCantHelp) throw problem;
+			console.warn("Asking the card database directly:", problem.message);
+			relayRestsUntil = Date.now() + RELAY_REST_MS;
+		}
+	}
+	return askUntilAnswered(API_URL + search, false);
+}
+
+async function askUntilAnswered(url, viaRelay) {
 	let lastProblem = null;
 	for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
 		try {
 			// Each try sends the same question twice at once and takes whichever answer
 			// comes back first: with half of all requests failing, both failing is far rarer.
-			const body = await Promise.any([askOnce(url), askOnce(url)]);
+			const body = await Promise.any([askOnce(url, viaRelay), askOnce(url, viaRelay)]);
 			return { cards: body.data || [], totalCount: body.totalCount || 0 };
 		} catch (problem) {
-			lastProblem = problem.errors ? problem.errors[0] : problem;
+			const problems = problem.errors || [problem];
+			// Asking again won't change these, and would only use up more lookups.
+			const final = problems.find((one) => one.tooManyLookups || one.relayCantHelp);
+			if (final) throw final;
+			lastProblem = problems[0];
 		}
 		await wait(RETRY_DELAY_MS * attempt);   // wait a little longer after each failure
 	}
 	throw lastProblem;
 }
 
-async function askOnce(url) {
-	// Throws when there is no answer at all (like a dropped connection) or an error answer.
-	const response = await fetch(url);
-	if (!response.ok) throw new Error("Price database answered " + response.status);
-	return response.json();
+async function askOnce(url, viaRelay) {
+	// Throws when there is no answer at all (like a dropped connection) or an error answer. Two
+	// kinds are marked, as asking again won't help: relayCantHelp - the relay has no key (503),
+	// refuses (like 429, when the key's day is used up) or can't be reached; tooManyLookups - the
+	// database itself says this internet connection has asked too often (429).
+	let response;
+	try {
+		response = await fetch(url);
+	} catch (problem) {
+		if (viaRelay) problem.relayCantHelp = true;
+		throw problem;
+	}
+	if (response.ok) return response.json();
+	const problem = new Error((viaRelay ? "The relay" : "Price database") + " answered " + response.status);
+	if (viaRelay) problem.relayCantHelp = response.status === 503 || (response.status >= 400 && response.status < 500);
+	else problem.tooManyLookups = response.status === 429;
+	throw problem;
 }
 
 function wait(ms) {

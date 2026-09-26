@@ -24,8 +24,11 @@ A web page with nothing to install. What happens to a photo:
    moved up a little: the box is never found exactly, and tiny print cut out a little
    differently often reads differently (`NUMBER_RECUTS`).
 2. **Text → card.** The name and number are looked up in the free
-   [Pokémon TCG API](https://pokemontcg.io); every number the reader thought possible is
-   tried, and the database says which one exists. A right number also finds a card whose
+   [Pokémon TCG API](https://pokemontcg.io), through the app's relay on Cloudflare, which asks
+   with a free key: 20,000 lookups a day for the whole app, where each internet connection gets
+   1,000 without one (`CARDS_RELAY_URL` in `cards.js`; the key is the relay's secret, see
+   `relay/README.md`). When the relay can't help, the database is asked directly. Every number
+   the reader thought possible is tried, and the database says which one exists. A right number also finds a card whose
    name was misread, and the name is then corrected. If no number fits, the candidates are sorted by
    how much their picture looks like the photo, and a clear winner opens by itself. Cards
    with the very same picture (a holo and its plain print) are told apart by the number:
@@ -140,7 +143,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `camera.js` | The app's own camera: live picture, 2x zoom, light, and the photo |
 | `learned.js` | Remembers cards the viewer picked for a photo, and recognises the next photo of them |
 | `graded.js` | PSA prices of a card, asked from the relay and kept on the phone for a day |
-| `relay/` | The PSA price relay that runs on Cloudflare, not in the page |
+| `relay/` | The relay that runs on Cloudflare, not in the page: PSA prices, and card searches with the database's key |
 | `storage.js` | Saves things on the phone (language, My cards) |
 | `currency.js` | Shows prices in DKK, EUR, GBP or IDR, with the central bank's daily rates |
 | `account.js` | Accounts: sign up, sign in, and My cards kept online (Firebase) |
@@ -215,7 +218,11 @@ illustration-rare cards, whose name and number are printed on the artwork.
 
 - **The free API is unreliable.** In September 2026, about half of all requests failed on
   the first try. The page sends every lookup twice at once and tries up to 6 times before
-  giving up.
+  giving up - except when the database says "too many requests" (429): asking again would only
+  make that last longer, so the app says so instead.
+- **The free API has a daily allowance.** Without a key: 1,000 lookups a day and 30 a minute
+  per internet connection, which a busy day of scanning (or of testing: 26 September 2026) can
+  use up. With the relay's key: 20,000 a day for the whole app. Never run two test pages at once.
 - **Cardmarket prices can be weeks or months old** in this API. The page shows the date
   and labels anything older than two weeks.
 - **Prices are for ungraded cards.** Condition changes the value a lot.

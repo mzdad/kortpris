@@ -49,6 +49,7 @@ const STRINGS = {
 		seenBefore: "Seen before",
 		noMatch: "No cards matched. Check the name and number against the card and search again.",
 		apiDown: "The price database didn't answer. Wait a moment, then press Search.",
+		apiTooMany: "The price database has had too many lookups from this internet connection today. Try again later, or on mobile data.",
 
 		resultsTitle: "Which one is yours?",
 		matchExact: "Cards named “{name}” with number {number}.",
@@ -362,6 +363,7 @@ const STRINGS = {
 		seenBefore: "Set før",
 		noMatch: "Ingen kort passede. Sammenlign navn og nummer med kortet, og søg igen.",
 		apiDown: "Prisdatabasen svarede ikke. Vent lidt, og tryk så på Søg.",
+		apiTooMany: "Prisdatabasen har fået for mange opslag fra denne internetforbindelse i dag. Prøv igen senere, eller brug mobildata.",
 
 		resultsTitle: "Hvilket er dit?",
 		matchExact: "Kort med navnet »{name}« og nummer {number}.",

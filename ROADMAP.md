@@ -5,6 +5,20 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.31.0
+
+- **2.7 The free database's daily allowance.** Without a key the card database allows 1,000
+  lookups a day and 30 a minute per internet connection, and a scan takes from a few to about 25 (the
+  app asks twice at once, and again when the database fails). The relay on Cloudflare now also searches the
+  database, with a free key kept as its secret (`/cards` in `relay/relay.js`): 20,000 lookups a
+  day for the whole app. The app asks through the relay first, and the database directly when the
+  relay can't help (no key yet, the key's day used up, or no answer); then it leaves the relay
+  alone for 10 minutes. When the database says "too many requests" (429), the app no longer asks
+  again (up to 12 times), and says so: "The price database has had too many lookups from this
+  internet connection today. Try again later, or on mobile data." **Still to do, by you:** make
+  the free account at dev.pokemontcg.io and give the relay its key (steps in `relay/README.md`).
+  Until then the app works as before, asking the database directly.
+
 ## Done in 1.30.0
 
 - **1.6 A second look at the number in any photo.** When the reads of the number corners don't
@@ -110,7 +124,6 @@ L = several sessions).
 | 2.4 | **Read the number first, the name only when needed.** | Name and number are read one after the other. A clear number alone finds the card. | M |
 | 2.5 | **Compare fewer pictures**: when only the name is known, the app compares the photo with up to 250 cards' pictures. Using the set size read, or learned cards, narrows that down. | The slowest searches are these. | M |
 | 2.6 | **A paid price database (Scrydex)**, from the makers of the free one. | Faster and fresher prices, and it doesn't fail half the time. Costs money: your decision. | M |
-| 2.7 | **Don't use up the free database's daily allowance**: a free key for it, kept in the relay like the PSA key, and no retrying when it says "too many requests" (429). | Without a key it allows 1,000 lookups a day and 30 a minute per internet connection. The app sends each lookup twice and retries failures, so a busy day uses it up, and then no card is found on that connection until it resets: the tests did that on 26 September 2026. The key needs a free account at pokemontcg.io: yours to make. | S |
 
 ## 3. Smoother
 
