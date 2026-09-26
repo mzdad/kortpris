@@ -160,6 +160,14 @@ const moveCardsButton = document.getElementById("move-cards");
 const accountMessageText = document.getElementById("account-message");
 const kidsButton = document.getElementById("kids-button");
 const kidStartButton = document.getElementById("kid-start");
+const liveCameraView = document.getElementById("live-camera");
+const cameraVideo = document.getElementById("camera-video");
+const cameraMessage = document.getElementById("camera-message");
+const cameraCloseButton = document.getElementById("camera-close");
+const cameraLightButton = document.getElementById("camera-light");
+const cameraShutterButton = document.getElementById("camera-shutter");
+const cameraZoomButton = document.getElementById("camera-zoom");
+const cameraPhoneButton = document.getElementById("camera-phone");
 
 // ---------- What is on screen right now ----------
 // Kept as plain data so everything can be redrawn when the language changes.
@@ -197,6 +205,10 @@ let photoUrl = null;
 let lastPhoto = null;
 // The cards shown came from a search about that photo, so tapping one answers which card it shows.
 let resultsForPhoto = false;
+// The app's own camera while it is open (camera.js), and its zoom and light.
+let liveCamera = null;
+let cameraZoom = chosenCameraZoom();
+let cameraLight = chosenCameraLight();
 // The number the reader put in the box, and every other number it thought possible.
 let scannedNumbers = { shown: "", guesses: [] };
 
@@ -307,6 +319,7 @@ function applyLanguage() {
 	renderLearned();
 	renderAccount();
 	renderFooter();
+	if (cameraMessage.dataset.key) showCameraMessage(cameraMessage.dataset.key);
 }
 
 function renderFooter() {
@@ -354,8 +367,112 @@ function openCamera() {
 	// Said from the button press on purpose: iPhones only let a page start speaking from a tap,
 	// and after this first time it may also speak by itself when the card is found.
 	if (kidsMode) say(t("sayTakePhoto"));
-	cameraInput.click();
+	// The app's own camera zooms in and lights the card; the phone's own camera screen can't be
+	// told to. Browsers without a live camera open the phone's camera straight away.
+	if (liveCameraPossible()) openLiveCamera();
+	else cameraInput.click();
 }
+
+// ---------- The app's own camera ----------
+
+async function openLiveCamera() {
+	if (!liveCameraView.hidden) return;
+	liveCameraView.hidden = false;
+	document.body.classList.add("camera-open");   // the page behind mustn't scroll
+	showCameraMessage("cameraStarting");
+	renderCameraButtons();
+	let camera;
+	try {
+		camera = await startLiveCamera(cameraVideo);
+	} catch (error) {
+		console.error(error);
+		// The button to the phone's own camera stays: a tap on it can open that camera, where
+		// opening it from here (not from a tap) would be blocked.
+		showCameraMessage(error.name === "NotAllowedError" ? "cameraNotAllowed" : "cameraFailed");
+		return;
+	}
+	if (liveCameraView.hidden) {
+		stopLiveCamera(camera, cameraVideo);   // closed while it was starting
+		return;
+	}
+	liveCamera = camera;
+	await setLiveCameraSafely();
+	showCameraMessage("cameraHint");
+	renderCameraButtons();
+}
+
+function closeLiveCamera() {
+	if (liveCamera) stopLiveCamera(liveCamera, cameraVideo);
+	liveCamera = null;
+	liveCameraView.hidden = true;
+	document.body.classList.remove("camera-open");
+}
+
+async function setLiveCameraSafely() {
+	// Zoom and light are extras: if the camera refuses them, it still takes photos.
+	try {
+		await setLiveCamera(liveCamera, cameraZoom, cameraLight);
+	} catch (error) {
+		console.error(error);
+	}
+}
+
+function showCameraMessage(key) {
+	cameraMessage.textContent = key ? t(key) : "";
+	cameraMessage.dataset.key = key || "";
+}
+
+function renderCameraButtons() {
+	// Only the buttons this camera can use; none while it is starting.
+	const running = liveCamera !== null;
+	cameraShutterButton.disabled = !running;
+	cameraLightButton.hidden = !running || !liveCamera.canLight;
+	cameraZoomButton.hidden = !running || !liveCamera.zoomRange;
+	cameraLightButton.setAttribute("aria-pressed", String(cameraLight));
+	cameraZoomButton.textContent = cameraZoom + "×";
+}
+
+cameraCloseButton.addEventListener("click", closeLiveCamera);
+
+cameraPhoneButton.addEventListener("click", () => {
+	closeLiveCamera();
+	cameraInput.click();
+});
+
+cameraLightButton.addEventListener("click", async () => {
+	cameraLight = !cameraLight;
+	chooseCameraLight(cameraLight);
+	renderCameraButtons();
+	await setLiveCameraSafely();
+});
+
+cameraZoomButton.addEventListener("click", async () => {
+	cameraZoom = CAMERA_ZOOMS[(CAMERA_ZOOMS.indexOf(cameraZoom) + 1) % CAMERA_ZOOMS.length];
+	chooseCameraZoom(cameraZoom);
+	renderCameraButtons();
+	await setLiveCameraSafely();
+});
+
+cameraShutterButton.addEventListener("click", async () => {
+	if (!liveCamera || cameraShutterButton.disabled) return;
+	cameraShutterButton.disabled = true;   // one photo per press
+	let photo;
+	try {
+		photo = await takeLivePhoto(liveCamera, cameraVideo);
+	} catch (error) {
+		console.error(error);
+		showCameraMessage("cameraFailed");
+		cameraShutterButton.disabled = false;
+		return;
+	}
+	closeLiveCamera();
+	scanPhoto(photo);
+});
+
+// Switching to another app stops the camera anyway; close it, so it starts fresh next time.
+document.addEventListener("visibilitychange", () => {
+	if (document.hidden && !liveCameraView.hidden) closeLiveCamera();
+});
 
 kidsButton.addEventListener("click", () => {
 	kidsMode = !kidsMode;

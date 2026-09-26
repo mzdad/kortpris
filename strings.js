@@ -124,6 +124,14 @@ const STRINGS = {
 
 		scanBar: "Scan",
 		takePhoto: "Take photo",
+		cameraStarting: "Starting the camera…",
+		cameraHint: "Fill the frame with the card",
+		cameraNotAllowed: "This page isn't allowed to use the camera. Allow it in the phone's settings, or use the phone's own camera.",
+		cameraFailed: "The camera couldn't start. Use the phone's own camera instead.",
+		cameraUsePhone: "Use the phone's own camera",
+		cameraClose: "Close the camera",
+		cameraLight: "Light",
+		cameraZoom: "Zoom",
 		choosePhoto: "Choose photo",
 
 		views: "Screens",
@@ -409,6 +417,14 @@ const STRINGS = {
 
 		scanBar: "Scan",
 		takePhoto: "Tag billede",
+		cameraStarting: "Starter kameraet …",
+		cameraHint: "Fyld rammen ud med kortet",
+		cameraNotAllowed: "Siden må ikke bruge kameraet. Giv lov i telefonens indstillinger, eller brug telefonens eget kamera.",
+		cameraFailed: "Kameraet kunne ikke starte. Brug telefonens eget kamera i stedet.",
+		cameraUsePhone: "Brug telefonens eget kamera",
+		cameraClose: "Luk kameraet",
+		cameraLight: "Lys",
+		cameraZoom: "Zoom",
 		choosePhoto: "Vælg billede",
 
 		views: "Skærme",

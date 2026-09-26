@@ -443,6 +443,62 @@ footer p:empty { display: none; }
 }
 .actionbar-inner { max-width: 34rem; margin-inline: auto; display: grid; grid-template-columns: 1fr auto; gap: 10px; }
 
+/* ---------- The app's own camera (camera.js), over the whole screen ---------- */
+body.camera-open { overflow: hidden; }
+.live-camera {
+	position: fixed; inset: 0; z-index: 50;
+	background: #000; color: #FFFFFF;
+}
+.camera-video { width: 100%; height: 100%; object-fit: cover; }
+/* A card-shaped frame to fill, with the rest of the picture a little darker. */
+.camera-frame {
+	position: absolute; left: 50%; top: 46%;
+	width: min(78vw, 60vh * 63 / 88); aspect-ratio: 63 / 88;
+	transform: translate(-50%, -50%);
+	border: 3px solid rgba(255, 255, 255, 0.85); border-radius: 14px;
+	box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+	pointer-events: none;
+}
+.camera-message {
+	position: absolute; left: 16px; right: 16px; top: calc(20px + env(safe-area-inset-top, 0px));
+	margin: 0 auto; max-width: 26rem; padding-inline: 56px;
+	text-align: center; font-weight: 700; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.camera-message:empty { display: none; }
+.camera-round {
+	width: 56px; height: 56px;
+	font: inherit; font-size: 1.5rem; font-weight: 800; line-height: 1;
+	color: #FFFFFF; background: rgba(0, 0, 0, 0.5);
+	border: 2px solid rgba(255, 255, 255, 0.6); border-radius: 50%;
+	cursor: pointer;
+}
+.camera-round[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+.camera-round:focus-visible, .camera-shutter:focus-visible, .camera-phone:focus-visible { outline: 3px solid #8FB2FF; outline-offset: 3px; }
+.camera-close { position: absolute; right: 16px; top: calc(12px + env(safe-area-inset-top, 0px)); font-size: 1.3rem; }
+.camera-zoom { font-size: 1.15rem; }
+.camera-controls {
+	position: absolute; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+	display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; justify-items: center;
+	padding-inline: 16px;
+}
+.camera-controls > :first-child { grid-column: 1; }
+.camera-shutter { grid-column: 2; }
+.camera-zoom { grid-column: 3; }
+.camera-shutter {
+	width: 84px; height: 84px; border-radius: 50%;
+	background: #FFFFFF; border: 6px solid rgba(255, 255, 255, 0.45); background-clip: padding-box;
+	box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35);
+	cursor: pointer;
+}
+.camera-shutter:active { transform: scale(0.94); }
+.camera-shutter:disabled { opacity: 0.4; }
+.camera-phone {
+	position: absolute; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+	font: inherit; font-size: 0.9rem; color: #FFFFFF; text-decoration: underline;
+	background: none; border: 0; padding: 8px; white-space: nowrap;
+	cursor: pointer;
+}
+
 /* ---------- Reading aloud ---------- */
 .name-row { display: flex; align-items: flex-start; gap: 10px; }
 .name-row .detail-name { flex: 1; }

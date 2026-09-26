@@ -45,6 +45,15 @@ A web page with nothing to install. What happens to a photo:
    ("jungle holo", "pika", "58") and says what the cards found are worth together.
    Without an account it is kept in the phone's browser only.
 
+**The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed
+2x and with the phone's light on, because the phone's own camera screen can't be told to do either.
+Zoomed in, the phone is held further away, so the card is in focus and out of the phone's shadow; the
+light stays on, so a glare spot shows before the photo is taken. Zoom needs iOS 17 or Chrome on
+Android, the light iOS 18; the buttons for them only show when the phone can. Both are remembered.
+Where the browser can (Safari 18.4, Chrome), the photo is the camera's own full-size photo, otherwise
+the live picture. "Use the phone's own camera" at the bottom opens the old camera screen, and so does
+the button when the page can't have a live camera.
+
 **Learning.** When the app can't tell which card a photo shows (or opens the wrong one) and the
 viewer taps or types the right one, or saves the card the photo found, the app remembers how that
 card's artwork looked in the photo (`learned.js`): the same small colour thumbnail the picture
@@ -96,6 +105,7 @@ Anthropic.
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
 | `sparkle.js` | Tells a reverse holo from the photo: glitter everywhere except the picture |
+| `camera.js` | The app's own camera: live picture, 2x zoom, light, and the photo |
 | `learned.js` | Remembers cards the viewer picked for a photo, and recognises the next photo of them |
 | `graded.js` | PSA prices of a card, asked from the relay and kept on the phone for a day |
 | `relay/` | The PSA price relay that runs on Cloudflare, not in the page |
