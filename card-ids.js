@@ -80,6 +80,36 @@ const REPRINT_NUMBERS = {
 	"029": ["149", "Lugia"], "030": ["203", "Magikarp"],
 };
 
+// The Celebrations Classic Collection (2021) reprints also carry their original's number, like
+// "4/102" on the Charizard, with a "25" stamp where the 30th Celebration's have "30". TCGdex numbers
+// them CC001 to CC025. TCGdex's number: [the number printed, the originals' TCGdex ids - the cards
+// with the same picture and number; names differ too much between them to go by, like "Impostor
+// Professor Oak" and "Imposter Professor Oak"].
+const CLASSIC_SET = "cel25cc";
+const CLASSIC_NUMBERS = {
+	"CC001": ["2", ["base1-2", "base4-2"]], "CC002": ["4", ["base1-4", "base4-4"]],
+	"CC003": ["15", ["base1-15"]], "CC004": ["73", ["base1-73"]],
+	"CC005": ["8", ["base5-8"]], "CC006": ["15", ["base5-15"]],
+	"CC007": ["15", ["gym2-15"]], "CC008": ["24", ["basep-24"]],
+	"CC009": ["20", ["neo1-20"]], "CC010": ["66", ["neo3-66"]],
+	"CC011": ["9", ["ex4-9"]], "CC012": ["86", ["ex7-86"]],
+	"CC013": ["88", ["ex12-88"]], "CC014": ["93", ["ex15-93"]],
+	"CC015": ["17", ["pop5-17"]], "CC016": ["15", ["dp4-15"]],
+	"CC017": ["109", ["pl2-109"]], "CC018": ["145", ["pl3-145"]],
+	"CC019": ["107", ["hgss1-107"]], "CC020": ["113", ["bw1-113"]],
+	"CC021": ["114", ["bw1-114"]], "CC022": ["54", ["bw4-54"]],
+	"CC023": ["97", ["xy1-97"]], "CC024": ["76", ["xy6-76"]],
+	"CC025": ["60", ["sm2-60"]],
+};
+
+// The number an anniversary reprint carries - its original's, like "69" of "69/132" - or null for
+// any other card.
+function reprintNumber(setId, localId) {
+	if (setId === REPRINT_SET && REPRINT_NUMBERS[localId]) return REPRINT_NUMBERS[localId][0].replace(/\D+$/, "");
+	if (setId === CLASSIC_SET && CLASSIC_NUMBERS[localId]) return CLASSIC_NUMBERS[localId][0];
+	return null;
+}
+
 // Cards TCGdex has no picture of (about 1,600 in September 2026: gallery, promo, trainer kit and
 // McDonald's cards, and the newest promos) borrow Scrydex's, from the makers of the old database: it
 // knows cards by the old database's ids, and has sets the old database never had. Checked on 27

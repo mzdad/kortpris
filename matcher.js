@@ -44,15 +44,23 @@ const CLEAR_WINNER_GAP = 2;
 // nearly as alike: at most this many times further from the photo. Cards with the very same
 // artwork score within about 1.13 of each other; a different card at least twice as far.
 const SET_SIZE_LOOK_SLACK = 1.5;
+// ...and only among cards that look like the photo at all. When none does (the right card isn't
+// among them), those rules would pick whichever card merely comes from a set of the right size: a
+// Shiny Vault Shuckle whose number read "4/11" opened a trainer kit's Machoke 4/11 that way, 1.90
+// from the photo (version 1.44.0, the first with trainer kit pictures). Right cards scored at most
+// 1.46 on the real photos (see NUMBER_ALONE_MOST_DISTANCE).
+const LOOK_ALIKE_MOST_DISTANCE = 1.5;
 // A card found by its number alone, before the name is read (see cardByNumberAlone), opens only when
 // its picture is at most this far from the photo. On 46 real photos (version 1.41.2) the right cards
 // scored 0.12 to 1.46, most under 1, and other cards 0.88 and up, most over 1.3; the few right ones
 // above this simply wait for the name, as before.
 const NUMBER_ALONE_MOST_DISTANCE = 1.0;
-// An anniversary reprint (see ANNIVERSARY_REPRINT_SETS in cards.js) has its original's picture
-// and number, but a "30" stamp at one bottom corner of the picture: the right one on most, the
-// left one when the Pokémon sits on the right. These patches around both corners, as shares of
-// the card's width and height (measured on the reprints' pictures), are compared as well...
+// An anniversary reprint (see isAnniversaryReprint in cards.js) has its original's picture and
+// number, but a "30" stamp (30th Celebration) or "25" stamp (Celebrations Classic Collection) at
+// one bottom corner of the picture: the right one on most, the left one when the Pokémon sits on
+// the right. These patches around both corners, as shares of the card's width and height
+// (measured on the 30th Celebration reprints' pictures; the Classic Collection's stamps sit in the
+// same place), are compared as well...
 const STAMP_CORNERS = [
 	{ x0: 0.0, x1: 0.28, y0: 0.38, y1: 0.54 },
 	{ x0: 0.72, x1: 1.0, y0: 0.38, y1: 0.54 },
@@ -200,13 +208,13 @@ function pickBestMatch(ranked, located, clues = {}) {
 	if (fromSet.length === 1) return { cards: moveToFront(cards, fromSet[0]), clear: true };
 	if (!located) return { cards: cards, clear: false };
 
-	// The cards that look nearly as much like the photo as the best one.
+	// The cards that look nearly as much like the photo as the best one, and like the photo at all.
 	const best = ranked[0].distance;
 	let lookAlikes = ranked.filter((entry) =>
-		Number.isFinite(entry.distance) && entry.distance <= best * SET_SIZE_LOOK_SLACK);
+		entry.distance <= best * SET_SIZE_LOOK_SLACK && entry.distance <= LOOK_ALIKE_MOST_DISTANCE);
 
 	// An anniversary reprint and its original among them: the corners with the stamp decide.
-	// When they can't, both are shown for the viewer to pick - their prices can be far apart.
+	// When they can't, the closest are shown for the viewer to pick - their prices can be far apart.
 	const reprintCheck = reprintOrOriginal(lookAlikes);
 	if (reprintCheck.won) return { cards: moveToFront(cards, reprintCheck.won), clear: true };
 	if (reprintCheck.unsure) {
@@ -215,10 +223,10 @@ function pickBestMatch(ranked, located, clues = {}) {
 	let candidates = ranked;
 	let lastCards = [];
 	if (reprintCheck.lost) {
-		// Not the reprint: it goes last, and the rules below choose among the rest.
-		candidates = ranked.filter((entry) => entry !== reprintCheck.lost);
-		lookAlikes = lookAlikes.filter((entry) => entry !== reprintCheck.lost);
-		lastCards = [reprintCheck.lost.card];
+		// Not a reprint: they go last, and the rules below choose among the rest.
+		candidates = ranked.filter((entry) => !reprintCheck.lost.includes(entry));
+		lookAlikes = lookAlikes.filter((entry) => !reprintCheck.lost.includes(entry));
+		lastCards = reprintCheck.lost.map((entry) => entry.card);
 	}
 	const inOrder = [...candidates.map((entry) => entry.card), ...lastCards];
 
@@ -279,20 +287,23 @@ async function cardByNumberAlone(numberRead) {
 	return pick.cards;
 }
 
-// Looks for an anniversary reprint and its original among the look-alikes (see STAMP_CORNERS).
-// Returns { won: the reprint's card } when the photo is the reprint, { lost: the reprint's entry }
-// when it is the original, { unsure: [both cards, closer first] }, or {} with nothing to decide.
+// Looks for anniversary reprints and their original among the look-alikes (see STAMP_CORNERS).
+// Returns { won: a reprint's card } when the photo is that reprint, { lost: the reprints' entries }
+// when it is the original, { unsure: [the two closest cards, closer first] }, or {} with nothing to
+// decide. Base Set Charizard has two reprints: the Classic Collection's and the 30th Celebration's.
 function reprintOrOriginal(lookAlikes) {
-	const reprint = lookAlikes.find((entry) => isAnniversaryReprint(entry.card));
-	if (!reprint) return {};
-	const originals = lookAlikes.filter((entry) => isReprintOf(reprint.card, entry.card));
-	if (originals.length === 0) return {};
+	const reprints = lookAlikes.filter((entry) => isAnniversaryReprint(entry.card)
+		&& lookAlikes.some((other) => isReprintOf(entry.card, other.card)));
+	if (reprints.length === 0) return {};
+	const originals = lookAlikes.filter((entry) => reprints.some((reprint) => isReprintOf(reprint.card, entry.card)));
 	// Base Set Charizard 4/102 and Base Set 2 Charizard 4/130 are both originals of one reprint.
 	const original = originals.reduce((closest, entry) => (entry.corners < closest.corners ? entry : closest));
-	if (reprint.corners === null || original.corners === null) return { unsure: [original.card, reprint.card] };
-	if (original.corners >= reprint.corners * REPRINT_CORNER_GAP) return { won: reprint.card };
-	if (reprint.corners >= original.corners * REPRINT_CORNER_GAP) return { lost: reprint };
-	return { unsure: reprint.corners < original.corners ? [reprint.card, original.card] : [original.card, reprint.card] };
+	const contenders = [original, ...reprints];
+	if (contenders.some((entry) => entry.corners === null)) return { unsure: contenders.map((entry) => entry.card) };
+	contenders.sort((a, b) => a.corners - b.corners);
+	const [closest, next] = contenders;
+	if (next.corners < closest.corners * REPRINT_CORNER_GAP) return { unsure: [closest.card, next.card] };
+	return closest === original ? { lost: reprints } : { won: closest.card };
 }
 
 function nearlySameNumber(read, printed) {

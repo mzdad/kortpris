@@ -5,6 +5,37 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.45.0
+
+- **1.10 Celebrations Classic Collection cards (2021) open as themselves**, not as their originals.
+  Like the 30th Celebration reprints, each carries its original's number ("4/102" on the
+  Charizard), which TCGdex numbers CC001 to CC025, so a search by the number found only the
+  original. Now each is added next to its original (listed by id in `CLASSIC_NUMBERS`, as the names
+  differ), and its "25" stamp - where the 30th Celebration's "30" is - tells them apart. Base Set
+  Charizard has both reprints; the app shows whichever two its stamps can't tell apart. Cards saved
+  before 1.32.0 with the old database's ids ("cel25c-4_A") are now translated too.
+  - Made-up photos of the 25 cards: 22 first, 22 opened by themselves, 0 wrong (before: none
+    found by its number, and a photo of one opened its original). Of the other 3, two had their
+    text misread ("Throh" for Xerneas EX), and M Rayquaza EX's edges weren't found, so the stamp
+    couldn't be checked: both cards are shown, the original first.
+  - Made-up photos of their 25 originals: 24 first, 23 opened, 0 wrong. Mewtwo-EX ties with its
+    Legendary Treasures print (the same picture), as before.
+- **A wrong card no longer opens because it alone came from a set of the size read.** That rule
+  (and those for the set code, a nearby number and sparkle) now picks only among cards that look
+  like the photo at all (`LOOK_ALIKE_MOST_DISTANCE` 1.5; right cards scored up to 1.46). Found
+  while testing: since 1.44.0 gave the trainer kits pictures, a Shiny Vault Shuckle whose number
+  read "4/11" opened a trainer kit Machoke 4/11, although nothing looked like the photo (1.75 at
+  best). The special numbers test is back to 0 wrong.
+- **What 1.44.0's new pictures changed in the made-up photos**, checked against 1.43.0: two of 16
+  now aren't opened by themselves (13 first and 12 opened instead of 14 and 13, 0 wrong), because
+  cards with the same picture got one. The Pokémon 151 Pikachu's picture is also the McDonald's
+  2024 Pikachu's, and the Evolutions Charizard's is the Celebrations and 30th Celebration
+  Charizards'. Without the number the app can't tell them apart, and now shows both rather than
+  opening one by luck.
+  - Your 46 real photos: unchanged (46 first, 44 opened, 0 wrong). Full-art: 27 first, 27 opened,
+    0 wrong. Special numbers: 18 read, 24 first, 22 opened, 0 wrong. Learning: unchanged (harder
+    second photos 29 recognised, 28 before the reading, 10 neither, 0 wrong).
+
 ## Done in 1.44.0
 
 - **5.2 Pictures for the cards TCGdex has none of** come from Scrydex now, from the old database's
@@ -411,7 +442,6 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black: the rest. | 6 of 27 full-art numbers still aren't read in 1.40.0 (8 in 1.28.0). The made-up photos are made from the database's small pictures, so a real photo may read better: worth checking with a few real full-art photos first. The name and the look find these cards anyway. | S |
 | 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: in a toploader, and on a grey table. | The name strip, the number corners and the set code (1.7) need them. Your Gengar in a toploader has none (its best box scores 1.24, where 1.3 is needed), nor do 2 of 27 made-up full-art photos on a grey table, where the card's own edge is too faint to be among the lines tried. Trying more lines didn't help in 1.40.0. The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
-| 1.10 | **Celebrations Classic Collection cards (2021) open as their originals.** Like the 30th Celebration reprints, each carries its original's number ("4/102" on the Charizard), which TCGdex numbers CC001 to CC025 instead, so a search by the number finds only the original. | Since 1.44.0 they have pictures, which tell them apart (the Charizard's photo was 0.025 from its own picture, 0.108 from the 1999 original's), but the number opens the original first. Adding each next to its original, as the 30th Celebration's are (1.32.0), would fix it. | S |
 
 ## 2. Quicker
 

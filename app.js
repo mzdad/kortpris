@@ -1944,7 +1944,7 @@ function clockTime(date) {
 function ebaySoldUrl(card, version, grade = "") {
 	// eBay's finished sales of this card: what people really paid. For a reprint, the number is
 	// left out - the database has only half of it ("69" of "69/132"), which titles never show
-	// alone - and so is the end of the set's name, which sellers skip: "30th Celebration".
+	// alone - and so is anything after a colon in the set's name, which sellers skip.
 	const words = isAnniversaryReprint(card)
 		? ["Pokemon", card.name, card.set.name.split(":")[0]]
 		: ["Pokemon", card.name, collectorNumber(card), card.set.name];

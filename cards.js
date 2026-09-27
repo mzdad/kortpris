@@ -305,6 +305,10 @@ function possibleCurrentIds(oldId) {
 	const at = oldId.lastIndexOf("-");
 	const oldSetId = oldId.slice(0, at);
 	const number = oldId.slice(at + 1);
+	// Cards the old database numbered its own way, like "cel25c-4_A" for the Classic Collection
+	// Charizard (Scrydex keeps its ids: see SCRYDEX_CARD_IDS in card-ids.js).
+	const numberedOwnWay = Object.keys(SCRYDEX_CARD_IDS).find((id) => SCRYDEX_CARD_IDS[id] === oldId);
+	if (numberedOwnWay) return [numberedOwnWay];
 	if (oldSetId === OLD_REPRINT_SET) {
 		const reprint = Object.entries(REPRINT_NUMBERS).find(([, old]) => old[0] === number);
 		return reprint ? [REPRINT_SET + "-" + reprint[0]] : [];
@@ -347,9 +351,10 @@ function appCard(raw, set) {
 		variants: raw.variants || {},
 	};
 	// An anniversary reprint carries its original's number, like "69/132", which is how it is read
-	// and shown; TCGdex numbers it 1 to 30 (see REPRINT_NUMBERS in card-ids.js).
-	if (set.id === REPRINT_SET && REPRINT_NUMBERS[raw.localId]) {
-		card.number = REPRINT_NUMBERS[raw.localId][0].replace(/\D+$/, "");
+	// and shown; TCGdex numbers them 1 to 30 or CC001 to CC025 (see reprintNumber in card-ids.js).
+	const printed = reprintNumber(set.id, raw.localId);
+	if (printed) {
+		card.number = printed;
 		card.set.printedTotal = null;
 	}
 	return card;
@@ -440,8 +445,9 @@ function dayOf(isoTime) {
 }
 
 async function withReprints(cards) {
-	// The cards found, plus the anniversary reprint of any of them. If the database doesn't
-	// answer, the cards alone: the reprints are an extra, not worth failing the search for.
+	// The cards found, plus the anniversary reprints of any of them: the 30th Celebration's (2026)
+	// and the Celebrations Classic Collection's (2021). If the database doesn't answer, the cards
+	// alone: the reprints are an extra, not worth failing the search for.
 	let reprints;
 	try {
 		reprints = await allReprints();
@@ -456,19 +462,25 @@ async function withReprints(cards) {
 
 function allReprints() {
 	if (!reprintsPromise) {
-		reprintsPromise = cardsOfSet(REPRINT_SET);
+		reprintsPromise = Promise.all([cardsOfSet(REPRINT_SET), cardsOfSet(CLASSIC_SET)]).then(([thirtieth, classic]) => [...thirtieth, ...classic]);
 		reprintsPromise.catch(() => { reprintsPromise = null; });   // try again on the next search
 	}
 	return reprintsPromise;
 }
 
 function isAnniversaryReprint(card) {
-	return card.set.id === REPRINT_SET;
+	return card.set.id === REPRINT_SET || card.set.id === CLASSIC_SET;
 }
 
 function isReprintOf(reprint, card) {
-	// Same name and same number, but not itself a reprint.
-	return isAnniversaryReprint(reprint) && !isAnniversaryReprint(card)
+	if (isAnniversaryReprint(card)) return false;
+	// A Classic Collection card: one of its originals listed in CLASSIC_NUMBERS (card-ids.js).
+	if (reprint.set.id === CLASSIC_SET) {
+		const classic = CLASSIC_NUMBERS[reprint.id.slice(CLASSIC_SET.length + 1)];
+		return Boolean(classic) && classic[1].includes(card.id);
+	}
+	// A 30th Celebration card: the same name and number.
+	return reprint.set.id === REPRINT_SET
 		&& reprint.name.toLowerCase() === card.name.toLowerCase()
 		&& sameNumber(card.number, reprint.number);
 }

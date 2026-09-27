@@ -45,7 +45,12 @@ A web page with nothing to install. What happens to a photo:
    a read "8/64" picks Mr. Mime 6/64, one digit away, over Mr. Mime 22/64. The 2026
    **30th Celebration: Classic Collection** reprints carry their original's number ("69/132"),
    which the database can't search on, so each is added next to its original; a "30" stamp at a
-   bottom corner of the picture tells the two apart (`STAMP_CORNERS` in `matcher.js`). When
+   bottom corner of the picture tells the two apart (`STAMP_CORNERS` in `matcher.js`). The 2021
+   **Celebrations Classic Collection** reprints work the same way (version 1.45.0), with a "25"
+   stamp in the same place; their originals are listed by id in `CLASSIC_NUMBERS`
+   (`card-ids.js`), as the names differ ("Impostor" and "Imposter Professor Oak"). The rules that
+   pick among look-alike cards (by set size, set code, number or sparkle) only pick a card that
+   looks like the photo at all (`LOOK_ALIKE_MOST_DISTANCE`). When
    both the name and the card's own number are unreadable but the set size isn't (shown as
    `?/110`), the photo is compared with every card from a set of that size. The
    fields stay editable, so a card can also be typed in.
