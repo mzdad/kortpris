@@ -46,7 +46,9 @@ A web page with nothing to install. What happens to a photo:
    cards reads differently after even a tiny change (one PC read `86/110`, another `0/110`,
    from the same photo).
 3. **Card → prices.** Prices from **Cardmarket** (Europe, euros, also shown in kroner)
-   and **TCGplayer** (USA, dollars), with links to both shops. A card whose background
+   and **TCGplayer** (USA, dollars), with links to both shops. Cardmarket also gives "reverse
+   holo" prices for some cards never printed that way (Base Set Charizard); TCGdex lists each
+   card's prints, so those are left out (`cardmarketReverseCounts`). A card whose background
    glitters in the photo (below the picture, letters left out) opens on its **reverse holo**
    price, which can be a hundred times the plain one (`sparkle.js`); that also picks the right
    one of two cards with the same picture when only one was ever printed as a reverse holo. **PSA prices** (what the card

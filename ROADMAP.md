@@ -5,6 +5,17 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.33.1
+
+- **3.6 No "reverse holo" prices for cards never printed that way.** Cardmarket gives some old cards
+  reverse holo prices anyway - Base Set Charizard €203, Base Set Pikachu €23 - though reverse holos
+  only began in 2002. Since 1.32.0 the version boxes left those out; now the Cardmarket table on a
+  card's page does too, by the same rule in one place (`cardmarketReverseCounts`): TCGdex's list of
+  the card's prints. Cards that really come as reverse holos keep the rows (Legendary Collection
+  and 151 Pikachu), and a card whose prints TCGdex doesn't list shows Cardmarket's prices as before.
+  Tested on the six cards of the test browser's made-up collection, and on Charizard without its
+  list of prints.
+
 ## Done in 1.33.0
 
 - **A saved card opens its page.** You asked to be able to tap a card in My cards and see more
@@ -180,7 +191,6 @@ L = several sessions).
 | 3.3 | **Scan several cards in a row**: after each card, "Save and next" goes straight back to the camera. | Adding a stack of cards to My cards is many taps today. | S |
 | 3.4 | **My cards: sort and filter** (by value, set, name, newest) and share the list. | The list grows long. | M |
 | 3.5 | **Hide the camera details** at the bottom of the page once the camera is proven on your phones. | It was added to find out what iPhones give. | S |
-| 3.6 | **Leave out Cardmarket's "reverse holo" rows for cards never printed that way.** Since 1.32.0 the version boxes do, but the Cardmarket table on a card's page still lists "Reverse holo, 30-day average" for Base Set Charizard and Pikachu. | It looks like a price for a card that doesn't exist, and a saved card's page (1.33.0) shows it more often. | S |
 
 ## 4. Accounts and keeping things
 

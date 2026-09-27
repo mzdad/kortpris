@@ -1300,7 +1300,7 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 		${versionsHtml(versions, version.key, card.pricesFailed, fromPhoto)}
 		${versions.length === 0 ? `<p>${storeLinkHtml(ebaySoldUrl(card, version), t("soldOnEbay"))}</p>` : ""}
 		${own}
-		${cardmarketTableHtml(card.cardmarket)}
+		${cardmarketTableHtml(card)}
 		${tcgplayerTableHtml(card.tcgplayer)}
 		${gradedLinksHtml(card, version)}
 		<p class="fineprint">${t("ungraded")}</p>
@@ -1333,16 +1333,22 @@ function cardVersions(card) {
 			versions.push({ key: textKey, eur: null, usd: price.market > 0 ? price.market : null });
 		}
 	}
-	// Cardmarket has a "reverse holo" price for some cards never printed that way (Base Set Charizard):
-	// the database's list of a card's prints (card.variants) says whether there is one.
 	const reverse = firstPrice(cardmarket, CARDMARKET_REVERSE);
-	const knowsPrints = card.variants && Object.keys(card.variants).length > 0;
-	if (reverse !== null && (!knowsPrints || card.variants.reverse)) {
+	if (reverse !== null && cardmarketReverseCounts(card)) {
 		findOrAddVersion(versions, ["reverseHolofoil"], "reverseHolofoil").eur = reverse;
 	}
 	const regular = firstPrice(cardmarket, CARDMARKET_REGULAR);
 	if (regular !== null) findOrAddVersion(versions, REGULAR_VERSIONS, "normal").eur = regular;
 	return versions;
+}
+
+// Cardmarket has "reverse holo" prices for some cards never printed that way (Base Set Charizard).
+// The database's list of a card's prints (card.variants) says whether there is one; without that
+// list, Cardmarket is believed. Its reverse holo prices are shown only when this says true: in the
+// version boxes and in the Cardmarket table.
+function cardmarketReverseCounts(card) {
+	const knowsPrints = card.variants && Object.keys(card.variants).length > 0;
+	return !knowsPrints || Boolean(card.variants.reverse);
 }
 
 function firstPrice(prices, keys) {
@@ -1427,12 +1433,16 @@ function bestCardmarketPrice(cardmarket) {
 	return null;
 }
 
-function cardmarketTableHtml(cardmarket) {
+function cardmarketTableHtml(card) {
+	const cardmarket = card.cardmarket;
 	if (!bestCardmarketPrice(cardmarket)) return "";
 	// Euros is the shop's own currency; a second column converts when another one is picked.
 	const showsEuros = money.code === "EUR";
+	// The reverse holo rows only for a card printed that way (see cardmarketReverseCounts).
+	const showsReverse = cardmarketReverseCounts(card);
 	const rows = CARDMARKET_ROWS
 		.filter((key) => cardmarket.prices[key] > 0)
+		.filter((key) => showsReverse || !CARDMARKET_REVERSE.includes(key))
 		.map((key) => {
 			const value = cardmarket.prices[key];
 			const converted = showsEuros ? "" : `<td>${money.local.format(fromEuros(value, money.code))}</td>`;
