@@ -336,6 +336,8 @@ button.version { cursor: pointer; }
 
 /* ---------- "Add to my cards" on a card's page ---------- */
 .own { display: grid; gap: 6px; justify-items: start; }
+/* "Add to my cards" and "Save and scan the next", side by side while they fit. */
+.own-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .own-note { margin: 0; font-size: 0.9rem; color: var(--muted); }
 
 /* ---------- My cards ---------- */

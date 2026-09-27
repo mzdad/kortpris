@@ -5,6 +5,16 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.35.0
+
+- **3.3 Scan a stack of cards.** A card found on the Scan screen now has a yellow "Save and scan
+  the next" button next to "Add to my cards": it saves the card and opens the camera again straight
+  away, which says "Saved. Fill the frame with the next card". Kids mode has a big one too ("Save,
+  then the next card"). A phone without the app's own camera gets its own camera instead. With
+  learned cards opening in a moment (1.34.0), a stack you have scanned before goes quickly. Tested
+  in the test browser with a pretend camera showing a card photo: save, camera, photo, the next card
+  found - and the button is not on a saved card's page in My cards.
+
 ## Done in 1.34.0
 
 - **2.1 A learned card opens before its text is read.** The app now finds the card's edges in the
@@ -204,7 +214,6 @@ L = several sessions).
 |---|---|---|---|
 | 3.1 | **Install it as an app** (home screen icon, opens full screen, starts instantly, My cards works without internet). | Feels like a real app; files load from the phone. (Since 1.32.1 the app already loads a newer version as it opens.) | M |
 | 3.2 | **Take the photo by itself** when the card fills the frame and the phone is still. | No button to press; great for kids. The steadiness measure exists already. | M |
-| 3.3 | **Scan several cards in a row**: after each card, "Save and next" goes straight back to the camera. | Adding a stack of cards to My cards is many taps today. | S |
 | 3.4 | **My cards: sort and filter** (by value, set, name, newest) and share the list. | The list grows long. | M |
 | 3.5 | **Hide the camera details** at the bottom of the page once the camera is proven on your phones. | It was added to find out what iPhones give. | S |
 

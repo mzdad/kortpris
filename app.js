@@ -391,28 +391,29 @@ for (const button of languageButtons) {
 
 // ---------- Buttons ----------
 
-cameraButton.addEventListener("click", openCamera);
-kidStartButton.addEventListener("click", openCamera);
+cameraButton.addEventListener("click", () => openCamera());
+kidStartButton.addEventListener("click", () => openCamera());
 libraryButton.addEventListener("click", () => {
 	showView("scan");
 	if (kidsMode) say(t("sayChoosePhoto"));
 	libraryInput.click();
 });
 
-function openCamera() {
+// afterSave: opened by "Save and scan the next", so the camera says the last card was saved.
+function openCamera(afterSave = false) {
 	showView("scan");
 	// Said from the button press on purpose: iPhones only let a page start speaking from a tap,
 	// and after this first time it may also speak by itself when the card is found.
 	if (kidsMode) say(t("sayTakePhoto"));
 	// The app's own camera zooms in and lights the card; the phone's own camera screen can't be
 	// told to. Browsers without a live camera open the phone's camera straight away.
-	if (liveCameraPossible()) openLiveCamera();
+	if (liveCameraPossible()) openLiveCamera(afterSave);
 	else cameraInput.click();
 }
 
 // ---------- The app's own camera ----------
 
-async function openLiveCamera() {
+async function openLiveCamera(afterSave = false) {
 	if (!liveCameraView.hidden) return;
 	liveCameraView.hidden = false;
 	document.body.classList.add("camera-open");   // the page behind mustn't scroll
@@ -435,7 +436,7 @@ async function openLiveCamera() {
 	liveCamera = camera;
 	fitCameraBox();
 	await setLiveCameraSafely();
-	showCameraMessage("cameraHint");
+	showCameraMessage(afterSave ? "cameraSavedHint" : "cameraHint");
 	renderCameraButtons();
 }
 
@@ -611,13 +612,16 @@ detail.addEventListener("click", (event) => {
 		sayCard(card);
 		return;
 	}
-	if (!event.target.closest("[data-action='add-to-collection']") || !collectionReady()) return;
+	const andNext = event.target.closest("[data-action='save-and-next']");
+	if (!(andNext || event.target.closest("[data-action='add-to-collection']")) || !collectionReady()) return;
 	saveFailed = !addToCollection(card, versionOf(card).key);
 	// Saving the card the photo was taken to be says it was right: that photo is learned too.
 	if (lastPhoto && lastPhoto.card && lastPhoto.card.id === card.id) rememberCard(card);
 	renderResults();
 	renderCollection();
 	if (kidsMode && !saveFailed) say(t("saySaved"));
+	// "Save and scan the next": straight back to the camera, still from the tap (see openCamera).
+	if (andNext && !saveFailed) openCamera(true);
 });
 
 // The "fetch PSA prices" tick box on the open card: remembered, and the card drawn again, which
@@ -1396,11 +1400,20 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
 	let addText = owned > 0 ? "addAnother" : "addToCollection";
 	if (!collectionReady()) addText = "loadingAccountCards";
+	// For a stack of cards: save this one and go straight back to the camera for the next.
+	const saveAndNext = onScanScreen
+		? `<button type="button" class="button primary" data-action="save-and-next" ${collectionReady() ? "" : "disabled"}>
+				<span aria-hidden="true">📷</span> ${t("saveAndNext")}
+			</button>`
+		: "";
 	const own = `
 		<div class="own">
-			<button type="button" class="button secondary" data-action="add-to-collection" ${collectionReady() ? "" : "disabled"}>
-				${t(addText)}
-			</button>
+			<div class="own-buttons">
+				<button type="button" class="button secondary" data-action="add-to-collection" ${collectionReady() ? "" : "disabled"}>
+					${t(addText)}
+				</button>
+				${saveAndNext}
+			</div>
 			${ownedNote}
 			${saveProblem}
 		</div>`;
@@ -1717,13 +1730,19 @@ function storeLinkHtml(url, text) {
 // For children who can't read well yet: the card's picture and name, a row of Poké Balls for how
 // valuable it is, one rounded price and big buttons - and the phone says it out loud.
 
-// pickedKey: the version picked on the page (see versionOf).
-function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint) {
+// pickedKey: the version picked on the page (see versionOf). onScanScreen: false for a saved card's
+// page in My cards, which has no "save and the next one".
+function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanScreen = true) {
 	const versions = cardVersions(card);
 	const version = versionOf(card, pickedKey);
 	const owned = savedCount(card.id, version.key);
 	const ownedNote = owned > 0 ? `<p class="own-note">${t("kidHave", { count: owned })}</p>` : "";
 	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
+	const saveAndNext = onScanScreen
+		? `<button type="button" class="button secondary kid-save" data-action="save-and-next" ${collectionReady() ? "" : "disabled"}>
+				<span aria-hidden="true">⭐📷</span> ${t("kidSaveAndNext")}
+			</button>`
+		: "";
 	return `
 		<div class="kid-card">
 			<img class="card-image kid-card-image" src="${escapeHtml(readablePictureUrl(card.images && card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
@@ -1736,6 +1755,7 @@ function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint) {
 			<button type="button" class="button primary kid-save" data-action="add-to-collection" ${collectionReady() ? "" : "disabled"}>
 				<span aria-hidden="true">⭐</span> ${t(owned > 0 ? "kidSaveAnother" : "kidSave")}
 			</button>
+			${saveAndNext}
 			${ownedNote}
 			${saveProblem}
 		</div>`;
@@ -2122,7 +2142,7 @@ function renderSavedCardPage() {
 	const page = savedPage;
 	if (!page) return;
 	if (!page.card) savedCardPanel.innerHTML = savedCardWaitingHtml(page.entry, page.problem);
-	else if (kidsMode) savedCardPanel.innerHTML = kidCardDetailHtml(page.card, page.version);
+	else if (kidsMode) savedCardPanel.innerHTML = kidCardDetailHtml(page.card, page.version, false);
 	else savedCardPanel.innerHTML = cardDetailHtml(page.card, page.version, false);
 }
 

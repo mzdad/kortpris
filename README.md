@@ -57,7 +57,8 @@ A web page with nothing to install. What happens to a photo:
    fetched while "Fetch PSA prices automatically" is ticked on the card page, because the free
    plan allows about 50 cards a day; prices fetched in the last day are shown either way.
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
-   value in kroner. It is split into Pokémon, Trainer cards and Energy cards (the database's
+   value in kroner. For a stack of cards, "Save and scan the next" on a found card saves it and
+   opens the camera again at once. It is split into Pokémon, Trainer cards and Energy cards (the database's
    "supertype"; cards saved before 1.25.0 are asked for theirs when My cards opens). A search box
    narrows the list by name, set, number, version or kind ("jungle holo", "pika", "58",
    "trainer") and says what the cards found are worth together. Tapping a card opens its page
