@@ -15,6 +15,9 @@ const LANGUAGE_STORAGE_KEY = "kortpris.language";
 const CLAUDE_FINISH_VERSIONS = { holo: "holofoil", reverse_holo: "reverseHolofoil", normal: "normal" };
 // Where the phone remembers whether kids mode is on.
 const KIDS_MODE_STORAGE_KEY = "kortpris.kidsMode";
+// Where the phone remembers the order My cards is shown in (see sortedCollection).
+const SORT_STORAGE_KEY = "kortpris.collectionSort";
+const SORT_ORDERS = ["value", "name", "set", "newest"];
 // A version's big price from this amount up (six digits) gets a smaller size, so it fits its box.
 const LONG_PRICE_FROM = 100000;
 // Kids mode shows a card's value as 1 to 5 Poké Balls: one more ball from each of these prices, in
@@ -129,6 +132,9 @@ const collectionList = document.getElementById("collection-list");
 const collectionSearchRow = document.getElementById("collection-search-row");
 const collectionSearch = document.getElementById("collection-search");
 const collectionSearchNote = document.getElementById("collection-search-note");
+const collectionSort = document.getElementById("collection-sort");
+const collectionShare = document.getElementById("collection-share");
+const collectionShareNote = document.getElementById("collection-share-note");
 const collectionPage = document.getElementById("collection-page");
 const savedCardView = document.getElementById("saved-card-view");
 const savedCardBack = document.getElementById("saved-card-back");
@@ -218,6 +224,7 @@ let stopWatchingLearned = null;   // stops listening for the signed-in account's
 let savedPage = null;             // the saved card whose page My cards shows (see openSavedCard), or null
 let listScrolledTo = 0;           // how far down My cards' list was when that page opened
 let installOffer = null;          // Android's offer to install the app, once it has come (see renderInstall)
+let shareMessage = null;          // what sharing My cards last said: a text key, or null
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
@@ -238,6 +245,8 @@ let lastCameraPhoto = null;
 // The number the reader put in the box, and every other number it thought possible.
 let scannedNumbers = { shown: "", guesses: [] };
 
+// The order My cards was last shown in on this phone (see sortedCollection).
+collectionSort.value = SORT_ORDERS.includes(readStorage(SORT_STORAGE_KEY)) ? readStorage(SORT_STORAGE_KEY) : "value";
 applyLanguage();
 // A newer version is loaded first, if there is one; then cards saved before 1.32.0 are translated.
 reloadIfNewerVersion().then((reloading) => {
@@ -783,12 +792,25 @@ moveCardsButton.addEventListener("click", () => {
 	renderAccount();
 });
 
-// The list narrows down with every letter typed.
-collectionSearch.addEventListener("input", renderCollection);
+// The list narrows down with every letter typed. (A note that it was shared is about the list
+// before, so it goes.)
+collectionSearch.addEventListener("input", () => {
+	shareMessage = null;
+	renderCollection();
+});
 collectionSearch.addEventListener("keydown", (event) => {
 	// There is nothing to send, so Enter only puts the phone's keyboard away to show the cards.
 	if (event.key === "Enter") collectionSearch.blur();
 });
+
+// The order of My cards (its first value is set before the page is first drawn, above).
+collectionSort.addEventListener("change", () => {
+	writeStorage(SORT_STORAGE_KEY, collectionSort.value);
+	shareMessage = null;
+	renderCollection();
+});
+
+collectionShare.addEventListener("click", shareCollection);
 
 collectionList.addEventListener("click", (event) => {
 	const button = event.target.closest("[data-action]");
@@ -1999,14 +2021,12 @@ function renderCollection() {
 		? `<p class="status error">${t("notSaved")} ${t(accountSaveProblem.key, accountSaveProblem.values)}</p>`
 		: "";
 	collectionSummary.innerHTML = saveProblem + collectionSummaryHtml(totals);
-	// Most valuable first; cards without a Cardmarket price at the end.
-	const sorted = [...collection].sort((a, b) => savedValue(b) - savedValue(a));
-	// Kids mode hides the search box, so a search typed earlier mustn't hide cards there.
-	const query = kidsMode ? "" : collectionSearch.value;
-	const shown = sorted.filter((entry) => matchesSearch(entry, query));
+	const query = shownQuery();
+	const shown = shownCollection();
 	collectionSearchRow.hidden = collection.length === 0;
 	collectionSearchNote.textContent = searchNote(query, shown);
-	// A group for each kind of card, with its cards most valuable first; empty groups are left out.
+	collectionShareNote.textContent = shareMessage ? t(shareMessage) : "";
+	// A group for each kind of card, with its cards in the order picked; empty groups are left out.
 	collectionList.innerHTML = CARD_KINDS.map((kind) => {
 		const entries = shown.filter((entry) => cardKind(entry) === kind);
 		if (entries.length === 0) return "";
@@ -2017,6 +2037,80 @@ function renderCollection() {
 				<ul class="collection-list">${entries.map(savedCardHtml).join("")}</ul>
 			</section>`;
 	}).join("");
+}
+
+// Kids mode hides the search box and the order, so what was picked there mustn't change its list.
+function shownQuery() {
+	return kidsMode ? "" : collectionSearch.value;
+}
+
+// The saved cards My cards shows: those the search finds, in the order picked.
+function shownCollection() {
+	const order = kidsMode ? "value" : collectionSort.value;
+	return sortedCollection(order).filter((entry) => matchesSearch(entry, shownQuery()));
+}
+
+// My cards in an order: "value" is the most valuable first (cards without a price at the end),
+// "name" and "set" (then number) are alphabetical, and "newest" is the last saved first - the list
+// keeps the cards in the order they were saved (one more of a card saved before doesn't move it).
+function sortedCollection(order) {
+	const cards = [...collection];
+	const byText = (a, b) => String(a).localeCompare(String(b), money.locale, { sensitivity: "base", numeric: true });
+	if (order === "name") return cards.sort((a, b) => byText(a.name, b.name) || savedValue(b) - savedValue(a));
+	if (order === "set") return cards.sort((a, b) => byText(a.setName, b.setName) || byText(a.number, b.number));
+	if (order === "newest") return cards.reverse();
+	return cards.sort((a, b) => savedValue(b) - savedValue(a));
+}
+
+// "Share list": the cards shown, as text, through the phone's own way of sharing (Messages, Mail,
+// Notes...). Where the browser can't share, the text is copied, to paste somewhere.
+async function shareCollection() {
+	const text = collectionText(shownCollection());
+	shareMessage = null;
+	if (navigator.share) {
+		try {
+			await navigator.share({ title: t("shareTitle"), text: text });
+			renderCollection();
+			return;
+		} catch (error) {
+			if (error.name === "AbortError") return;   // the viewer closed the share sheet
+			console.error(error);   // copied instead, below
+		}
+	}
+	try {
+		await navigator.clipboard.writeText(text);
+		shareMessage = "shareCopied";
+	} catch (error) {
+		console.error(error);
+		shareMessage = "shareFailed";
+	}
+	renderCollection();
+}
+
+// The cards as plain text, in groups like the list, with what they are worth together.
+function collectionText(entries) {
+	const totals = collectionTotals(entries);
+	let summary = totals.cards === 1 ? t("cardCountOne") : t("cardCount", { count: totals.cards });
+	if (totals.value > 0) summary += " · " + t("searchWorth", { price: money.whole.format(totals.value) });
+	const query = shownQuery().trim();
+	const lines = [query ? t("shareHeadingSearch", { query: query }) : t("shareHeading"), summary, ""];
+	for (const kind of CARD_KINDS) {
+		const ofKind = entries.filter((entry) => cardKind(entry) === kind);
+		if (ofKind.length === 0) continue;
+		lines.push(t(KIND_TEXT_KEYS[kind]));
+		for (const entry of ofKind) lines.push(savedCardLine(entry));
+		lines.push("");
+	}
+	lines.push(t("valueBasis") + " · Kortpris");
+	return lines.join("\n");
+}
+
+// One saved card as a line of text: "2× Charizard · Base Set 4/102 · Holo · 6.093 kr. each".
+function savedCardLine(entry) {
+	const local = localPrice(entry.priceEur, entry.priceUsd);
+	const price = local !== null ? t("each", { price: money.whole.format(local) }) : t("noPrice");
+	const version = entry.version ? " · " + t(entry.version) : "";
+	return `${entry.count}× ${entry.name} · ${entry.setName} ${entry.number}${version} · ${price}`;
 }
 
 function matchesSearch(entry, query) {

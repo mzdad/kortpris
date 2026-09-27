@@ -5,6 +5,17 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.37.0
+
+- **3.4 Sort and share My cards.** Under the search box: "Sort by" value (as before), name, set
+  and number, or the last saved first - remembered on the phone - and "Share list", which sends the
+  cards shown (so a search like "holo" shares only those) as text through the phone's own sharing:
+  Messages, Mail, Notes. It reads like "1× Charizard · Base Set 4/102 · Holo · DKK 6,093 each",
+  with the count and what they are worth at the top. Where a browser can't share, the text is
+  copied instead, and the page says so. The search box was already the filter. Kids mode keeps the
+  list by value, without these. Tested in the test browser: all four orders, the shared text with
+  and without a search, the copy instead, Danish at phone width.
+
 ## Done in 1.36.0
 
 - **3.1 Kortpris can be installed as an app.** "Put Kortpris on your home screen" on the Scan
@@ -228,7 +239,6 @@ L = several sessions).
 | | What | Why | Size |
 |---|---|---|---|
 | 3.2 | **Take the photo by itself** when the card fills the frame and the phone is still. | No button to press; great for kids. The steadiness measure exists already. | M |
-| 3.4 | **My cards: sort and filter** (by value, set, name, newest) and share the list. | The list grows long. | M |
 | 3.5 | **Hide the camera details** at the bottom of the page once the camera is proven on your phones. | It was added to find out what iPhones give. | S |
 
 ## 4. Accounts and keeping things

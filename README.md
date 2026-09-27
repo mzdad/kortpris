@@ -61,7 +61,10 @@ A web page with nothing to install. What happens to a photo:
    opens the camera again at once. It is split into Pokémon, Trainer cards and Energy cards (the database's
    "supertype"; cards saved before 1.25.0 are asked for theirs when My cards opens). A search box
    narrows the list by name, set, number, version or kind ("jungle holo", "pika", "58",
-   "trainer") and says what the cards found are worth together. Tapping a card opens its page
+   "trainer") and says what the cards found are worth together. "Sort by" orders the list by
+   value, name, set and number, or the last saved first (remembered on the phone), and "Share
+   list" sends the cards shown as text through the phone's own sharing, or copies it where the
+   browser can't share. Tapping a card opens its page
    there - the page the Scan screen shows for a card it found, with the saved version picked -
    and "Back to My cards" or the phone's own Back (a swipe on an iPhone) returns to the list.
    Without an account it is kept in the phone's browser only.
