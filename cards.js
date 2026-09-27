@@ -37,12 +37,13 @@ const MOST_ANSWERS = 1000;
 const KEPT_AT_HEADER = "Kortpris-Kept-At";
 // TCGdex also has the sets of the TCG Pocket phone game, which aren't cards anyone can hold.
 const DIGITAL_SERIES = ["tcgp"];
-// TCGdex's pictures (WebP: a quarter of the PNG's size), and the old database's for the cards TCGdex
-// has no picture of yet (mostly galleries, vaults and promos).
+// TCGdex's pictures (WebP: a quarter of the PNG's size), and Scrydex's for the cards TCGdex has no
+// picture of yet (mostly galleries, vaults and promos: see scrydexIdOf in card-ids.js).
 const PICTURE_SMALL = "/low.webp";
 const PICTURE_LARGE = "/high.webp";
+const SCRYDEX_PICTURES = "https://images.scrydex.com/pokemon/";
+// Where they came from until 1.44.0: the old database, which may close in March 2027.
 const OLD_PICTURES = "https://images.pokemontcg.io/";
-const OLD_REPRINT_PICTURES = "https://images.scrydex.com/pokemon/";
 // Promo sets whose cards print a code before a plain number: "SVP EN 001" is card 1 of the
 // Scarlet & Violet Black Star promos, set "svp".
 const PROMO_SET_CODES = { SVP: "svp" };
@@ -356,17 +357,19 @@ function appCard(raw, set) {
 
 function picturesOf(raw, setId) {
 	if (raw.image) return { small: raw.image + PICTURE_SMALL, large: raw.image + PICTURE_LARGE };
-	// TCGdex has no picture of this card yet: the old database's, when it had the card.
-	if (setId === REPRINT_SET) {
-		const old = REPRINT_NUMBERS[raw.localId];
-		if (!old) return null;
-		const oldId = OLD_REPRINT_SET + "-" + old[0];
-		return { small: OLD_REPRINT_PICTURES + oldId + "/small", large: OLD_REPRINT_PICTURES + oldId + "/large" };
-	}
-	const oldSetId = OLD_SET_OF[setId];
-	if (!oldSetId) return null;
-	const number = /^\d+$/.test(raw.localId) ? String(Number(raw.localId)) : raw.localId;
-	return { small: OLD_PICTURES + oldSetId + "/" + number + ".png", large: OLD_PICTURES + oldSetId + "/" + number + "_hires.png" };
+	// TCGdex has no picture of this card yet: Scrydex's, when it has the card.
+	const scrydexId = scrydexIdOf(setId, raw.localId);
+	if (!scrydexId) return null;
+	return { small: SCRYDEX_PICTURES + scrydexId + "/small", large: SCRYDEX_PICTURES + scrydexId + "/large" };
+}
+
+// The picture to keep with a card saved or learned under TCGdex's id (cardId): Scrydex's instead of
+// one borrowed from the old database before 1.44.0 (see picturesOf). Any other comes back as it is.
+function currentPicture(cardId, image) {
+	if (!image || !image.startsWith(OLD_PICTURES)) return image;
+	const at = cardId.lastIndexOf("-");
+	const scrydexId = scrydexIdOf(cardId.slice(0, at), cardId.slice(at + 1));
+	return scrydexId ? SCRYDEX_PICTURES + scrydexId + "/small" : image;
 }
 
 // Every set of cards you can hold: Map(id -> { id, name, printedTotal, releaseDate }). Asked

@@ -5,6 +5,22 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.44.0
+
+- **5.2 Pictures for the cards TCGdex has none of** come from Scrydex now, from the old database's
+  makers (`scrydexIdOf` in `card-ids.js`). TCGdex had no picture of 1,621 cards: 958 borrowed the
+  old database's, which may go in March 2027 (and a few of those were a card's back, like the SVP
+  Oddish's), and 663 had none at all - the MEP promos, McDonald's 2023 and 2024, the Mega
+  Evolution energies and the trainer kits among them. Scrydex has 1,552 of the 1,621, checked
+  against its own set lists (it answers a card it hasn't with a card's back, so its ids must be
+  right); 69 still show a grey "?". Cards saved or learned with the old database's picture get
+  Scrydex's once. Its small pictures are a third of the old database's size (about 50 KB).
+  - 30 of these cards, as made-up photos: 27 first by their looks alone (the other 3 share their
+    picture with another card, and the number picks them), 26 opened by themselves; the right
+    card's picture was 0.01 to 0.12 from the photo. The 2 Celebrations Classic Collection cards
+    opened as their originals, as before: see 1.10.
+  - Your 46 real photos: unchanged (46 first, 44 opened, 0 wrong).
+
 ## Done in 1.43.0
 
 - **2.3 Remember database answers for a day** on the phone (`askTcgdex` in `cards.js`). Every
@@ -395,6 +411,7 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black: the rest. | 6 of 27 full-art numbers still aren't read in 1.40.0 (8 in 1.28.0). The made-up photos are made from the database's small pictures, so a real photo may read better: worth checking with a few real full-art photos first. The name and the look find these cards anyway. | S |
 | 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: in a toploader, and on a grey table. | The name strip, the number corners and the set code (1.7) need them. Your Gengar in a toploader has none (its best box scores 1.24, where 1.3 is needed), nor do 2 of 27 made-up full-art photos on a grey table, where the card's own edge is too faint to be among the lines tried. Trying more lines didn't help in 1.40.0. The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
+| 1.10 | **Celebrations Classic Collection cards (2021) open as their originals.** Like the 30th Celebration reprints, each carries its original's number ("4/102" on the Charizard), which TCGdex numbers CC001 to CC025 instead, so a search by the number finds only the original. | Since 1.44.0 they have pictures, which tell them apart (the Charizard's photo was 0.025 from its own picture, 0.108 from the 1999 original's), but the number opens the original first. Adding each next to its original, as the 30th Celebration's are (1.32.0), would fix it. | S |
 
 ## 2. Quicker
 
@@ -415,7 +432,7 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 
 | | What | Why | Size |
 |---|---|---|---|
-| 5.2 | **Pictures for the cards TCGdex has none of.** The gallery, vault and some promo cards borrow the old database's pictures, which may go when it does (March 2027). | Without a picture a card can't be compared with a photo, and shows a grey "?". Check again closer to March 2027: TCGdex may have them by then. | S |
+| 5.3 | **The test pages' photos** are made from the old database's big pictures, which may go in March 2027. | Then the tests can't run. Scrydex has the same pictures under the same ids (5.2), but new photos would change the tests' results a little, so only when needed. | S |
 
 ## 6. Cards in other languages
 

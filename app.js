@@ -2666,6 +2666,9 @@ async function reloadIfNewerVersion() {
 // learned.js). Quietly: if the database doesn't answer, it is tried again the next time.
 function moveOldCardsToTcgdex() {
 	if (reloadingForUpdate) return;
+	// Pictures first: these need no internet.
+	if (moveSavedPicturesToScrydex()) renderCollection();
+	if (moveLearnedPicturesToScrydex()) renderLearned();
 	moveSavedCardsToTcgdex().then((changed) => { if (changed) renderCollection(); }, (error) => console.error(error));
 	moveLearnedToTcgdex().then((changed) => { if (changed) renderLearned(); }, (error) => console.error(error));
 }

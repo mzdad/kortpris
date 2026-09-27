@@ -190,6 +190,22 @@ async function moveSavedCardsToTcgdex() {
 	}
 }
 
+// Saved cards whose picture was borrowed from the old database get Scrydex's (see currentPicture in
+// cards.js). Returns true when something changed.
+function moveSavedPicturesToScrydex() {
+	if (!collectionReady()) return false;
+	let changed = false;
+	for (const entry of collection) {
+		if (entry.db !== CARD_DATABASE) continue;   // moved to TCGdex first, with its picture
+		const picture = currentPicture(entry.id, entry.image);
+		if (picture === entry.image) continue;
+		entry.image = picture;
+		changed = true;
+	}
+	if (changed) saveCollection();
+	return changed;
+}
+
 function sameCardsTogether(entries) {
 	// The same card in the same version once, with the counts added up: a card saved both before
 	// and after the move to TCGdex.

@@ -37,8 +37,8 @@ A web page with nothing to install. What happens to a photo:
    number read come in one quick question each (`cards.js`), and every number the reader thought
    possible is tried against them. (Until version 1.32.0 the app used the Pokémon TCG API,
    pokemontcg.io, which is being shut down. Cards saved or learned before then are given TCGdex's
-   ids once, by `card-ids.js`, which also lends TCGdex's cards without a picture the old
-   database's.) A right number also finds a card whose
+   ids once, by `card-ids.js`, which also finds Scrydex's picture for TCGdex's cards without
+   one.) A right number also finds a card whose
    name was misread, and the name is then corrected. If no number fits, the candidates are sorted by
    how much their picture looks like the photo, and a clear winner opens by itself. Cards
    with the very same picture (a holo and its plain print) are told apart by the number:
@@ -301,14 +301,21 @@ illustration-rare cards, whose name and number are printed on the artwork.
 - **TCGdex gives prices one card at a time**, so a search finds cards without them, and the app
   asks for the prices of a card as it opens (`withPrices`). Its Cardmarket and TCGplayer prices are
   from the same day.
-- **Some cards have no picture in TCGdex** (in September 2026: the Galarian Gallery, the Shiny
-  Vaults, the Trainer Galleries, some promos): those borrow the old database's picture, and a card
-  neither has shows a grey "?". A card without a picture can still be found by its number.
+- **Some cards have no picture in TCGdex** (1,621 in September 2026: the Galarian Gallery, the
+  Shiny Vaults, the Trainer Galleries, trainer kits, McDonald's cards, the newest promos): those
+  borrow Scrydex's (version 1.44.0, `scrydexIdOf` in `card-ids.js`), which knows cards by the old
+  database's ids and has 1,552 of them. The other 69 (the Unown Collection, My First Battle,
+  Yellow A Alternate, one Terapagos promo) show a grey "?", and can still be found by their
+  number. Scrydex answers a card it hasn't with a picture of a card's back, so its ids were
+  checked against its own set lists; the few it numbers differently are listed in
+  `SCRYDEX_CARD_IDS`. Scrydex's terms forbid copying its pictures, so they are only shown, one at a
+  time, like any picture on a web page. Cards saved or learned with the old database's picture get
+  Scrydex's once (`moveSavedPicturesToScrydex`).
 - **TCGdex's picture server refuses pictures whose address has an ending** like `?readable`
   (it then sends its permission twice), so its addresses are used as they are (`readablePictureUrl`).
 - **The old database, pokemontcg.io, is being shut down** (its keys stop working on 1 March 2027)
-  and allowed 1,000 lookups a day per internet connection without a key. Its picture server still
-  lends pictures (see above), and the test pages make their fake photos from its big pictures, so
-  they stay the same photos as before the move.
+  and allowed 1,000 lookups a day per internet connection without a key. The test pages make their
+  fake photos from its big pictures, so they stay the same photos as before the move (see
+  ROADMAP.md, 5.3).
 - **Prices are for ungraded cards.** Condition changes the value a lot.
 - [Scrydex](https://scrydex.com), from the old database's makers, is a paid alternative.

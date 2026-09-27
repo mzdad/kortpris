@@ -175,6 +175,22 @@ async function moveLearnedToTcgdex() {
 	}
 }
 
+// Learned cards whose picture was borrowed from the old database get Scrydex's, like saved cards
+// (see moveSavedPicturesToScrydex in collection.js). Returns true when something changed.
+function moveLearnedPicturesToScrydex() {
+	const learned = readLearned();
+	let changed = false;
+	for (const entry of learned) {
+		if (entry.db !== CARD_DATABASE) continue;
+		const picture = currentPicture(entry.cardId, entry.image);
+		if (picture === entry.image) continue;
+		entry.image = picture;
+		changed = true;
+	}
+	if (changed) writeLearned(learned);
+	return changed;
+}
+
 // Each photo once (the later copy wins), oldest first, and only the newest few photos of each card
 // (PHOTOS_PER_CARD) and of all cards (MOST_LEARNED_PHOTOS).
 function trimLearned(learned) {

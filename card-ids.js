@@ -2,7 +2,8 @@
 
 // How cards were known in pokemontcg.io, the card database the app used until version 1.32.0, and
 // how TCGdex knows them. Saved and learned cards keep their old ids until they are translated
-// (see currentCardIds in cards.js), and cards TCGdex has no picture of borrow the old database's.
+// (see currentCardIds in cards.js), and cards TCGdex has no picture of borrow Scrydex's, which knows
+// cards by the old ids (see scrydexIdOf below).
 // Made on 27 September 2026 by matching the two databases' set lists by name and code.
 
 // Every set the old database had: its id there, and TCGdex's (the same for most).
@@ -78,3 +79,56 @@ const REPRINT_NUMBERS = {
 	"027": ["123", "Arceus VSTAR"], "028": ["138", "Zacian V"],
 	"029": ["149", "Lugia"], "030": ["203", "Magikarp"],
 };
+
+// Cards TCGdex has no picture of (about 1,600 in September 2026: gallery, promo, trainer kit and
+// McDonald's cards, and the newest promos) borrow Scrydex's, from the makers of the old database: it
+// knows cards by the old database's ids, and has sets the old database never had. Checked on 27
+// September 2026 against Scrydex's own set lists: 1,552 of TCGdex's 1,621 such cards (all but the
+// Unown Collection, My First Battle, Yellow A Alternate and one Terapagos promo). Scrydex answers
+// a card it hasn't with a picture of a card's back, so the ids must be right.
+// Sets Scrydex has and the old database hadn't: TCGdex's set id, and Scrydex's.
+const SCRYDEX_ONLY_SET_IDS = {
+	"mep": "mep", "mee": "mee", "2023sv": "mcd23", "2024sv": "mcd24", "ex5.5": "wb1", "miscp": "miscp",
+	"tk-dp-m": "tk3a", "tk-dp-l": "tk3b", "tk-hs-r": "tk4a", "tk-hs-g": "tk4b",
+	"tk-bw-z": "tk5a", "tk-bw-e": "tk5b", "tk-xy-sy": "tk6a", "tk-xy-n": "tk6b",
+	"tk-xy-w": "tk7a", "tk-xy-b": "tk7b", "tk-xy-latio": "tk8a", "tk-xy-latia": "tk8b",
+	"tk-xy-su": "tk9a", "tk-xy-p": "tk9b", "tk-sm-l": "tk10a", "tk-sm-r": "tk10b",
+};
+// Cards Scrydex numbers differently: TCGdex's id, and Scrydex's (null: Scrydex hasn't it). The
+// Celebrations Classic Collection (2021) reprints carry their original's number there, like the
+// 30th Celebration's.
+const SCRYDEX_CARD_IDS = {
+	"cel25cc-CC001": "cel25c-2_A", "cel25cc-CC002": "cel25c-4_A", "cel25cc-CC003": "cel25c-15_A1",
+	"cel25cc-CC004": "cel25c-73_A", "cel25cc-CC005": "cel25c-8_A", "cel25cc-CC006": "cel25c-15_A2",
+	"cel25cc-CC007": "cel25c-15_A3", "cel25cc-CC008": "cel25c-24_A", "cel25cc-CC009": "cel25c-20_A",
+	"cel25cc-CC010": "cel25c-66_A", "cel25cc-CC011": "cel25c-9_A", "cel25cc-CC012": "cel25c-86_A",
+	"cel25cc-CC013": "cel25c-88_A", "cel25cc-CC014": "cel25c-93_A", "cel25cc-CC015": "cel25c-17_A",
+	"cel25cc-CC016": "cel25c-15_A4", "cel25cc-CC017": "cel25c-109_A", "cel25cc-CC018": "cel25c-145_A",
+	"cel25cc-CC019": "cel25c-107_A", "cel25cc-CC020": "cel25c-113_A", "cel25cc-CC021": "cel25c-114_A",
+	"cel25cc-CC022": "cel25c-54_A", "cel25cc-CC023": "cel25c-97_A", "cel25cc-CC024": "cel25c-76_A",
+	"cel25cc-CC025": "cel25c-60_A",
+	"bwp-BW04": "bwp-BW004", "bwp-BW05": "bwp-BW005",
+	"mep-Museum": "mep-1000",
+	"svp-500": null,
+};
+
+// Scrydex's id for a card TCGdex knows as setId + "-" + localId, or null when Scrydex hasn't it.
+function scrydexIdOf(setId, localId) {
+	const cardId = setId + "-" + localId;
+	if (cardId in SCRYDEX_CARD_IDS) return SCRYDEX_CARD_IDS[cardId];
+	if (setId === REPRINT_SET) {
+		const old = REPRINT_NUMBERS[localId];
+		return old ? OLD_REPRINT_SET + "-" + old[0] : null;
+	}
+	const scrydexSet = OLD_SET_OF[setId] || SCRYDEX_ONLY_SET_IDS[setId];
+	if (!scrydexSet) return null;
+	let number = localId;
+	if (/^\d+$/.test(number)) {
+		number = String(Number(number));   // "085" is "85" there
+	} else if (scrydexSet === "ecard2" || scrydexSet === "ecard3") {
+		// The e-Card holos: "H01" is "H1" there. Aquapolis's two prints of a card, "50a" and "50b",
+		// are one card, "50".
+		number = number.replace(/^H0/, "H").replace(/^(\d+)[ab]$/, "$1");
+	}
+	return scrydexSet + "-" + number;
+}
