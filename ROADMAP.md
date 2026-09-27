@@ -5,6 +5,14 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.41.1
+
+- **The links are in a menu too.** With "Fetch PSA prices automatically" unticked, the card page
+  still showed the loose "PSA 10 / PSA 9 sales on eBay" and PriceCharting links, and no menu - you
+  looked for the new menu there. Now there is always one line to tap: without prices it is "See
+  sales on eBay and PriceCharting", with links for PSA 10, 9 and 8, CGC 10 and BGS 9.5; with
+  prices it is the menu of 1.41.0, which now ends with the PriceCharting link.
+
 ## Done in 1.41.0
 
 - **Better graded prices, in a menu.** You asked for the PSA improvements and a way to see the eBay

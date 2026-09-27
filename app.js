@@ -1745,25 +1745,40 @@ function tcgplayerTableHtml(tcgplayer) {
 // Graded cards: their prices come through the Kortpris relay (graded.js), and these links
 // search the real sales as well.
 function gradedLinksHtml(card, version) {
-	const priceCharting = "https://www.pricecharting.com/search-products?type=prices&q="
-		+ encodeURIComponent(card.name + " " + card.set.name + " " + card.number);
 	const known = gradedPricesAvailable() ? gradedPricesOf(card, renderCardPages) : null;
-	// With prices shown, every grade links to its own eBay sales (in the "More" menu), so the
-	// PSA 10 and PSA 9 links are only needed without them.
+	// The links are always in a menu, closed at first. With prices shown it is the one under them
+	// (gradedMoreHtml), where every grade links to its own eBay sales; without them, this one links
+	// to the most sold grades' sales. Either way the page shows one line to tap.
 	const gradesShown = known !== null && known.state === "done" && known.grades.length + known.others.length > 0;
-	const ebayLinks = gradesShown ? "" : `
-				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 10"), t("gradedEbay", { grade: "PSA 10" }))}
-				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 9"), t("gradedEbay", { grade: "PSA 9" }))}`;
 	return `
 		<div class="source">
 			<h3>${t("gradedTitle")}</h3>
 			<p class="hint">${t("gradedExplain")}</p>
 			${known !== null ? gradedPricesHtml(card, version, known) : ""}
-			<div class="graded-links">
-				${ebayLinks}
-				${storeLinkHtml(priceCharting, t("gradedPriceCharting"))}
-			</div>
+			${gradesShown ? "" : gradedLinksMenuHtml(card, version)}
 		</div>`;
+}
+
+// The grades whose eBay sales the menu links to when no prices are shown: the ones sold most.
+const EBAY_LINKED_GRADES = ["PSA 10", "PSA 9", "PSA 8", "CGC 10", "BGS 9.5"];
+
+function gradedLinksMenuHtml(card, version) {
+	const links = EBAY_LINKED_GRADES.map((grade) =>
+		storeLinkHtml(ebaySoldUrl(card, version, grade), t("gradedEbay", { grade: grade })));
+	return `
+		<details class="graded-more"${gradedMoreOpen ? " open" : ""}>
+			<summary>${t("gradedLinksMenu")}</summary>
+			<div class="graded-more-body">
+				${links.join("")}
+				${storeLinkHtml(priceChartingUrl(card), t("gradedPriceCharting"))}
+			</div>
+		</details>`;
+}
+
+function priceChartingUrl(card) {
+	// PriceCharting's search, whose page for the card lists its prices in every grade.
+	return "https://www.pricecharting.com/search-products?type=prices&q="
+		+ encodeURIComponent(card.name + " " + card.set.name + " " + card.number);
 }
 
 // known: the card's graded prices as far as they are known (gradedPricesOf in graded.js).
@@ -1846,12 +1861,15 @@ function gradedMoreHtml(card, version, known) {
 	return `
 		<details class="graded-more"${gradedMoreOpen ? " open" : ""}>
 			<summary>${t("gradedMore")}</summary>
-			<table class="price-table graded-more-table">
-				<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedPrice")}</th><th>${t("gradedLastSale")}</th><th>${t("gradedEbayColumn")}</th></tr></thead>
-				<tbody>${rows.join("")}</tbody>
-			</table>
-			<p class="hint">${t("gradedSureExplain")}</p>
-			${others}
+			<div class="graded-more-body">
+				<table class="price-table graded-more-table">
+					<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedPrice")}</th><th>${t("gradedLastSale")}</th><th>${t("gradedEbayColumn")}</th></tr></thead>
+					<tbody>${rows.join("")}</tbody>
+				</table>
+				<p class="hint">${t("gradedSureExplain")}</p>
+				${others}
+				${storeLinkHtml(priceChartingUrl(card), t("gradedPriceCharting"))}
+			</div>
 		</details>`;
 }
 

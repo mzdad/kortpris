@@ -67,7 +67,8 @@ A web page with nothing to install. What happens to a photo:
    most, odd ones left out), not the middle of months of sales. A menu under the table, closed
    at first, lists every grade with its number of sales, how sure the price is and its last
    sale, the other grading companies' grades (CGC, BGS, SGC, TAG, ACE), and a link to each
-   grade's sales on eBay (`gradedMoreHtml`).
+   grade's sales on eBay (`gradedMoreHtml`). Without prices, the same kind of line opens links to
+   the most sold grades' eBay sales and to PriceCharting (`gradedLinksMenuHtml`).
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
    value in kroner. For a stack of cards, "Save and scan the next" on a found card saves it and
    opens the camera again at once. It is split into Pokémon, Trainer cards and Energy cards (the database's
