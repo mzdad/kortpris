@@ -165,6 +165,25 @@ async function findExactCards(name, guesses) {
 	return exactCardsAmong(nameWord, guesses, await askForCandidates(nameWord, []));
 }
 
+// The cards with one of these collector numbers, each in a set of the size read after its "/" (or
+// in the set its promo code names), for a number read before the name (see cardByNumberAlone in
+// matcher.js). Never a wider search: a misread number should find nothing, not a pile of cards.
+// Returns { cards, setSizes }: setSizes as for findCards.
+async function findCardsByNumber(numberGuesses) {
+	const guesses = allNumberGuesses("", numberGuesses).filter((guess) => {
+		const parsed = parseCollectorNumber(guess);
+		return parsed.number && (parsed.total || isPromoCode(parsed));
+	});
+	const candidates = await askForCandidates("", guesses);
+	const found = new Map();
+	for (const guess of guesses) {
+		const parsed = parseCollectorNumber(guess);
+		for (const card of withNumber(candidates.byNumber.get(numberKey(parsed)) || [], parsed, true)) found.set(card.id, card);
+	}
+	const setSizes = [...new Set(guesses.map((guess) => parseCollectorNumber(guess).total).filter(Boolean))];
+	return { cards: await withReprints([...found.values()]), setSizes: setSizes };
+}
+
 async function exactCardsAmong(nameWord, guesses, candidates) {
 	if (!nameWord) return null;
 	for (const guess of guesses) {

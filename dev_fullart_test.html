@@ -34,16 +34,16 @@ column says what the name strip (see <code>readNameStrip</code> in <code>reader.
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.41.2"></script>
-<script src="card-names.js?v=1.41.2"></script>
-<script src="set-codes.js?v=1.41.2"></script>
-<script src="card-finder.js?v=1.41.2"></script>
-<script src="sparkle.js?v=1.41.2"></script>
-<script src="reader.js?v=1.41.2"></script>
-<script src="storage.js?v=1.41.2"></script>
-<script src="card-ids.js?v=1.41.2"></script>
-<script src="cards.js?v=1.41.2"></script>
-<script src="matcher.js?v=1.41.2"></script>
+<script src="pokemon-names.js?v=1.42.0"></script>
+<script src="card-names.js?v=1.42.0"></script>
+<script src="set-codes.js?v=1.42.0"></script>
+<script src="card-finder.js?v=1.42.0"></script>
+<script src="sparkle.js?v=1.42.0"></script>
+<script src="reader.js?v=1.42.0"></script>
+<script src="storage.js?v=1.42.0"></script>
+<script src="card-ids.js?v=1.42.0"></script>
+<script src="cards.js?v=1.42.0"></script>
+<script src="matcher.js?v=1.42.0"></script>
 <script>
 "use strict";
 
@@ -106,7 +106,7 @@ runAllTests();
 async function runAllTests() {
 	const cards = await findCardsById(TEST_CARDS.map((test) => test.id));
 	const random = seededRandom(RANDOM_SEED);
-	const scores = { total: 0, name: 0, number: 0, first: 0, openedRight: 0, openedWrong: 0 };
+	const scores = { total: 0, name: 0, number: 0, first: 0, openedRight: 0, openedWrong: 0, byNumber: 0, seconds: 0 };
 	const allRows = [];
 	for (const card of cards) {
 		// Every card's photo is made, so ?only= gives each the same photo as a full run.
@@ -116,17 +116,22 @@ async function runAllTests() {
 		const row = await testOnePhoto(card, photo);
 		allRows.push({ id: card.id, ...row });
 		scores.total++;
-		if (row.nameOk) scores.name++;
+		if (row.settled) scores.byNumber++;
+		else if (row.nameOk) scores.name++;
+		scores.seconds += row.seconds;
 		if (row.numberOk) scores.number++;
 		if (row.foundAt === 0) scores.first++;
 		if (row.opened && row.foundAt === 0) scores.openedRight++;
 		if (row.opened && row.foundAt !== 0) scores.openedWrong++;
 		summary.textContent = "Running… " + scores.total + " done";
 	}
-	const line = "Name read " + scores.name + "/" + scores.total
+	const line = "Name read " + scores.name + "/" + (scores.total - scores.byNumber)
+		+ " (not needed for " + scores.byNumber + ")"
 		+ " · number read " + scores.number + "/" + scores.total
 		+ " · shown first " + scores.first + "/" + scores.total
-		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong";
+		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong"
+		+ " (" + scores.byNumber + " by the number alone)"
+		+ " · " + (scores.seconds / scores.total).toFixed(1) + " s per photo";
 	summary.textContent = line;
 	console.log("FULL-ART TEST: " + line);
 	window.testScores = scores;   // lets a script read the result
@@ -136,7 +141,11 @@ async function runAllTests() {
 async function testOnePhoto(card, photo) {
 	const started = performance.now();
 	stripSaid = "not read (no card edges found)";
-	const reading = await readCardPhoto(photo);
+	// As in the app: a number that reads sure is looked up before the name is read (roadmap 2.4).
+	let byNumber = null;
+	const reading = await readCardPhoto(photo, () => {}, null, {
+		onSureNumber: async (numberRead) => (byNumber = await cardByNumberAlone(numberRead)) !== null,
+	});
 	// Right when every word read is a word of the card's name: "Kangaskhan" for Kangaskhan-EX,
 	// but not "Aron" for Lairon.
 	const words = (text) => text.split(/[\s-]+/).map(lettersOnly).filter(Boolean);
@@ -150,24 +159,30 @@ async function testOnePhoto(card, photo) {
 	let opened = false;   // would the app open a card's prices without asking?
 	let error = "";
 	try {
-		// The same steps as the app (searchForCard in app.js), without the screen.
-		const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
-		const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
-		const located = reading.cardBox !== null || reading.textArea !== null;
-		const pick = found.cards.length === 1
-			? { cards: found.cards, clear: true }
-			: pickBestMatch(ranked, located, {
-				setSizes: found.setSizes,
-				codeSets: setsOfCode(reading.setCode),
-				numbersRead: found.numbersRead,
-				looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
-			});
-		foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
-		opened = pick.cards.length > 0 && pick.clear;
+		if (reading.settled) {
+			// Opened by its number, before the name was read (see cardByNumberAlone): nothing to search.
+			foundAt = byNumber.findIndex((entry) => entry.id === card.id);
+			opened = true;
+		} else {
+			// The same steps as the app (searchForCard in app.js), without the screen.
+			const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
+			const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
+			const located = reading.cardBox !== null || reading.textArea !== null;
+			const pick = found.cards.length === 1
+				? { cards: found.cards, clear: true }
+				: pickBestMatch(ranked, located, {
+					setSizes: found.setSizes,
+					codeSets: setsOfCode(reading.setCode),
+					numbersRead: found.numbersRead,
+					looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
+				});
+			foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
+			opened = pick.cards.length > 0 && pick.clear;
+		}
 	} catch (problem) {
 		error = String(problem);
 	}
-	const row = { name: reading.name, number: reading.number, setCode: reading.setCode, nameOk, numberOk, foundAt, opened, seconds: (performance.now() - started) / 1000 };
+	const row = { settled: Boolean(reading.settled), name: reading.name, number: reading.number, setCode: reading.setCode, nameOk, numberOk, foundAt, opened, seconds: (performance.now() - started) / 1000 };
 	addRow(photo, card, row, error);
 	return row;
 }

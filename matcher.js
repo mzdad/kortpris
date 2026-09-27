@@ -44,6 +44,11 @@ const CLEAR_WINNER_GAP = 2;
 // nearly as alike: at most this many times further from the photo. Cards with the very same
 // artwork score within about 1.13 of each other; a different card at least twice as far.
 const SET_SIZE_LOOK_SLACK = 1.5;
+// A card found by its number alone, before the name is read (see cardByNumberAlone), opens only when
+// its picture is at most this far from the photo. On 46 real photos (version 1.41.2) the right cards
+// scored 0.12 to 1.46, most under 1, and other cards 0.88 and up, most over 1.3; the few right ones
+// above this simply wait for the name, as before.
+const NUMBER_ALONE_MOST_DISTANCE = 1.0;
 // An anniversary reprint (see ANNIVERSARY_REPRINT_SETS in cards.js) has its original's picture
 // and number, but a "30" stamp at one bottom corner of the picture: the right one on most, the
 // left one when the Pokémon sits on the right. These patches around both corners, as shares of
@@ -249,6 +254,29 @@ function pickBestMatch(ranked, located, clues = {}) {
 	// card in their light; their earlier photo of it doesn't.
 	const seenBefore = inOrder.filter((card) => suggestedIds.includes(card.id));
 	return { cards: [...seenBefore, ...inOrder.filter((card) => !seenBefore.includes(card))], clear: false };
+}
+
+// A card whose number reads sure (two reads agree) is looked up by its number alone, before its
+// name is read, which takes about as long as the number (roadmap 2.4). numberRead is what the reader
+// hands onSureNumber (see readCardPhoto): { numberGuesses, setCode, photo, cardBox, sparkle }.
+// Returns the cards found, best first, when the first is sure enough to open without the name;
+// otherwise null, and the name is read as before. Sure enough means pickBestMatch finds it clear,
+// and its picture looks like the photo (NUMBER_ALONE_MOST_DISTANCE): a misread number can fit one
+// single card, which pickBestMatch alone would open whatever it looks like.
+async function cardByNumberAlone(numberRead) {
+	const found = await findCardsByNumber(numberRead.numberGuesses);
+	if (found.cards.length === 0) return null;
+	const ranked = await rankByLook(numberRead.photo, null, found.cards, numberRead.cardBox);
+	const pick = pickBestMatch(ranked, true, {
+		setSizes: found.setSizes,
+		codeSets: setsOfCode(numberRead.setCode),
+		numbersRead: numberRead.numberGuesses,
+		looksReverseHolo: Boolean(numberRead.sparkle && numberRead.sparkle.reverseHolo),
+	});
+	if (!pick.clear) return null;
+	const best = ranked.find((entry) => entry.card === pick.cards[0]);
+	if (!best || !(best.distance <= NUMBER_ALONE_MOST_DISTANCE)) return null;
+	return pick.cards;
 }
 
 // Looks for an anniversary reprint and its original among the look-alikes (see STAMP_CORNERS).

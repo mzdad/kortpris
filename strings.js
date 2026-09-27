@@ -55,6 +55,7 @@ const STRINGS = {
 
 		resultsTitle: "Which one is yours?",
 		matchExact: "Cards named “{name}” with number {number}.",
+		matchNumberLook: "Found by its number {number} and its picture.",
 		matchAnySet: "Cards named “{name}” with number {number}, from any set.",
 		matchNameTotal: "Cards named “{name}” from a set of {total} cards. Check the number.",
 		matchByLook: "The name and number couldn't both be read, so these are the cards that fit part of it, closest look first.",
@@ -438,6 +439,7 @@ const STRINGS = {
 
 		resultsTitle: "Hvilket er dit?",
 		matchExact: "Kort med navnet »{name}« og nummer {number}.",
+		matchNumberLook: "Fundet ud fra nummeret {number} og billedet.",
 		matchAnySet: "Kort med navnet »{name}« og nummer {number}, fra alle sæt.",
 		matchNameTotal: "Kort med navnet »{name}« fra et sæt med {total} kort. Tjek nummeret.",
 		matchByLook: "Navn og nummer kunne ikke begge læses, så her er kortene, der passer med en del af det, det mest lignende først.",

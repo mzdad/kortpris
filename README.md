@@ -30,7 +30,8 @@ A web page with nothing to install. What happens to a photo:
    2023 also print their set's code by the number ("PAF EN 057/091"), white in a little box: it
    is read with only capitals allowed, and kept when that set's size is the one after the "/"
    (`readSetCode`, `set-codes.js`). It then picks among cards that look alike - Black Bolt,
-   White Flare and Chaos Rising all have 86 cards.
+   White Flare and Chaos Rising all have 86 cards. Once the card's edges are found, the number is
+   read before the name, as it alone often settles which card it is (see step 2).
 2. **Text → card.** The name and number are looked up in [TCGdex](https://tcgdex.dev), a free
    card database that web pages may ask directly: the cards with that name and those with each
    number read come in one quick question each (`cards.js`), and every number the reader thought
@@ -48,6 +49,16 @@ A web page with nothing to install. What happens to a photo:
    both the name and the card's own number are unreadable but the set size isn't (shown as
    `?/110`), the photo is compared with every card from a set of that size. The
    fields stay editable, so a card can also be typed in.
+
+   **The number first** (version 1.42.0). Reading the name takes about as long as reading the
+   number, so when two reads of the number agree, the cards with that number (in a set of the
+   size read) are looked up and compared with the photo before the name is read
+   (`onSureNumber` in `readCardPhoto`, `cardByNumberAlone` in `matcher.js`). A clear winner
+   opens and the name is never read - but only when its picture is also close to the photo
+   (`NUMBER_ALONE_MOST_DISTANCE`), as a misread number can fit a single, different card.
+   Otherwise the name is read and the search goes on as above. On the 46 real photos, 23 opened
+   this way, all right, in 1.4 seconds on average; all photos together took 2.9 seconds each
+   instead of 3.8 on this PC, with the same cards found and opened.
 
    All drawing on canvases uses the processor (`willReadFrequently`), not the graphics card:
    graphics cards resize pictures slightly differently from PC to PC, and tiny print on foil

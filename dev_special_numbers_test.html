@@ -34,16 +34,16 @@ scores the result. The last column shows how the number corners were read.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.41.2"></script>
-<script src="card-names.js?v=1.41.2"></script>
-<script src="set-codes.js?v=1.41.2"></script>
-<script src="card-finder.js?v=1.41.2"></script>
-<script src="sparkle.js?v=1.41.2"></script>
-<script src="reader.js?v=1.41.2"></script>
-<script src="storage.js?v=1.41.2"></script>
-<script src="card-ids.js?v=1.41.2"></script>
-<script src="cards.js?v=1.41.2"></script>
-<script src="matcher.js?v=1.41.2"></script>
+<script src="pokemon-names.js?v=1.42.0"></script>
+<script src="card-names.js?v=1.42.0"></script>
+<script src="set-codes.js?v=1.42.0"></script>
+<script src="card-finder.js?v=1.42.0"></script>
+<script src="sparkle.js?v=1.42.0"></script>
+<script src="reader.js?v=1.42.0"></script>
+<script src="storage.js?v=1.42.0"></script>
+<script src="card-ids.js?v=1.42.0"></script>
+<script src="cards.js?v=1.42.0"></script>
+<script src="matcher.js?v=1.42.0"></script>
 <script>
 "use strict";
 
@@ -102,7 +102,7 @@ runAllTests();
 async function runAllTests() {
 	const cards = only ? TEST_CARDS.filter((card) => only.split(",").some((part) => card.id.includes(part))) : TEST_CARDS;
 	const random = seededRandom(RANDOM_SEED);
-	const scores = { total: 0, number: 0, first: 0, openedRight: 0, openedWrong: 0 };
+	const scores = { total: 0, number: 0, first: 0, openedRight: 0, openedWrong: 0, byNumber: 0, seconds: 0 };
 	const allRows = [];
 	for (const card of TEST_CARDS) {
 		// Every card's photo is made, so ?only= gives each the same photo as a full run.
@@ -112,6 +112,8 @@ async function runAllTests() {
 		allRows.push({ id: card.id, ...row });
 		scores.total++;
 		if (row.numberOk) scores.number++;
+		if (row.settled) scores.byNumber++;
+		scores.seconds += row.seconds;
 		if (row.foundAt === 0) scores.first++;
 		if (row.opened && row.foundAt === 0) scores.openedRight++;
 		if (row.opened && row.foundAt !== 0) scores.openedWrong++;
@@ -119,7 +121,9 @@ async function runAllTests() {
 	}
 	const line = "Number read " + scores.number + "/" + scores.total
 		+ " · shown first " + scores.first + "/" + scores.total
-		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong";
+		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong"
+		+ " (" + scores.byNumber + " by the number alone)"
+		+ " · " + (scores.seconds / scores.total).toFixed(1) + " s per photo";
 	summary.textContent = line;
 	console.log("SPECIAL NUMBERS TEST: " + line);
 	window.testScores = scores;   // lets a script read the result
@@ -129,7 +133,11 @@ async function runAllTests() {
 async function testOnePhoto(card, photo) {
 	const started = performance.now();
 	cornerTexts.length = 0;
-	const reading = await readCardPhoto(photo);
+	// As in the app: a number that reads sure is looked up before the name is read (roadmap 2.4).
+	let byNumber = null;
+	const reading = await readCardPhoto(photo, () => {}, null, {
+		onSureNumber: async (numberRead) => (byNumber = await cardByNumberAlone(numberRead)) !== null,
+	});
 	const texts = cornerTexts.slice();
 	// Right when the number read names the card's number ("BW0004" does name BW004).
 	const numberOk = numberSpellings(parseCollectorNumber(reading.number || "").number).includes(card.number);
@@ -137,24 +145,30 @@ async function testOnePhoto(card, photo) {
 	let opened = false;   // would the app open a card's prices without asking?
 	let error = "";
 	try {
-		// The same steps as the app (searchForCard in app.js), without the screen.
-		const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
-		const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
-		const located = reading.cardBox !== null || reading.textArea !== null;
-		const pick = found.cards.length === 1
-			? { cards: found.cards, clear: true }
-			: pickBestMatch(ranked, located, {
-				setSizes: found.setSizes,
-				codeSets: setsOfCode(reading.setCode),
-				numbersRead: found.numbersRead,
-				looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
-			});
-		foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
-		opened = pick.cards.length > 0 && pick.clear;
+		if (reading.settled) {
+			// Opened by its number, before the name was read (see cardByNumberAlone): nothing to search.
+			foundAt = byNumber.findIndex((entry) => entry.id === card.id);
+			opened = true;
+		} else {
+			// The same steps as the app (searchForCard in app.js), without the screen.
+			const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
+			const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
+			const located = reading.cardBox !== null || reading.textArea !== null;
+			const pick = found.cards.length === 1
+				? { cards: found.cards, clear: true }
+				: pickBestMatch(ranked, located, {
+					setSizes: found.setSizes,
+					codeSets: setsOfCode(reading.setCode),
+					numbersRead: found.numbersRead,
+					looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
+				});
+			foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
+			opened = pick.cards.length > 0 && pick.clear;
+		}
 	} catch (problem) {
 		error = String(problem);
 	}
-	const row = { name: reading.name, number: reading.number, numberOk, foundAt, opened, seconds: (performance.now() - started) / 1000 };
+	const row = { settled: Boolean(reading.settled), name: reading.name, number: reading.number, numberOk, foundAt, opened, seconds: (performance.now() - started) / 1000 };
 	addRow(card, row, texts, error);
 	return row;
 }

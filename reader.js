@@ -222,12 +222,53 @@ let reportProgress = () => {};
 // the reader looks itself. stillWanted(): false once the reading isn't needed any more (another
 // photo came). It then stops between its steps, as the text reader reads one thing at a time and
 // the next photo would wait for it; a stopped reading throws an error marked stopped.
-async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { look = null, stillWanted = () => true } = {}) {
+// onSureNumber({ numberGuesses, setCode, photo, cardBox, sparkle }): asked as soon as the number
+// reads sure, before the name is read (roadmap 2.4). When it answers true, the number settled which
+// card it is (see cardByNumberAlone in matcher.js): the name isn't read, and the reading returns
+// with settled: true and no name.
+async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { look = null, stillWanted = () => true, onSureNumber = null } = {}) {
 	reportProgress = onProgress;
 	onProgress("starting", null);
 	const { original, photo, framed, cardBox } = look || await lookAtPhoto(imageFile, frame);
 	const worker = await getOcrWorker();
 	stopUnlessWanted(stillWanted, original);
+	const cardInOriginal = cardBox ? scaleBox(cardBox, original.width / photo.width) : null;
+
+	// The number first: where it is printed is known once the card's own edges are found, and it
+	// alone often settles which card it is, with the card's picture - in about half the reading
+	// time, as reading the name takes as long as the number. Other cuts of the card are read when
+	// the first reads don't agree: the card's own box a little changed (NUMBER_RECUTS), then the
+	// camera's frame. Tiny print cut out differently often reads differently. (In 34 made-up camera
+	// pictures, reading the frame first gave one right number fewer: when two cuts read two numbers
+	// once each, the earlier one wins.)
+	let placeGuesses = [];
+	let codeRead = null;   // the set code read early, and the set size it was read for
+	if (cardBox) {
+		// (None when the card's box is the frame: its own edges weren't found.)
+		const otherCuts = [];
+		if (cardBox !== framed) {
+			otherCuts.push(...NUMBER_RECUTS.map((recut) => recutBox(cardBox, recut)));
+			if (framed) otherCuts.push(framed);
+		}
+		placeGuesses = await readNumberPlacesOfCard(worker, original, photo, cardBox, otherCuts, stillWanted);
+		if (onSureNumber && twoReadsAgree(placeGuesses)) {
+			const early = likeliestNumbers(placeGuesses).slice(0, MAX_NUMBER_GUESSES);
+			if (mayHaveSetCode(early)) {
+				stopUnlessWanted(stillWanted, original);
+				codeRead = { size: sizeRead(early), code: await readSetCode(worker, original, cardInOriginal, sizeRead(early)) };
+			}
+			const sparkle = sparkleOf(photo, cardBox, null);
+			stopUnlessWanted(stillWanted, original);
+			const setCode = codeRead ? codeRead.code : "";
+			if (await onSureNumber({ numberGuesses: early, setCode: setCode, photo: photo, cardBox: cardBox, sparkle: sparkle })) {
+				original.close();
+				return {
+					name: "", nameSure: false, number: early[0], numberGuesses: early, setCode: setCode,
+					photo: photo, textArea: null, cardBox: cardBox, sparkle: sparkle, settled: true,
+				};
+			}
+		}
+	}
 
 	// When it is clear where the card is, only the card is read - not the table, cloth or
 	// toploader around it, whose patterns look like made-up letters.
@@ -239,7 +280,7 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 	// name, even when the whole card's read found another one somewhere else on the card.
 	if (cardBox) {
 		stopUnlessWanted(stillWanted, original);
-		const stripName = await readNameStrip(worker, original, scaleBox(cardBox, original.width / photo.width));
+		const stripName = await readNameStrip(worker, original, cardInOriginal);
 		if (stripName) name = stripName;
 	}
 	// No known Pokémon found: read it a second time, the other way.
@@ -259,25 +300,20 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 		if (inkName.sure) name = inkName;
 	}
 
-	// Other cuts of the card to read the number from when the first reads don't agree: the card's
-	// own box a little changed (NUMBER_RECUTS), then the camera's frame - both only when the card's
-	// own edges were found. Tiny print cut out differently often reads differently. (In 34 made-up
-	// camera pictures, reading the frame first gave one right number fewer: when two cuts read two
-	// numbers once each, the earlier one wins.)
-	const otherCuts = [];
-	if (cardBox && cardBox !== framed) {
-		otherCuts.push(...NUMBER_RECUTS.map((recut) => recutBox(cardBox, recut)));
-		if (framed) otherCuts.push(framed);
-	}
 	stopUnlessWanted(stillWanted, original);
-	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead, view, otherCuts);
+	const numberGuesses = await readCollectorNumbers(worker, original, photo, placeGuesses, firstRead, view);
 	// Cards since 2023 print their set's code by the number, which tells sets of the same size
 	// apart (see set-codes.js). Their numbers are padded ("057/091"), so the code is only looked
-	// for then - or when no number was read at all.
+	// for then - or when no number was read at all. Read already for the same set size: not again.
 	let setCode = "";
 	if (cardBox && mayHaveSetCode(numberGuesses)) {
-		stopUnlessWanted(stillWanted, original);
-		setCode = await readSetCode(worker, original, scaleBox(cardBox, original.width / photo.width), sizeRead(numberGuesses));
+		const size = sizeRead(numberGuesses);
+		if (codeRead && codeRead.size === size) {
+			setCode = codeRead.code;
+		} else {
+			stopUnlessWanted(stillWanted, original);
+			setCode = await readSetCode(worker, original, cardInOriginal, size);
+		}
 	}
 	original.close();   // the full-size photo takes a lot of memory; it isn't needed any more
 	const textArea = boxInPhoto(firstRead.textArea, view);
@@ -727,24 +763,29 @@ function lettersOnly(text) {
 
 // ---------- The collector number ----------
 
-async function readCollectorNumbers(worker, original, photo, cardBox, page, view, otherCuts = []) {
-	// The number is tiny print along the card's bottom edge, too small to read in the whole
-	// photo, so that part is read again, enlarged - cut from the full-size original, which has
-	// far more detail. Tiny print is often misread, so this returns every number that seems
-	// possible, likeliest first: the search tries them in turn, and the card database says
-	// which one exists.
+// The number is tiny print along the card's bottom edge, too small to read in the whole photo, so
+// that part is read again, enlarged - cut from the full-size original, which has far more detail.
+// First where it is printed on the card (cardBox is the card's box in photo): readNumberPlaces, then
+// again from the other cuts of the card, in turn, until two reads agree (see NUMBER_RECUTS). In 34
+// made-up camera pictures of real cards, the right number came first in 27, where 1.29.0 - which
+// read only the camera's frame again - had 23.
+async function readNumberPlacesOfCard(worker, original, photo, cardBox, otherCuts, stillWanted) {
 	const toOriginal = original.width / photo.width;
-	let guesses = [];
-	if (cardBox) {
-		guesses = await readNumberPlaces(worker, original, scaleBox(cardBox, toOriginal));
-	}
-	// Not sure yet: read the number places again from the other cuts of the card, in turn, until
-	// two reads agree (see NUMBER_RECUTS). In 34 made-up camera pictures of real cards, the right
-	// number came first in 27, where 1.29.0 - which read only the camera's frame again - had 23.
+	const guesses = await readNumberPlaces(worker, original, scaleBox(cardBox, toOriginal));
 	for (const box of otherCuts) {
 		if (twoReadsAgree(guesses)) break;
+		stopUnlessWanted(stillWanted, original);
 		guesses.push(...await readNumberPlaces(worker, original, scaleBox(box, toOriginal), guesses));
 	}
+	return guesses;
+}
+
+async function readCollectorNumbers(worker, original, photo, placeGuesses, page, view) {
+	// Tiny print is often misread, so this returns every number that seems possible, likeliest
+	// first: the search tries them in turn, and the card database says which one exists.
+	// placeGuesses: what readNumberPlacesOfCard read (none without the card's edges).
+	const toOriginal = original.width / photo.width;
+	const guesses = [...placeGuesses];
 	if (!sawWholeNumber(guesses) && page.textArea) {
 		// Without the card's outline, or when the number wasn't where the outline says, the
 		// lowest lines of text are read one at a time instead. (page was read from view, the

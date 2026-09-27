@@ -1061,12 +1061,16 @@ async function scanPhoto(imageFile, frame = null) {
 			return;
 		}
 		const searchIdBefore = latestSearchId;
-		reading = await readWithBuiltInReader(imageFile, scanId, frame, look, openedEarly !== null);
+		// A number that reads sure is looked up before the name is read (see openByNumber). Not when a
+		// learned card is open already: then the whole text is read, to check it.
+		const onSureNumber = openedEarly ? null : (numberRead) => openByNumber(numberRead, learnedLook, scanId);
+		reading = await readWithBuiltInReader(imageFile, scanId, frame, look, openedEarly !== null, onSureNumber);
 		if (scanId !== latestScanId) return;
 		if (openedEarly) {
 			await checkLearnedCard(openedEarly, reading, scanId, searchIdBefore);
 			return;
 		}
+		if (reading.settled) return;   // opened by its number: the name wasn't needed
 	}
 
 	// A card that sparkles outside its picture opens on its reverse holo price (see sparkle.js).
@@ -1111,7 +1115,8 @@ async function scanPhoto(imageFile, frame = null) {
 // look: where the card is, found before the reading (lookAtPhoto in reader.js), or null.
 // quietly: a learned card is open already (see openLearnedEarly), and the status says the text is
 // being checked; the reading doesn't report how it's getting on.
-async function readWithBuiltInReader(imageFile, scanId, frame, look = null, quietly = false) {
+// onSureNumber: see readCardPhoto, or null.
+async function readWithBuiltInReader(imageFile, scanId, frame, look = null, quietly = false, onSureNumber = null) {
 	try {
 		return await readCardPhoto(imageFile, (stage, fraction) => {
 			if (scanId !== latestScanId || quietly) return;
@@ -1125,7 +1130,7 @@ async function readWithBuiltInReader(imageFile, scanId, frame, look = null, quie
 				setStatus("readerStarting");
 				showProgress(null);
 			}
-		}, frame, { look: look, stillWanted: () => scanId === latestScanId });
+		}, frame, { look: look, stillWanted: () => scanId === latestScanId, onSureNumber: onSureNumber });
 	} catch (error) {
 		if (!error.stopped) console.error(error);   // stopped: another photo came, nothing went wrong
 		return { name: "", number: "" };
@@ -1177,6 +1182,38 @@ async function openLearnedEarly(learnedCard, look, scanId) {
 	setStatus("learnedChecking");
 	showResults([card], { key: "matchLearned", values: {} }, card.id, null);
 	return card;
+}
+
+// A number the reader is sure of is looked up on its own, before the name is read - which takes
+// about as long again (roadmap 2.4). When that and the card's picture settle which card it is (see
+// cardByNumberAlone in matcher.js), the card opens as a clear best match would after a search, and
+// the reader stops: returns true. Otherwise false, and the reading and search go on as before.
+// numberRead: what the reader hands onSureNumber (see readCardPhoto). learnedLook: as in scanPhoto.
+async function openByNumber(numberRead, learnedLook, scanId) {
+	let cards = null;
+	try {
+		cards = await cardByNumberAlone(numberRead);
+	} catch (error) {
+		console.error(error);   // the database didn't answer: the name is read, and the search tries again
+	}
+	if (!cards || scanId !== latestScanId) return false;
+	const card = cards[0];
+	await loadPrices(card);
+	if (scanId !== latestScanId) return false;
+	// A card that sparkles outside its picture opens on its reverse holo price (see sparkle.js).
+	if (numberRead.sparkle && numberRead.sparkle.reverseHolo) versionHint = "reverseHolofoil";
+	const learned = learnedLook || { card: null, suggestions: [] };   // none when the app couldn't look first
+	lastPhoto = photoFacts(numberRead.photo, null, numberRead.cardBox, "", learned, numberRead.setCode);
+	nameInput.value = card.name;
+	numberInput.value = collectorNumber(card);
+	scannedNumbers = { shown: numberInput.value, guesses: numberRead.numberGuesses };
+	searchButton.disabled = false;
+	hideProgress();
+	setStatus("bestMatchOpened");
+	const description = { key: "matchNumberLook", values: { number: collectorNumber(card) } };
+	showResults(cards.slice(0, RESULTS_PAGE_SIZE), description, card.id, card.id);
+	takeFor(card, false);
+	return true;
 }
 
 // After a learned card opened early (see openLearnedEarly), the text is read all the same, as a

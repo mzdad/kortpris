@@ -40,17 +40,17 @@ the app opens before reading any text (when the card's own edges are found, see 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="storage.js?v=1.41.2"></script>
-<script src="pokemon-names.js?v=1.41.2"></script>
-<script src="card-names.js?v=1.41.2"></script>
-<script src="set-codes.js?v=1.41.2"></script>
-<script src="card-finder.js?v=1.41.2"></script>
-<script src="sparkle.js?v=1.41.2"></script>
-<script src="reader.js?v=1.41.2"></script>
-<script src="card-ids.js?v=1.41.2"></script>
-<script src="cards.js?v=1.41.2"></script>
-<script src="matcher.js?v=1.41.2"></script>
-<script src="learned.js?v=1.41.2"></script>
+<script src="storage.js?v=1.42.0"></script>
+<script src="pokemon-names.js?v=1.42.0"></script>
+<script src="card-names.js?v=1.42.0"></script>
+<script src="set-codes.js?v=1.42.0"></script>
+<script src="card-finder.js?v=1.42.0"></script>
+<script src="sparkle.js?v=1.42.0"></script>
+<script src="reader.js?v=1.42.0"></script>
+<script src="card-ids.js?v=1.42.0"></script>
+<script src="cards.js?v=1.42.0"></script>
+<script src="matcher.js?v=1.42.0"></script>
+<script src="learned.js?v=1.42.0"></script>
 <script>
 "use strict";
 
@@ -190,7 +190,9 @@ async function runAllPhotos() {
 
 // What the app does with a photo it doesn't recognise for sure but that looks somewhat like learned
 // cards (scanPhoto and searchForCard in app.js), without the screen. Returns { cards, opened }:
-// the cards in the order shown, and whether the first opens by itself.
+// the cards in the order shown, and whether the first opens by itself. (The app's own step of
+// looking a sure number up before the name is read, roadmap 2.4, isn't tried here: this page tests
+// the learned cards, and reads every photo whole.)
 async function searchLikeTheApp(reading, suggestions) {
 	const nothingToSearch = !reading.number && (!reading.name || !reading.nameSure);
 	let found = { cards: [], description: null, totalCount: 0, exactFound: false };
