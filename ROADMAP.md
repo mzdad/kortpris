@@ -386,7 +386,6 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | | What | Why | Size |
 |---|---|---|---|
 | 2.3 | **Remember database answers for a day** on the phone. | Scanning a card twice, or opening My cards, would not ask again. Worth less since 1.32.0: TCGdex answers in about 0.2 seconds and seldom fails. | S |
-| 2.5 | **Compare fewer pictures**: when only the name is known, the app compares the photo with up to 250 cards' pictures. Using the set size read, or learned cards, narrows that down. | The slowest searches are these. | M |
 | 2.6 | **A paid card database (Scrydex)**, from the makers of pokemontcg.io. | Graded prices and picture recognition built in. Costs money (from $29 a month, September 2026): your decision. Since 1.32.0 the free TCGdex (5.1) is quick, reliable and up to date. | M |
 | 2.8 | **Prices by condition** for ungraded cards: "What condition is your card in?" (Near Mint, Lightly Played, Moderately Played, Heavily Played, Damaged) changes the price. | The prices shown are for cards in top condition, and a worn card sells for much less. Checked 27 September 2026: PokemonPriceTracker's free plan (the PSA relay's source) gives only each version's Near Mint price, the same as TCGdex's TCGplayer price. The other conditions look like a paid plan: your decision. Its eBay "ungraded" sales can't stand in: for a $2 Mewtwo they said $22, with other cards' sales mixed in. | M |
 
@@ -448,3 +447,10 @@ handle:
 ## Not planned
 
 - **Grading a card's condition from the photo.** Too unreliable for prices that differ this much.
+- **2.5 Compare fewer pictures** when only the name is known (dropped 27 September 2026, after
+  2.4). Only 7 of your 46 real photos compare more than one picture now, and the big piles (230
+  Pikachus, 97 Unowns) come from misread numbers, so the set size and numbers read seldom point to
+  the right card. Comparing those "likely" cards first saved 25 of 475 pictures and would have
+  opened the wrong card once (the Jigglypuff reprint, whose original has the same number). The cost
+  is mostly the first download: 216 pictures take 0.4 seconds once kept on the phone, 3.3 seconds
+  on this PC the first time (about 16 KB each), and the app keeps 1,500.
