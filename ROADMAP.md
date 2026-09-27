@@ -325,6 +325,7 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | 2.4 | **Read the number first, the name only when needed.** | Name and number are read one after the other. A clear number alone finds the card. | M |
 | 2.5 | **Compare fewer pictures**: when only the name is known, the app compares the photo with up to 250 cards' pictures. Using the set size read, or learned cards, narrows that down. | The slowest searches are these. | M |
 | 2.6 | **A paid card database (Scrydex)**, from the makers of pokemontcg.io. | Graded prices and picture recognition built in. Costs money (from $29 a month, September 2026): your decision. Since 1.32.0 the free TCGdex (5.1) is quick, reliable and up to date. | M |
+| 2.8 | **Prices by condition** for ungraded cards: "What condition is your card in?" (Near Mint, Lightly Played, Moderately Played, Heavily Played, Damaged) changes the price. | The prices shown are for cards in top condition, and a worn card sells for much less. Checked 27 September 2026: PokemonPriceTracker's free plan (the PSA relay's source) gives only each version's Near Mint price, the same as TCGdex's TCGplayer price. The other conditions look like a paid plan: your decision. Its eBay "ungraded" sales can't stand in: for a $2 Mewtwo they said $22, with other cards' sales mixed in. | M |
 
 ## 3. Smoother
 
