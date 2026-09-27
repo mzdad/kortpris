@@ -112,15 +112,24 @@ a { color: var(--link); }
 }
 .language-switch button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .language-switch button:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; }
+/* "Install app" and "Kids mode" */
+.header-button {
+	font: inherit; font-size: 0.85rem; font-weight: 700;
+	min-height: 36px; padding: 0 10px;
+	border-radius: 999px; border: 1px solid var(--line);
+	background: var(--surface); color: var(--ink);
+	cursor: pointer;
+}
+.header-button:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; }
 
 /* ---------- How it works (first visit) ---------- */
 .intro { display: grid; gap: 14px; }
-.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: step; }
-.steps li {
+.steps, .install-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: step; }
+.steps li, .install-steps li {
 	counter-increment: step;
 	display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: baseline;
 }
-.steps li::before {
+.steps li::before, .install-steps li::before {
 	content: counter(step);
 	font-family: var(--font-mono);
 	font-size: 0.8rem;
@@ -555,16 +564,39 @@ body.camera-open { overflow: hidden; }
 }
 .read-aloud:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
 
-/* ---------- Kids mode: big pictures, few words (switched on by the class on <body>) ---------- */
-.kids-button {
-	font: inherit; font-size: 0.85rem; font-weight: 700;
-	min-height: 36px; padding: 0 12px;
-	border-radius: 999px; border: 1px solid var(--line);
-	background: var(--surface); color: var(--ink);
-	cursor: pointer;
+/* ---------- Install app: the guide that opens from the top of the page ---------- */
+.install-dialog {
+	width: min(32rem, calc(100% - 32px));
+	max-height: calc(100vh - 48px);
+	max-height: calc(100dvh - 48px);
+	padding: 0;
+	border: 1px solid var(--line); border-radius: var(--radius);
+	background: var(--bg); color: var(--ink);
+	overflow-y: auto; overscroll-behavior: contain;
 }
+.install-dialog::backdrop { background: rgb(8 12 18 / 0.6); }
+/* The page behind stays put while the guide is scrolled. */
+body:has(.install-dialog[open]) { overflow: hidden; }
+.install-sheet { display: grid; gap: 14px; padding: 18px 16px 20px; }
+.install-sheet > p { margin: 0; }
+.install-head { display: flex; align-items: center; gap: 12px; }
+.install-head h2 { margin: 0; font-size: 1.35rem; line-height: 1.2; font-weight: 800; }
+.install-close {
+	margin-left: auto; flex: none;
+	width: 44px; height: 44px; border-radius: 50%;
+	border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+	font-size: 1rem; cursor: pointer;
+}
+.install-close:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+.install-guides { display: grid; gap: 10px; }
+.install-guide { padding: 14px 16px; }
+/* The device in hand: first, marked "Your device", with a yellow edge. */
+.install-guide.yours { order: -1; border-color: var(--accent-edge); }
+.install-guide:not(.yours) .install-yours { display: none; }
+.install-yours { white-space: nowrap; }
+
+/* ---------- Kids mode: big pictures, few words (switched on by the class on <body>) ---------- */
 .kids-button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent-edge); }
-.kids-button:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; }
 
 /* The grown-up parts: typing, settings, price tables and small print. */
 body.kids .tagline,
@@ -574,7 +606,7 @@ body.kids #search-form,
 body.kids #claude-settings,
 body.kids #voice-settings,
 body.kids #learned-settings,
-body.kids #install-settings,
+body.kids #install-open,
 body.kids #notice,
 body.kids #results-note,
 body.kids .result-set,

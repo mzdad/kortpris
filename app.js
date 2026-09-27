@@ -139,12 +139,13 @@ const collectionPage = document.getElementById("collection-page");
 const savedCardView = document.getElementById("saved-card-view");
 const savedCardBack = document.getElementById("saved-card-back");
 const savedCardPanel = document.getElementById("saved-card");
-const installSettings = document.getElementById("install-settings");
+const installOpen = document.getElementById("install-open");
+const installDialog = document.getElementById("install-dialog");
+const installClose = document.getElementById("install-close");
 const installButtonRow = document.getElementById("install-button-row");
 const installButton = document.getElementById("install-button");
-const installIphone = document.getElementById("install-iphone");
 const installIphoneStorage = document.getElementById("install-iphone-storage");
-const installOther = document.getElementById("install-other");
+const installGuides = document.querySelectorAll(".install-guide");
 const voiceSettings = document.getElementById("voice-settings");
 const voiceSelects = document.querySelectorAll("[data-voice-language]");
 const learnedSettings = document.getElementById("learned-settings");
@@ -2402,9 +2403,9 @@ if ("serviceWorker" in navigator) {
 	}
 }
 
-// Android's browsers offer to install the app by themselves. The offer is kept for the Install
-// button in "Put Kortpris on your home screen" instead. iPhones never offer: there it is Safari's
-// Share button, as that panel says.
+// Android's browsers (and Chrome and Edge on computers) offer to install the app by themselves. The
+// offer is kept for the Install button in the install guide instead. iPhones never offer: there it
+// is Safari's Share button, as the guide says.
 window.addEventListener("beforeinstallprompt", (event) => {
 	event.preventDefault();
 	installOffer = event;
@@ -2419,9 +2420,27 @@ installButton.addEventListener("click", async () => {
 	const offer = installOffer;
 	installOffer = null;   // each offer can be shown once
 	offer.prompt();
-	await offer.userChoice;
+	const choice = await offer.userChoice;
+	if (choice.outcome === "accepted") installDialog.close();
 	renderInstall();
 });
+
+// "Install app" at the top opens the guide. A <dialog> opened with showModal() sits on top of the
+// page and keeps the page behind it from being tapped; Esc and the phone's Back close it by themselves.
+installOpen.addEventListener("click", openInstallGuide);
+installClose.addEventListener("click", () => installDialog.close());
+installDialog.addEventListener("click", (event) => {
+	// A tap on the dark area around the guide lands on the dialog itself, not on the guide inside it.
+	if (event.target === installDialog) installDialog.close();
+});
+
+function openInstallGuide() {
+	// Only the guide for the device in hand is unfolded; the others stay a line each.
+	const device = thisDevice();
+	for (const guide of installGuides) guide.open = guide.dataset.device === device;
+	installDialog.showModal();
+	installDialog.scrollTop = 0;
+}
 
 // The app was opened from the home screen, not in the browser.
 function runsFromHomeScreen() {
@@ -2439,14 +2458,26 @@ function installedOnIphone() {
 	return runsFromHomeScreen() && isIphone() && accountsAvailable();
 }
 
-// "Put Kortpris on your home screen": the Install button where the browser offered it, Safari's
-// steps on an iPhone, the browser's menu elsewhere. Not shown in the installed app itself.
+// Which install guide fits the device in hand: one of the data-device names in index.html.
+function thisDevice() {
+	const agent = navigator.userAgent;
+	if (isIphone()) return "iphone";
+	if (/Android/.test(agent)) return "android";
+	if (/CrOS/.test(agent)) return "chromebook";
+	// Firefox on a computer has no Install like Chrome's, so it gets the "other browsers" advice.
+	if (/Firefox\//.test(agent)) return "other";
+	return "computer";
+}
+
+// The install guide: the Install button where the browser offered it, and the device in hand's
+// guide marked "Your device" and moved to the top (style.css). "Install app" is not shown in the
+// installed app itself, nor in kids mode (style.css).
 function renderInstall() {
-	installSettings.hidden = runsFromHomeScreen();
+	installOpen.hidden = runsFromHomeScreen();
 	installButtonRow.hidden = installOffer === null;
-	installIphone.hidden = !isIphone();
-	installIphoneStorage.hidden = !isIphone() || !accountsAvailable();
-	installOther.hidden = isIphone() || installOffer !== null;
+	installIphoneStorage.hidden = !accountsAvailable();
+	const device = thisDevice();
+	for (const guide of installGuides) guide.classList.toggle("yours", guide.dataset.device === device);
 }
 
 // A phone may keep the start page for up to ten minutes (GitHub Pages), and then opens the version

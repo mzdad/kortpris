@@ -141,8 +141,10 @@ US$0.03 per photo on the key owner's account. If Claude fails, the built-in read
 over and a notice says why. The key is kept in the phone's browser and sent only to
 Anthropic.
 
-**On the home screen.** The app can be installed like an app ("Put Kortpris on your home
-screen" on the Scan screen says how): it then opens full screen, with its own icon
+**On the home screen.** The app can be installed like an app. "Install app" at the top of the
+page opens a guide for each kind of device - iPhone and iPad, Android, Chromebook, computers,
+Firefox and other browsers - with the device in hand marked and first, and a one-tap Install
+button where the browser offers it. Installed, it opens full screen, with its own icon
 (`manifest.webmanifest`, the icons from `dev_make_icons.py`). A service worker (`sw.js`) keeps the
 app's own files, the text reader, Firebase's files, the fonts and the newest 1,500 card pictures on
 the phone, so the app starts at once and opens without internet; My cards then shows the cards

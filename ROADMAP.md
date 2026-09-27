@@ -5,6 +5,21 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.39.0
+
+- **"Install app" at the top.** You asked for a button at the top, like Kids mode, that says how
+  to install the app on different devices. "Install app" now sits beside the currency and opens
+  a guide with numbered steps for iPhone and iPad (Safari's Share button, "Add to Home Screen"),
+  Android (Chrome's menu, and Samsung Internet), Chromebook, computers (Chrome, Edge, and Safari on
+  a Mac) and Firefox and other browsers. The guide for the device in hand is marked "Your device",
+  comes first and is the only one unfolded. Where the browser offers to install (Android, Chrome,
+  Edge), a yellow "Install Kortpris" button does it in one tap. It replaces the "Put Kortpris on
+  your home screen" panel further down the Scan screen. The button is hidden in kids mode and in
+  the installed app. Tested in the test browser: the right guide for an iPhone, Android, a
+  Chromebook, Windows and Firefox; closing with ✕, Esc and a tap outside; the Install button; kids
+  mode and the installed app; English and Danish, light and dark. On the smallest iPhones (SE)
+  the Danish top wraps onto three lines; from the ordinary iPhone width up it stays on two.
+
 ## Done in 1.38.0
 
 - **3.2 The camera takes the photo by itself.** With "Auto" on - the button at the top left of the
