@@ -5,6 +5,23 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.34.0
+
+- **2.1 A learned card opens before its text is read.** The app now finds the card's edges in the
+  photo first and compares it with the cards it has learned, and one it knows opens straight away:
+  "Recognised… Checking the text on it". The text is still read, as a check. Base Set and Base
+  Set 2 print the same picture, and only the number tells them apart: when the text names another
+  card exactly, that one is shown instead, with a note saying why. Saving the card or searching
+  during the check keeps your choice. A reading now stops when a newer photo comes, so photos taken
+  quickly don't queue up behind each other (each held a full-size photo in the phone's memory).
+  Tested with the 40 real photos (`dev_learning_test.html`): every made-up second photo was
+  recognised before the reading (40 of 40, 0 wrong), 20 of the 23 harder ones, and no photo was
+  taken for another card (0 of 80); finding the card and comparing took about 0.1 seconds on the PC.
+  In the app, on the PC: a learned Kangaskhan opened after 0.3 seconds, the check was done after
+  1.7; a Base Set 2 Mewtwo photo taught as Base Set Mewtwo opened Base Set first and switched to
+  Base Set 2 at 2.4 seconds, by its number 10/130. On a phone the reading takes far longer, so the
+  gain is bigger there. Cards whose edges aren't found are still recognised after the reading.
+
 ## Done in 1.33.1
 
 - **3.6 No "reverse holo" prices for cards never printed that way.** Cardmarket gives some old cards
@@ -175,7 +192,6 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 2.1 | **Recognise learned cards before reading the text.** Finding the card takes a moment; reading the text takes 5 to 20 seconds. | A card the app knows would open in 1 to 2 seconds instead of after the reading. | S |
 | 2.2 | **Start the text reader when the page opens**, not at the first photo. | The first scan of a visit waits for a few megabytes to download. | S |
 | 2.3 | **Remember database answers for a day** on the phone. | Scanning a card twice, or opening My cards, would not ask again. Worth less since 1.32.0: TCGdex answers in about 0.2 seconds and seldom fails. | S |
 | 2.4 | **Read the number first, the name only when needed.** | Name and number are read one after the other. A clear number alone finds the card. | M |

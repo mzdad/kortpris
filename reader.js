@@ -184,18 +184,19 @@ let reportProgress = () => {};
 // - sparkle is { grain, reverseHolo } from sparkle.js, or null when that can't be told.
 // frame: where the viewer was asked to put the card, as shares of the photo's width and height
 // ({ x0, x1, y0, y1 }), when the photo came from the app's own camera; otherwise null.
-async function readCardPhoto(imageFile, onProgress = () => {}, frame = null) {
+// look: what lookAtPhoto found, when the app looked at the photo before reading it; otherwise
+// the reader looks itself. stillWanted(): false once the reading isn't needed any more (another
+// photo came). It then stops between its steps, as the text reader reads one thing at a time and
+// the next photo would wait for it; a stopped reading throws an error marked stopped.
+async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { look = null, stillWanted = () => true } = {}) {
 	reportProgress = onProgress;
 	onProgress("starting", null);
-	// createImageBitmap also turns sideways phone photos the right way up.
-	const original = await createImageBitmap(imageFile);
-	const photo = shrinkPhoto(original);
+	const { original, photo, framed, cardBox } = look || await lookAtPhoto(imageFile, frame);
 	const worker = await getOcrWorker();
+	stopUnlessWanted(stillWanted, original);
 
 	// When it is clear where the card is, only the card is read - not the table, cloth or
 	// toploader around it, whose patterns look like made-up letters.
-	const framed = frame ? frameBoxIn(photo, frame) : null;
-	const cardBox = whereIsTheCard(photo, framed);
 	const view = cardBox ? cardView(photo, cardBox) : { picture: photo, x0: 0, y0: 0, zoom: 1 };
 
 	const firstRead = await readPage(worker, view.picture, "scattered");
@@ -203,11 +204,13 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null) {
 	// The name's own place on the card, read on its own. A known name found there is the card's
 	// name, even when the whole card's read found another one somewhere else on the card.
 	if (cardBox) {
+		stopUnlessWanted(stillWanted, original);
 		const stripName = await readNameStrip(worker, original, scaleBox(cardBox, original.width / photo.width));
 		if (stripName) name = stripName;
 	}
 	// No known Pokémon found: read it a second time, the other way.
 	if (!name.sure) {
+		stopUnlessWanted(stillWanted, original);
 		const secondRead = await readPage(worker, view.picture, "block");
 		const secondName = guessCardName(secondRead.lines, secondRead.textArea);
 		if (secondName.sure || !name.text) name = secondName;
@@ -216,6 +219,7 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null) {
 	// Read a copy with only the dark ink left. Glitter can still fake a close-enough name
 	// ("Seel"), so only an exact Pokémon name counts from this read.
 	if (!name.sure) {
+		stopUnlessWanted(stillWanted, original);
 		const inkRead = await readPage(worker, inkOnly(view.picture), "ink");
 		const inkName = guessCardName(inkRead.lines, inkRead.textArea, { maxMistakes: 0 });
 		if (inkName.sure) name = inkName;
@@ -231,6 +235,7 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null) {
 		otherCuts.push(...NUMBER_RECUTS.map((recut) => recutBox(cardBox, recut)));
 		if (framed) otherCuts.push(framed);
 	}
+	stopUnlessWanted(stillWanted, original);
 	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead, view, otherCuts);
 	original.close();   // the full-size photo takes a lot of memory; it isn't needed any more
 	const textArea = boxInPhoto(firstRead.textArea, view);
@@ -247,7 +252,28 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null) {
 	};
 }
 
+// Stops a reading that isn't wanted any more (see readCardPhoto), and lets go of its full-size photo.
+function stopUnlessWanted(stillWanted, original) {
+	if (stillWanted()) return;
+	original.close();
+	const error = new Error("The reading was stopped: another photo came.");
+	error.stopped = true;
+	throw error;
+}
+
 // ---------- Where the card is (see card-finder.js for finding it) ----------
+
+// Where the card is in the photo, found before any text is read: in a moment, where reading takes
+// 5 to 20 seconds. Returns { original, photo, framed, cardBox }: the full-size photo (close it when
+// done with it), the smaller copy most of the reading works on, the camera's frame in that copy
+// (or null), and the card's box in it (see whereIsTheCard), or null. frame: as for readCardPhoto.
+async function lookAtPhoto(imageFile, frame = null) {
+	// createImageBitmap also turns sideways phone photos the right way up.
+	const original = await createImageBitmap(imageFile);
+	const photo = shrinkPhoto(original);
+	const framed = frame ? frameBoxIn(photo, frame) : null;
+	return { original: original, photo: photo, framed: framed, cardBox: whereIsTheCard(photo, framed) };
+}
 
 // The card's box in the photo, or null. Found by its yellow border or its shape; in a photo from
 // the app's camera, the white frame's box (framed) when nothing is found close to it.

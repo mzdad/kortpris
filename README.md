@@ -91,10 +91,15 @@ comparison uses, about 1,300 bytes, kept on the phone and, while someone is sign
 account too (`learned/<username>` in Firestore), so it follows them to every phone and isn't lost
 when the phone's browser forgets it. A search typed while the photo's card
 is already known is taken as a price lookup of some other card, and teaches nothing
-(`answersPhoto` in `app.js`). Every new photo is compared with those first. When it looks just like one
-learned card (`SAME_CARD_DISTANCE`) and clearly unlike every other (`SAME_CARD_GAP`), that card
-opens straight away, however badly the text read - unless the reader read another card's name and
-number exactly, because the same picture is printed in several sets. A photo that only looks
+(`answersPhoto` in `app.js`). Every new photo is compared with those first: as soon as the card's
+edges are found in it, before any text is read (`lookAtPhoto` in `reader.js`, `openLearnedEarly` in
+`app.js`). When it looks just like one learned card (`SAME_CARD_DISTANCE`) and clearly unlike every
+other (`SAME_CARD_GAP`), that card opens straight away - in about a second, instead of after the 5
+to 20 seconds of reading - however badly the text will read. The text is still read, as a check:
+when it names another card's name and number exactly, that card is shown instead, because the same
+picture is printed in several sets (`checkLearnedCard`). A photo whose card's edges aren't found is
+compared by where its text is, after the reading. A reading stops between its steps when another
+photo comes, so photos taken quickly one after another don't queue up. A photo that only looks
 somewhat like learned cards (`LIKE_CARD_DISTANCE`, in other light or of another copy of the card)
 still gets them as suggestions: they join the cards its text found, and when nothing is clear they go
 first, marked "Seen before" - but they never open by themselves. When nothing could be read, they

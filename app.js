@@ -50,6 +50,7 @@ const KID_STATUS = {
 	foundOne: "kidFound",
 	bestMatchOpened: "kidFound",
 	learnedOpened: "kidFound",
+	learnedChecking: "kidFound",
 	learnedSuggested: "kidPickOne",
 	foundMany: "kidPickOne",
 	foundManyByLook: "kidPickOne",
@@ -906,35 +907,47 @@ async function scanPhoto(imageFile, frame = null) {
 			setNotice(await claudeProblem(error));
 		}
 	}
-	if (!reading) reading = await readWithBuiltInReader(imageFile, scanId, frame);
-	if (scanId !== latestScanId) return;
+	// The cards the app has learned that the photo looks like (learned.js), once compared.
+	let learnedLook = null;
+	if (!reading) {
+		// The built-in reader finds the card in the photo first, which takes a moment. A card the app
+		// has learned then opens straight away (see openLearnedEarly), and the text - 5 to 20 seconds
+		// of reading - only checks it.
+		getOcrWorker();   // the text reader gets ready meanwhile (it downloads the first time)
+		setStatus("readerStarting");
+		showProgress(null);
+		const look = await lookAtPhotoSafely(imageFile, frame);
+		if (scanId !== latestScanId) {
+			freeLook(look);
+			return;
+		}
+		if (look) learnedLook = compareWithLearned(look.photo, null, look.cardBox);
+		let openedEarly = null;
+		if (learnedLook && learnedLook.card) openedEarly = await openLearnedEarly(learnedLook.card, look, scanId);
+		if (scanId !== latestScanId) {
+			freeLook(look);
+			return;
+		}
+		const searchIdBefore = latestSearchId;
+		reading = await readWithBuiltInReader(imageFile, scanId, frame, look, openedEarly !== null);
+		if (scanId !== latestScanId) return;
+		if (openedEarly) {
+			await checkLearnedCard(openedEarly, reading, scanId, searchIdBefore);
+			return;
+		}
+	}
 
 	// A card that sparkles outside its picture opens on its reverse holo price (see sparkle.js).
 	if (reading.sparkle && reading.sparkle.reverseHolo) versionHint = "reverseHolofoil";
 
 	searchButton.disabled = false;
 	if (reading.photo) {
-		// The cards the app has learned that this photo looks like (learned.js).
-		const learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null);
-		lastPhoto = {
-			picture: reading.photo,
-			textArea: reading.textArea,
-			cardBox: reading.cardBox || null,
-			setName: reading.setName || "",
-			looksReverseHolo: versionHint === "reverseHolofoil",
-			// Tells this photo apart when a card is learned from it (see learnCard in learned.js).
-			key: String(Date.now()),
-			// A learned card the photo looks just like, or null...
-			learnedCard: learnedLook.card,
-			// ...or else the learned cards it looks somewhat like, to compare it with too.
-			learnedSuggestions: learnedLook.suggestions,
-			// Whether the text read is worth searching on (see below).
-			textUsable: true,
-			// The card the photo is taken to be, once one was opened for it or learned from it...
-			card: null,
-			// ...and whether that was because the photo looked like a learned card.
-			recognised: false,
-		};
+		// Compared already when the card's own box was found before the reading: the place of the
+		// text isn't needed then. Otherwise now, by the place of the text.
+		if (!learnedLook || !reading.cardBox) {
+			learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null);
+		}
+		lastPhoto = photoFacts(reading.photo, reading.textArea, reading.cardBox || null, reading.setName || "", learnedLook);
 	}
 	nameInput.value = reading.name;
 	numberInput.value = reading.number;
@@ -963,10 +976,13 @@ async function scanPhoto(imageFile, frame = null) {
 	await searchForCard();
 }
 
-async function readWithBuiltInReader(imageFile, scanId, frame) {
+// look: where the card is, found before the reading (lookAtPhoto in reader.js), or null.
+// quietly: a learned card is open already (see openLearnedEarly), and the status says the text is
+// being checked; the reading doesn't report how it's getting on.
+async function readWithBuiltInReader(imageFile, scanId, frame, look = null, quietly = false) {
 	try {
 		return await readCardPhoto(imageFile, (stage, fraction) => {
-			if (scanId !== latestScanId) return;
+			if (scanId !== latestScanId || quietly) return;
 			if (stage === "reading") {
 				setStatus("reading");
 				showProgress(fraction);
@@ -977,11 +993,114 @@ async function readWithBuiltInReader(imageFile, scanId, frame) {
 				setStatus("readerStarting");
 				showProgress(null);
 			}
-		}, frame);
+		}, frame, { look: look, stillWanted: () => scanId === latestScanId });
 	} catch (error) {
-		console.error(error);
+		if (!error.stopped) console.error(error);   // stopped: another photo came, nothing went wrong
 		return { name: "", number: "" };
 	}
+}
+
+// Where the card is in the photo (lookAtPhoto in reader.js), or null when the photo can't be
+// opened: the reader then says so the usual way.
+async function lookAtPhotoSafely(imageFile, frame) {
+	try {
+		return await lookAtPhoto(imageFile, frame);
+	} catch (error) {
+		console.error(error);
+		return null;
+	}
+}
+
+// A look that won't be read after all (another photo came): its full-size photo takes a lot of
+// memory, so it is let go of at once.
+function freeLook(look) {
+	if (look) look.original.close();
+}
+
+// A photo of a card the app has learned opens that card as soon as the card is found in the photo,
+// before its text is read (see scanPhoto). Returns the card, or null when it can't be opened now -
+// the database didn't answer, or another photo came - and the scan goes on the usual way.
+async function openLearnedEarly(learnedCard, look, scanId) {
+	let card;
+	try {
+		[card] = await findCardsById([learnedCard.cardId]);
+	} catch (error) {
+		console.error(error);
+		return null;
+	}
+	if (!card) return null;   // not in the database (any more): the text may still find the card
+	await loadPrices(card);
+	if (scanId !== latestScanId) return null;
+	// A card that sparkles outside its picture opens on its reverse holo price (see sparkle.js).
+	const sparkle = sparkleOf(look.photo, look.cardBox, null);
+	if (sparkle && sparkle.reverseHolo) versionHint = "reverseHolofoil";
+	lastPhoto = photoFacts(look.photo, null, look.cardBox, "", { card: learnedCard, suggestions: [] });
+	takeFor(card, true);
+	// The card's own name and number, as when a learned card is found after the reading.
+	nameInput.value = card.name;
+	numberInput.value = collectorNumber(card);
+	scannedNumbers = { shown: numberInput.value, guesses: [] };
+	searchButton.disabled = false;
+	hideProgress();
+	setStatus("learnedChecking");
+	showResults([card], { key: "matchLearned", values: {} }, card.id, null);
+	return card;
+}
+
+// After a learned card opened early (see openLearnedEarly), the text is read all the same, as a
+// check: the same picture is printed in several sets (Base Set and Base Set 2 Charizard), and only
+// the name and number tell them apart. When the text names another card exactly, that one is shown
+// instead, as it would have been without the early look - unless the viewer searched, or saved the
+// card, meanwhile: then they have decided.
+async function checkLearnedCard(card, reading, scanId, searchIdBefore) {
+	// Another photo, or a search of the viewer's, has the screen now.
+	const tookOver = () => scanId !== latestScanId || latestSearchId !== searchIdBefore;
+	// The viewer saved the card, which says it is the right one (see rememberCard).
+	const confirmed = () => lastPhoto.card !== card || !lastPhoto.recognised;
+	if (tookOver()) return;
+	let exact = null;
+	if (!confirmed()) {
+		try {
+			exact = await findExactCards(reading.name, allNumberGuesses(reading.number, reading.numberGuesses));
+		} catch (error) {
+			console.error(error);   // only a check: the learned card stays
+		}
+		if (tookOver()) return;
+	}
+	if (confirmed() || !exact || exact.cards.some((found) => found.id === card.id)) {
+		setStatus("learnedOpened");
+		return;
+	}
+	// Searched as if the text had been read before anything opened (see findLearnedCard).
+	nameInput.value = reading.name;
+	numberInput.value = reading.number;
+	scannedNumbers = { shown: reading.number, guesses: reading.numberGuesses || [] };
+	await searchForCard();
+	if (scanId === latestScanId && shownCards.length > 0 && selectedCardId !== card.id) setNotice("learnedOtherPrint");
+}
+
+// What is kept about the latest photo (see lastPhoto). learnedLook: what compareWithLearned in
+// learned.js said about it.
+function photoFacts(photo, textArea, cardBox, setName, learnedLook) {
+	return {
+		picture: photo,
+		textArea: textArea,
+		cardBox: cardBox,
+		setName: setName,
+		looksReverseHolo: versionHint === "reverseHolofoil",
+		// Tells this photo apart when a card is learned from it (see learnCard in learned.js).
+		key: String(Date.now()),
+		// A learned card the photo looks just like, or null...
+		learnedCard: learnedLook.card,
+		// ...or else the learned cards it looks somewhat like, to compare it with too.
+		learnedSuggestions: learnedLook.suggestions,
+		// Whether the text read is worth searching on (see scanPhoto).
+		textUsable: true,
+		// The card the photo is taken to be, once one was opened for it or learned from it...
+		card: null,
+		// ...and whether that was because the photo looked like a learned card.
+		recognised: false,
+	};
 }
 
 async function photoForLooks(imageFile) {
