@@ -1056,7 +1056,7 @@ async function scanPhoto(imageFile, frame = null) {
 		if (!learnedLook || !reading.cardBox) {
 			learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null);
 		}
-		lastPhoto = photoFacts(reading.photo, reading.textArea, reading.cardBox || null, reading.setName || "", learnedLook);
+		lastPhoto = photoFacts(reading.photo, reading.textArea, reading.cardBox || null, reading.setName || "", learnedLook, reading.setCode || "");
 	}
 	nameInput.value = reading.name;
 	numberInput.value = reading.number;
@@ -1189,13 +1189,14 @@ async function checkLearnedCard(card, reading, scanId, searchIdBefore) {
 }
 
 // What is kept about the latest photo (see lastPhoto). learnedLook: what compareWithLearned in
-// learned.js said about it.
-function photoFacts(photo, textArea, cardBox, setName, learnedLook) {
+// learned.js said about it. setCode: the set's code read by the number ("PAF"), or "".
+function photoFacts(photo, textArea, cardBox, setName, learnedLook, setCode = "") {
 	return {
 		picture: photo,
 		textArea: textArea,
 		cardBox: cardBox,
 		setName: setName,
+		codeSets: setsOfCode(setCode),
 		looksReverseHolo: versionHint === "reverseHolofoil",
 		// Tells this photo apart when a card is learned from it (see learnCard in learned.js).
 		key: String(Date.now()),
@@ -1313,7 +1314,14 @@ async function searchForCard(byViewer = false) {
 			// Only trust looks when the reader also found where the card sits in the photo.
 			const cardLocated = lastPhoto.cardBox !== null || lastPhoto.textArea !== null;
 			const suggested = found.suggestedIds || [];
-			const pick = pickBestMatch(ranked, cardLocated, found.setSizes, lastPhoto.setName, found.numbersRead, lastPhoto.looksReverseHolo, suggested);
+			const pick = pickBestMatch(ranked, cardLocated, {
+				setSizes: found.setSizes,
+				setName: lastPhoto.setName,
+				codeSets: lastPhoto.codeSets,
+				numbersRead: found.numbersRead,
+				looksReverseHolo: lastPhoto.looksReverseHolo,
+				suggestedIds: suggested,
+			});
 			const cards = firstPageWith(pick.cards, suggested);
 			const best = cards[0].id;
 			if (pick.clear) {

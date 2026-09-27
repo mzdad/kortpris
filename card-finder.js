@@ -20,6 +20,17 @@ const CARD_FINDER_WIDTH = 300;
 // ...and a row or column counts as border when at least this share of it is yellow.
 // Tuned on real photos of cards in toploaders on a patterned cloth.
 const BORDER_YELLOW_SHARE = 0.4;
+// A reach along a border (see yellowReach) is only trusted from at least this many yellow pixels.
+const MIN_REACH_PIXELS = 10;
+
+// A photo is seldom quite straight, so the border's rows and columns may lean: the yellow is counted
+// along lines leaning up to this many degrees either way, in these steps, and the lean where it
+// lines up best is used. (Straight columns missed the borders of 5 of 41 made-up photos tilted 2 to
+// 4 degrees in version 1.39.2.)
+const YELLOW_MAX_LEAN = 6;
+const YELLOW_LEAN_STEP = 0.5;
+// Two border lines are the card's two sides when at least this far apart (share of the photo's size).
+const MIN_BORDER_GAP = 0.3;
 
 function findYellowCard(photo) {
 	// The card's left and right edges are yellow almost all the way down, and its top and
@@ -27,37 +38,117 @@ function findYellowCard(photo) {
 	// the box between the outermost rows and columns that are mostly yellow.
 	const width = CARD_FINDER_WIDTH;
 	const height = Math.round(photo.height * width / photo.width);
+	const yellow = yellowPixels(photo, width, height);
+	if (yellow.x.length === 0) return null;
+	const straight = straightestLean(yellow, width, height);
+	const columns = borderLines(straight.columns, height * BORDER_YELLOW_SHARE);
+	const rows = borderLines(straight.rows, width * BORDER_YELLOW_SHARE);
+	// Both sides found on an axis give the card's width (or height). Glare or a shadow can hide
+	// one side's border, or both: then how far the yellow reaches along the top or bottom border
+	// shows how wide the card is, and along a side border how tall - together with any border line
+	// that was found. (Without this, one side border and the bottom border made a box the size of
+	// their corner, in 4 of 41 made-up photos in version 1.39.2.)
+	const across = bordersApart(columns, width) || withLines(yellowReach(yellow, straight, rows, true), columns);
+	const down = bordersApart(rows, height) || withLines(yellowReach(yellow, straight, columns, false), rows);
+	if (!across || !down) return null;
+	if (down.to - down.from < height * MIN_CARD_HEIGHT_SHARE) return null;
+	const scale = photo.width / width;
+	const box = {
+		x0: across.from * scale,
+		x1: across.to * scale,
+		y0: down.from * scale,
+		y1: down.to * scale,
+		foundBy: "yellow border",
+	};
+	// Not the shape of a card: something else yellow, or a card without a yellow border.
+	const shape = (box.x1 - box.x0) / (box.y1 - box.y0);
+	return Math.abs(shape - CARD_SHAPE) <= CARD_SHAPE_TOLERANCE ? box : null;
+}
+
+function yellowPixels(photo, width, height) {
+	// Where the yellow pixels are in a copy of the photo this size: { x: [...], y: [...] }.
 	const small = document.createElement("canvas");
 	small.width = width;
 	small.height = height;
 	const ctx = small.getContext("2d", { willReadFrequently: true });
 	ctx.drawImage(photo, 0, 0, width, height);
 	const pixels = ctx.getImageData(0, 0, width, height).data;
-	const yellowInColumn = new Array(width).fill(0);
-	const yellowInRow = new Array(height).fill(0);
+	const yellow = { x: [], y: [] };
 	for (let y = 0; y < height; y++) {
 		for (let x = 0; x < width; x++) {
 			const i = (y * width + x) * 4;
 			if (isYellow(pixels[i], pixels[i + 1], pixels[i + 2])) {
-				yellowInColumn[x]++;
-				yellowInRow[y]++;
+				yellow.x.push(x);
+				yellow.y.push(y);
 			}
 		}
 	}
-	const columns = borderLines(yellowInColumn, height * BORDER_YELLOW_SHARE);
-	const rows = borderLines(yellowInRow, width * BORDER_YELLOW_SHARE);
-	if (columns.length < 2 || rows.length < 2) return null;
-	const scale = photo.width / width;
-	const box = {
-		x0: columns[0] * scale,
-		x1: (columns[columns.length - 1] + 1) * scale,
-		y0: rows[0] * scale,
-		y1: (rows[rows.length - 1] + 1) * scale,
-		foundBy: "yellow border",
+	return yellow;
+}
+
+function straightestLean(yellow, width, height) {
+	// The yellow counted along leaning columns and rows, at each lean in turn. At the card's own
+	// lean its border lines up in the fewest, fullest columns and rows; that shows as the largest
+	// sum of the counts squared. Returns { slope, columns, rows } for that lean.
+	let best = null;
+	for (let lean = -YELLOW_MAX_LEAN; lean <= YELLOW_MAX_LEAN; lean += YELLOW_LEAN_STEP) {
+		const slope = Math.tan(lean * Math.PI / 180);
+		const columns = new Array(width).fill(0);
+		const rows = new Array(height).fill(0);
+		for (let i = 0; i < yellow.x.length; i++) {
+			const place = leanedPlace(yellow.x[i], yellow.y[i], slope, width, height);
+			if (place.column >= 0 && place.column < width) columns[place.column]++;
+			if (place.row >= 0 && place.row < height) rows[place.row]++;
+		}
+		let lineUp = 0;
+		for (const count of columns) lineUp += count * count;
+		for (const count of rows) lineUp += count * count;
+		if (!best || lineUp > best.lineUp) best = { lineUp: lineUp, slope: slope, columns: columns, rows: rows };
+	}
+	return best;
+}
+
+function leanedPlace(x, y, slope, width, height) {
+	// Which leaning column and row a pixel lies on: the column is where its line crosses the
+	// photo's middle height, the row where its line crosses the middle width. A rectangle's sides
+	// lean the same way, so the rows lean at a right angle to the columns.
+	return {
+		column: Math.round(x - (y - height / 2) * slope),
+		row: Math.round(y + (x - width / 2) * slope),
 	};
-	// Not the shape of a card: something else yellow, or a card without a yellow border.
-	const shape = (box.x1 - box.x0) / (box.y1 - box.y0);
-	return Math.abs(shape - CARD_SHAPE) <= CARD_SHAPE_TOLERANCE ? box : null;
+}
+
+function bordersApart(lines, size) {
+	// The outermost two border lines, as { from, to }, when they are far enough apart to be the
+	// card's two sides; otherwise null (one side, or two lines of the same border).
+	if (lines.length < 2) return null;
+	const from = lines[0];
+	const to = lines[lines.length - 1] + 1;
+	return to - from >= size * MIN_BORDER_GAP ? { from: from, to: to } : null;
+}
+
+function yellowReach(yellow, straight, lines, alongRows) {
+	// How far the yellow reaches along some border lines: along rows (the top or bottom border)
+	// from left to right, along columns (a side border) from top to bottom. The outermost bits
+	// are left out, as a stray yellow pixel can lie in line with the border. Null when too few.
+	const onLines = new Set(lines);
+	const width = straight.columns.length;
+	const height = straight.rows.length;
+	const reach = [];
+	for (let i = 0; i < yellow.x.length; i++) {
+		const place = leanedPlace(yellow.x[i], yellow.y[i], straight.slope, width, height);
+		if (alongRows && onLines.has(place.row)) reach.push(place.column);
+		if (!alongRows && onLines.has(place.column)) reach.push(place.row);
+	}
+	if (reach.length < MIN_REACH_PIXELS) return null;
+	reach.sort((a, b) => a - b);
+	return { from: reach[Math.floor(reach.length * 0.02)], to: reach[Math.floor(reach.length * 0.98)] + 1 };
+}
+
+function withLines(reach, lines) {
+	// A reach widened to take in the border lines that were found across it.
+	if (!reach || lines.length === 0) return reach;
+	return { from: Math.min(reach.from, lines[0]), to: Math.max(reach.to, lines[lines.length - 1] + 1) };
 }
 
 function borderLines(yellowCounts, minimum) {

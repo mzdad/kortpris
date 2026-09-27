@@ -177,14 +177,17 @@ function isClearWinner(ranked) {
 // Decides what to show after rankByLook. Returns { cards, clear }: the cards in order, best
 // first, and whether the first is sure enough to open without asking.
 // - located: the reader found where the card sits in the photo, so its looks can be trusted.
+// clues, each left out when not known:
 // - setSizes: set sizes the reader saw ("102" of 8/102). They are often right even when the
 //   card's own number isn't - but not always, so the picture has to agree.
 // - setName: the set's name, when Claude read the card.
+// - codeSets: the sets the set code read by the number can be (see set-codes.js).
 // - numbersRead: every collector number the reader thought possible ("8/64").
 // - looksReverseHolo: the photo sparkles outside the card's picture (see sparkle.js).
 // - suggestedIds: learned cards the photo looks somewhat like (see compareWithLearned in
 //   learned.js). When nothing is clear, they go first.
-function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead = [], looksReverseHolo = false, suggestedIds = []) {
+function pickBestMatch(ranked, located, clues = {}) {
+	const { setSizes = [], setName = "", codeSets = [], numbersRead = [], looksReverseHolo = false, suggestedIds = [] } = clues;
 	if (ranked.length === 0) return { cards: [], clear: false };
 	const cards = ranked.map((entry) => entry.card);
 	// Claude names the set. If exactly one candidate is from that set, that settles it.
@@ -213,6 +216,12 @@ function pickBestMatch(ranked, located, setSizes = [], setName = "", numbersRead
 		lastCards = [reprintCheck.lost.card];
 	}
 	const inOrder = [...candidates.map((entry) => entry.card), ...lastCards];
+
+	// Among the look-alikes, exactly one comes from the set whose code the reader read by the
+	// number: that is the one. (Only among look-alikes, so a misread code can't open a card that
+	// looks nothing like the photo.)
+	const fromCode = lookAlikes.filter((entry) => codeSets.includes(entry.card.set.id));
+	if (fromCode.length === 1) return { cards: moveToFront(inOrder, fromCode[0].card), clear: true };
 
 	// Among the look-alikes, exactly one comes from a set of a size the reader saw: that is the one.
 	const fromSetSize = lookAlikes.filter((entry) => setSizes.includes(String(entry.card.set.printedTotal)));

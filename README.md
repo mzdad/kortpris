@@ -13,8 +13,10 @@ A web page with nothing to install. What happens to a photo:
    their tiny letters are often misread as digits: "6Go1/6670" is GG01 (`LETTERED_SETS` in
    `reader.js`). The name is checked against all 1025 Pokémon names and every Trainer and Energy
    card's name (`card-names.js`), so small misreads get corrected. The card is
-   found in the photo by its yellow border, or, for silver-bordered and foil cards, by its
-   shape (`card-finder.js`). The strip along its top where the name is printed is then read on
+   found in the photo by its yellow border - counted along lines that may lean a little, as a
+   photo is seldom quite straight, and from a single border line when glare hides the others -
+   or, for silver-bordered and foil cards, by its shape (`card-finder.js`). The strip along its
+   top where the name is printed is then read on
    its own, enlarged: as it is, with only its dark ink, and with only its white ink. On full-art
    cards the name sits on the artwork, where a read of the whole card often loses it
    (`readNameStrip`). The number is then read again from the full-size photo, in the
@@ -22,7 +24,12 @@ A web page with nothing to install. What happens to a photo:
    black ink kept, which hides coloured backgrounds and glitter), until two reads agree. When
    they don't, the corners are cut out again from the card's box made a tenth bigger, and then
    moved up a little: the box is never found exactly, and tiny print cut out a little
-   differently often reads differently (`NUMBER_RECUTS`).
+   differently often reads differently (`NUMBER_RECUTS`). The last way keeps only the near-white
+   print, for the white italic numbers of full-art and dark cards (`whiteInkOnly`). Cards since
+   2023 also print their set's code by the number ("PAF EN 057/091"), white in a little box: it
+   is read with only capitals allowed, and kept when that set's size is the one after the "/"
+   (`readSetCode`, `set-codes.js`). It then picks among cards that look alike - Black Bolt,
+   White Flare and Chaos Rising all have 86 cards.
 2. **Text → card.** The name and number are looked up in [TCGdex](https://tcgdex.dev), a free
    card database that web pages may ask directly: the cards with that name and those with each
    number read come in one quick question each (`cards.js`), and every number the reader thought
@@ -173,6 +180,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `pokemon-names.js` | All Pokémon names, used to correct misreads |
 | `card-names.js` | All Trainer and Energy card names, used the same way |
 | `card-finder.js` | Finds where the card is in the photo (yellow border, or shape) |
+| `set-codes.js` | The set codes printed on cards since 2023 ("PAF"), with their sets and sizes |
 | `reader.js` | Photo → name and number |
 | `cards.js` | Searches the card database (TCGdex), and asks for the prices of the cards shown |
 | `card-ids.js` | The old database's set ids and TCGdex's, and the 30th Celebration reprints' numbers |

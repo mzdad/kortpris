@@ -34,15 +34,16 @@ scores the result. The last column shows how the number corners were read.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.39.2"></script>
-<script src="card-names.js?v=1.39.2"></script>
-<script src="card-finder.js?v=1.39.2"></script>
-<script src="sparkle.js?v=1.39.2"></script>
-<script src="reader.js?v=1.39.2"></script>
-<script src="storage.js?v=1.39.2"></script>
-<script src="card-ids.js?v=1.39.2"></script>
-<script src="cards.js?v=1.39.2"></script>
-<script src="matcher.js?v=1.39.2"></script>
+<script src="pokemon-names.js?v=1.40.0"></script>
+<script src="card-names.js?v=1.40.0"></script>
+<script src="set-codes.js?v=1.40.0"></script>
+<script src="card-finder.js?v=1.40.0"></script>
+<script src="sparkle.js?v=1.40.0"></script>
+<script src="reader.js?v=1.40.0"></script>
+<script src="storage.js?v=1.40.0"></script>
+<script src="card-ids.js?v=1.40.0"></script>
+<script src="cards.js?v=1.40.0"></script>
+<script src="matcher.js?v=1.40.0"></script>
 <script>
 "use strict";
 
@@ -142,7 +143,12 @@ async function testOnePhoto(card, photo) {
 		const located = reading.cardBox !== null || reading.textArea !== null;
 		const pick = found.cards.length === 1
 			? { cards: found.cards, clear: true }
-			: pickBestMatch(ranked, located, found.setSizes, "", found.numbersRead, Boolean(reading.sparkle && reading.sparkle.reverseHolo));
+			: pickBestMatch(ranked, located, {
+				setSizes: found.setSizes,
+				codeSets: setsOfCode(reading.setCode),
+				numbersRead: found.numbersRead,
+				looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
+			});
 		foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
 		opened = pick.cards.length > 0 && pick.clear;
 	} catch (problem) {

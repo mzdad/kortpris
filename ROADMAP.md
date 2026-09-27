@@ -5,6 +5,39 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.40.0
+
+You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.7 is done; 1.8 and
+1.9 are partly done, and what is left of them stays below with the same numbers.
+
+- **1.7 The set's code is read.** Cards since 2023 print their set's code by the number ("PAF EN
+  057/091"), white in a little box. When a card's number looks like one of those (padded to three
+  digits) the box is read with only capitals and digits allowed, and a code is kept when its set
+  has the size read after the "/" (`readSetCode` in `reader.js`, the codes in the new
+  `set-codes.js`). Among cards that look alike, the one from that set is then picked - Black Bolt,
+  White Flare and Chaos Rising all have 86 cards, and Paradox Rift and Destined Rivals 182. Only
+  among look-alikes, so a misread code can't open a card that looks nothing like the photo. Read on
+  22 of 33 made-up photos of ordinary cards from 2023 to 2026 and on 10 of the 16 such full-art
+  cards, never a wrong code, and none made up on older cards. Allowed any character, Tesseract read
+  "PAF" as "PAfo". Your Gengar and Gastly photos don't get one yet: the Gengar's edges aren't found
+  (1.9) and the Gastly's number was misread, so its code isn't looked for.
+- **1.8, partly: white numbers.** A last way of reading the number keeps only the near-white print,
+  judged against the whitest print in the corner (`whiteInkOnly`); the white-ink copy of 1.28.0
+  judged it against the colours around it, which broke the black-edged white digits into pieces.
+  Italic print also turns the "/" into a 7 ("2397091" is 239/091) or leaves a dot by it
+  ("239/.091"): both are now understood. In the full-art test the right card came first 27 of 27
+  times (25) and opened by itself 27 times (25), with 21 numbers read (20), 0 wrong.
+- **1.9, partly: yellow borders in crooked photos and bad light.** The border's yellow is now counted
+  along lines leaning up to 6 degrees, at the lean where it lines up best, and a single border
+  line is enough when glare hides the others: the yellow along it shows how far the card reaches.
+  Before, one side border and the bottom border could make a box the size of their corner, which
+  happened in 4 of 41 harder made-up photos. The card's edges are now found in 37 of those 41 (32).
+  In the learning test, of 46 harder second photos 29 are recognised (25) and 28 opened before
+  the reading (22), and 10 neither recognised nor suggested (13); still 0 wrong, and no stranger
+  taken for a learned card. Your real photos: the right card first 46 of 46, opened 45, 0 wrong;
+  the special numbers test as before. No false cards in 112 cuts of pictures without one.
+
+
 ## Done in 1.39.2
 
 - **Auto finds dark and silver-bordered cards.** Your screen recording showed Auto saying "Fill
@@ -280,9 +313,8 @@ L = several sessions).
 | | What | Why | Size |
 |---|---|---|---|
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
-| 1.7 | **The set's code on newer cards**: since Scarlet & Violet, cards print their set's code by the number ("PAL EN 123/193"). Read it with the colours turned around, as it is white on black. | The code names the set exactly; today the set is guessed from its size, which several sets share. In 1.27.0 the "SVP" code was read in only about 1 of 3 tries. | M |
-| 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black. | 8 of 27 full-art numbers weren't read in 1.28.0, and a white-ink copy of the corner read none of them, so it needs something else, like thinning the black edge away first. The name and the look find these cards anyway. | M |
-| 1.9 | **Find the edges of silver-bordered and full-art cards** in photos from the phone's own camera. | The name strip and the number corners need them; 2 of 27 full-art photos had none. So do learned cards: of 13 harder made-up second photos neither recognised nor suggested in 1.29.0, 10 had no edges found (yellow borders in harsh light, there). The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
+| 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black: the rest. | 6 of 27 full-art numbers still aren't read in 1.40.0 (8 in 1.28.0). The made-up photos are made from the database's small pictures, so a real photo may read better: worth checking with a few real full-art photos first. The name and the look find these cards anyway. | S |
+| 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: in a toploader, and on a grey table. | The name strip, the number corners and the set code (1.7) need them. Your Gengar in a toploader has none (its best box scores 1.24, where 1.3 is needed), nor do 2 of 27 made-up full-art photos on a grey table, where the card's own edge is too faint to be among the lines tried. Trying more lines didn't help in 1.40.0. The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
 
 ## 2. Quicker
 
@@ -314,6 +346,22 @@ L = several sessions).
 |---|---|---|---|
 | 5.2 | **Pictures for the cards TCGdex has none of.** The gallery, vault and some promo cards borrow the old database's pictures, which may go when it does (March 2027). | Without a picture a card can't be compared with a photo, and shows a grey "?". Check again closer to March 2027: TCGdex may have them by then. | S |
 
+## 6. Cards in other languages
+
+You asked about Chinese, Korean, Indonesian and Japanese cards (27 September 2026). What TCGdex has,
+checked that day: Japanese 13,000 cards, about 1 in 3 with a picture, with real Cardmarket prices
+for the Japanese cards (5 of 6 sets sampled; the newest not yet); traditional Chinese 7,400 cards
+and Indonesian 2,800, but with the Japanese card's price, as they follow the Japanese sets;
+simplified Chinese 877 cards without pictures; Korean 239 cards without pictures. None has
+TCGplayer prices. The app's reader only reads English, but modern cards print their set's code and
+number in plain letters ("SV2P 006/071"), which with the picture comparison should find most cards.
+
+| | What | Why | Size |
+|---|---|---|---|
+| 6.1 | **Japanese cards**: a card-language choice (remembered), finding the card by set code and number (1.7) and its picture, Japanese prices from Cardmarket, and My cards keeping which language each card is. | The one Asian language with its own prices. Cards before about 2001 print no number, so they could only be found by their picture. | L |
+| 6.2 | **Chinese and Indonesian cards**, the same way, with the price clearly marked as the Japanese version's. | TCGdex has the cards, but only the Japanese card's price, which these printings usually sell for less than. | M |
+| 6.3 | **Korean cards**, if TCGdex (or another free database) gets them. | 239 cards and no pictures in September 2026: not enough to find cards by. | - |
+
 **The TCGdex trial (27 September 2026)**, before 5.1 was done. TCGdex (api.tcgdex.net) is free, needs no key, and answers
 web pages directly, pictures included. Of 40 requests none failed (pokemontcg.io fails about half),
 at about 0.1 seconds per card and 0.2 per name search. Its prices are from the same day, where
@@ -341,5 +389,4 @@ handle:
 
 ## Not planned
 
-- **Non-English cards.** The reader and its name lists are English only (TCGdex has other languages, not Danish).
 - **Grading a card's condition from the photo.** Too unreliable for prices that differ this much.

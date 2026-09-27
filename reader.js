@@ -86,14 +86,18 @@ const NUMBER_PLACES = [
 // Tesseract misreads tiny print differently each way, so together they read far more numbers
 // than any one way alone: on 12 real photos 11, against at most 7 (version 1.10.0).
 // cardWidth: how wide the whole card would be at that enlargement, in pixels.
-// ink: "soft" or "hard" for a black-ink-only copy (see inkAgainstBackground), "" for the photo itself.
-// (A white-ink copy, for numbers printed white on full-art cards, was tried in version 1.28.0: it
-// read none of them, as they are italic and edged in black.)
+// ink: "soft" or "hard" for a black-ink-only copy (see inkAgainstBackground), "white" for a copy of
+// only the near-white print (see whiteInkOnly), "" for the photo itself.
+// The last way is for numbers printed white on full-art cards and dark cards, italic and edged in
+// black. A copy judged against the colours around it, like the black-ink ones, breaks those up (as
+// tried in version 1.28.0, when it read none of them); judged against the window's own whitest
+// print, they come out whole.
 const NUMBER_READS = [
 	{ cardWidth: 3750, ink: "soft", mode: "numberScattered" },
 	{ cardWidth: 3000, ink: "", mode: "numberBlock" },
 	{ cardWidth: 3750, ink: "soft", mode: "numberBlock" },
 	{ cardWidth: 2400, ink: "hard", mode: "numberScattered" },
+	{ cardWidth: 2000, ink: "white", mode: "numberBlock" },
 ];
 // When the reads of the card's own cut don't agree, the number places are read again from other
 // cuts of the card, in turn, until two reads agree: its box a tenth bigger around its middle, then
@@ -106,6 +110,23 @@ const NUMBER_RECUTS = [
 	{ scale: 1.1, up: 0 },
 	{ scale: 1, up: 0.012 },
 ];
+// Where cards since 2023 print their set's code (see set-codes.js): in a little box in the
+// bottom-left corner, before the number - as shares of the card's width and height. The code box
+// itself is about x 0.09-0.16 and y 0.94-0.97; the "place" is a little bigger, as the card's edges
+// are never found exactly, and the "box" just around it.
+const SET_CODE_PLACE = { x0: 0.07, x1: 0.19, y0: 0.925, y1: 0.985 };
+const SET_CODE_BOX = { x0: 0.08, x1: 0.175, y0: 0.935, y1: 0.98 };
+// The code is read in these ways, in turn, until one finds a code that fits the number read. It is
+// printed white - in a black box on light cards, a white-edged one on dark cards - so only the light
+// ink is kept (see inkAgainstBackground). On 33 made-up photos of cards from 2023 to 2026, the first
+// way read 17 codes, the three together 22, and none wrong (version 1.40.0).
+const SET_CODE_READS = [
+	{ place: SET_CODE_PLACE, cardWidth: 2000, mode: "setCode" },
+	{ place: SET_CODE_BOX, cardWidth: 2000, mode: "setCodeLine" },
+	{ place: SET_CODE_BOX, cardWidth: 1400, mode: "setCodeLine" },
+];
+// What tiny capitals in a code are misread as ("0BF" is OBF, "S5P" is SSP).
+const CODE_LETTER_LOOKALIKES = { 0: "O", 1: "I", 5: "S", 6: "G", 8: "B" };
 // Black-ink-only copies: a pixel this dark compared to the background around it (or darker)
 // turns black, and this light turns white; "hard" copies cut at one point instead.
 const INK_BLACK_AT = 0.45;
@@ -114,6 +135,11 @@ const INK_HARD_CUTOFF = 0.72;
 // The background around a pixel is a smooth blur of this size (share of the window's width):
 // much wider than a letter, so the letters hardly darken it.
 const INK_BACKGROUND_BLUR = 1 / 25;
+// White-print copies (see whiteInkOnly): a pixel counts as white print when its darkest colour is
+// at least this share of the whitest print's. The whitest print is the lightest pixel but for this
+// small share of them (a glint of glare).
+const WHITE_INK_SHARE = 0.88;
+const WHITEST_SKIPPED = 0.005;
 // At most this many possible numbers are handed on to the search.
 const MAX_NUMBER_GUESSES = 5;
 // Stands in for a card's own number when only the set size after the "/" could be read: "?/110".
@@ -123,16 +149,23 @@ const UNREAD_NUMBER = "?";
 // "11" = scattered bits anywhere (suits a card: text between pictures), "6" = one block,
 // "7" = a single line. thresholding_method "2" turns the photo black-and-white one
 // neighbourhood at a time, which copes with uneven light far better than the default.
+// tessedit_char_whitelist: the only characters it may read, or "" for any. Every mode says it, as
+// Tesseract keeps a setting until it is changed.
+const ANY_CHARACTER = "";
 const READING_MODES = {
-	scattered: { tessedit_pageseg_mode: "11", thresholding_method: "2" },
-	block: { tessedit_pageseg_mode: "6", thresholding_method: "2" },
+	scattered: { tessedit_pageseg_mode: "11", thresholding_method: "2", tessedit_char_whitelist: ANY_CHARACTER },
+	block: { tessedit_pageseg_mode: "6", thresholding_method: "2", tessedit_char_whitelist: ANY_CHARACTER },
 	// On one short strip a single cut-off works fine, and it reads tiny print better.
-	line: { tessedit_pageseg_mode: "7", thresholding_method: "0" },
+	line: { tessedit_pageseg_mode: "7", thresholding_method: "0", tessedit_char_whitelist: ANY_CHARACTER },
 	// For the ink-only copy of a foil card (see inkOnly).
-	ink: { tessedit_pageseg_mode: "6", thresholding_method: "0" },
+	ink: { tessedit_pageseg_mode: "6", thresholding_method: "0", tessedit_char_whitelist: ANY_CHARACTER },
 	// For the windows around the collector number (see NUMBER_READS).
-	numberBlock: { tessedit_pageseg_mode: "6", thresholding_method: "2" },
-	numberScattered: { tessedit_pageseg_mode: "11", thresholding_method: "0" },
+	numberBlock: { tessedit_pageseg_mode: "6", thresholding_method: "2", tessedit_char_whitelist: ANY_CHARACTER },
+	numberScattered: { tessedit_pageseg_mode: "11", thresholding_method: "0", tessedit_char_whitelist: ANY_CHARACTER },
+	// For the set's code by the number (see readSetCode): capitals and digits only, as that is all
+	// a code holds. Allowed any character, Tesseract read "PAF" as "PAfo" and "SVI" as "Svia".
+	setCode: { tessedit_pageseg_mode: "6", thresholding_method: "0", tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" },
+	setCodeLine: { tessedit_pageseg_mode: "7", thresholding_method: "0", tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" },
 };
 
 // Words printed near the name that are never part of it.
@@ -175,9 +208,10 @@ let reportProgress = () => {};
 
 // Reads a photo. onProgress(stage, fraction) is told "starting" first, "loading" while the
 // reader downloads (first time only), then "reading" with a fraction from 0 to 1.
-// Returns { name, nameSure, number, numberGuesses, photo, textArea, cardBox, sparkle }:
+// Returns { name, nameSure, number, numberGuesses, setCode, photo, textArea, cardBox, sparkle }:
 // - nameSure means the name is a known Pokémon.
 // - number is the likeliest collector number; numberGuesses all possible ones, likeliest first.
+// - setCode is the set's code read by the number ("PAF", see set-codes.js), or "".
 // - photo is the resized picture. textArea (around the card's text) and cardBox (the card, found
 //   by its border or shape, or null - see card-finder.js) are boxes in it, used later to
 //   compare the card's looks.
@@ -237,6 +271,14 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 	}
 	stopUnlessWanted(stillWanted, original);
 	const numberGuesses = await readCollectorNumbers(worker, original, photo, cardBox, firstRead, view, otherCuts);
+	// Cards since 2023 print their set's code by the number, which tells sets of the same size
+	// apart (see set-codes.js). Their numbers are padded ("057/091"), so the code is only looked
+	// for then - or when no number was read at all.
+	let setCode = "";
+	if (cardBox && mayHaveSetCode(numberGuesses)) {
+		stopUnlessWanted(stillWanted, original);
+		setCode = await readSetCode(worker, original, scaleBox(cardBox, original.width / photo.width), sizeRead(numberGuesses));
+	}
 	original.close();   // the full-size photo takes a lot of memory; it isn't needed any more
 	const textArea = boxInPhoto(firstRead.textArea, view);
 	return {
@@ -244,6 +286,7 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 		nameSure: name.sure,
 		number: numberGuesses[0] || "",
 		numberGuesses: numberGuesses,
+		setCode: setCode,
 		photo: photo,
 		textArea: textArea,
 		cardBox: cardBox,
@@ -737,13 +780,69 @@ async function readNumberPlaces(worker, original, card, earlier = []) {
 				y1: card.y0 + cardHeight * place.y1,
 			};
 			let closeUp = cropAndZoom(original, area, way.cardWidth / cardWidth);
-			if (way.ink) closeUp = inkAgainstBackground(closeUp, way.ink);
+			if (way.ink === "white") closeUp = whiteInkOnly(closeUp);
+			else if (way.ink) closeUp = inkAgainstBackground(closeUp, way.ink);
 			const result = await worker.recognize(closeUp);
 			guesses.push(...oncePerNumber(numberCandidates(result.data.text || "")));
 		}
 		if (twoReadsAgree([...earlier, ...guesses])) break;
 	}
 	return guesses;
+}
+
+function mayHaveSetCode(numberGuesses) {
+	// A card from 2023 on pads its number to three digits on both sides ("057/091"). A Black Star
+	// promo's number ("SVP100") already names its set.
+	if (numberGuesses.length === 0) return true;
+	return /^\d{3}\/\d{3}$/.test(numberGuesses[0]);
+}
+
+function sizeRead(numberGuesses) {
+	// The set size after the "/" of the likeliest number read, or null.
+	const total = numberGuesses.length > 0 ? numberGuesses[0].split("/")[1] : "";
+	return total && /^\d+$/.test(total) ? Number(total) : null;
+}
+
+async function readSetCode(worker, original, card, size) {
+	// Reads the set's code by the number (card is the card's box in the original), in the ways of
+	// SET_CODE_READS, until a code is found that fits: one of set-codes.js whose set has the size
+	// read after the "/" - a misread code seldom does. Returns it ("PAF"), or "" when none fits.
+	const cardWidth = card.x1 - card.x0;
+	const cardHeight = card.y1 - card.y0;
+	for (const way of SET_CODE_READS) {
+		await worker.setParameters(READING_MODES[way.mode]);
+		const area = {
+			x0: card.x0 + cardWidth * way.place.x0,
+			x1: card.x0 + cardWidth * way.place.x1,
+			y0: card.y0 + cardHeight * way.place.y0,
+			y1: card.y0 + cardHeight * way.place.y1,
+		};
+		const closeUp = inkAgainstBackground(cropAndZoom(original, area, way.cardWidth / cardWidth), "soft", true);
+		const result = await worker.recognize(closeUp);
+		for (const code of setCodesIn(result.data.text || "")) {
+			const codeSize = SET_CODES[code].size;
+			if (size === null || codeSize === null || codeSize === size) return code;
+		}
+	}
+	return "";
+}
+
+function setCodesIn(text) {
+	// The codes of set-codes.js in a text, in the order read. Tiny capitals are read as look-alike
+	// digits, so those are turned back into letters first - but for "30C", the one code with digits.
+	// Any three letters in a row count, as the code comes glued to the letters around it: "GPAFEN"
+	// (regulation mark, code, language) holds PAF.
+	const found = [];
+	const plain = text.toUpperCase().replace(/[^A-Z0-9]+/g, " ");
+	if (plain.replace(/ /g, "").includes("30C")) found.push("30C");
+	const letters = plain.replace(/[0-9]/g, (digit) => CODE_LETTER_LOOKALIKES[digit] || " ");
+	for (const word of letters.split(" ")) {
+		for (let i = 0; i + 3 <= word.length; i++) {
+			const code = word.slice(i, i + 3);
+			if (SET_CODES[code] && !found.includes(code)) found.push(code);
+		}
+	}
+	return found;
 }
 
 function twoReadsAgree(guesses) {
@@ -851,6 +950,32 @@ function inkAgainstBackground(picture, style, lightInk = false) {
 	return copy;
 }
 
+// A copy of a close-up with only its near-white print left, in black on white, as Tesseract likes it:
+// for the white numbers of full-art and dark cards. White print is light in all three colours, so
+// each pixel is judged by its darkest colour, against the whitest print in the close-up - which
+// also allows for dim photos, where white is grey.
+function whiteInkOnly(picture) {
+	const copy = document.createElement("canvas");
+	copy.width = picture.width;
+	copy.height = picture.height;
+	const ctx = copy.getContext("2d", { willReadFrequently: true });
+	ctx.drawImage(picture, 0, 0);
+	const image = ctx.getImageData(0, 0, copy.width, copy.height);
+	const pixels = image.data;
+	const darkest = new Uint8Array(pixels.length / 4);
+	for (let i = 0; i < darkest.length; i++) darkest[i] = Math.min(pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2]);
+	const sorted = Uint8Array.from(darkest).sort();
+	const whitest = sorted[Math.floor(sorted.length * (1 - WHITEST_SKIPPED))];
+	for (let i = 0; i < darkest.length; i++) {
+		const value = darkest[i] >= whitest * WHITE_INK_SHARE ? 0 : 255;
+		pixels[i * 4] = value;
+		pixels[i * 4 + 1] = value;
+		pixels[i * 4 + 2] = value;
+	}
+	ctx.putImageData(image, 0, 0);
+	return copy;
+}
+
 function smoothBlur(values, width, height, radius) {
 	// Three box blurs one after the other look just like a smooth (Gaussian) blur of about
 	// this radius. (A canvas blur filter does the same, but not every phone browser has one.)
@@ -929,6 +1054,8 @@ function numberCandidates(text) {
 	// A slash in tiny print can come out as an apostrophe: "13'64" is 13/64. Only straight
 	// between digits, so a height like "4' 11"" stays what it is.
 	cleaned = cleaned.replace(/(?<=\d)['’](?=\d)/g, "/");
+	// A dot or comma can stick to it too, on italic print: "239/.091".
+	cleaned = cleaned.replace(/(?<=\d)\s*[.,]?\s*\/\s*[.,]?\s*(?=\d)/g, "/");
 	const found = [];
 	// "GG01/GG70", "TG05/TG30", "SV1/SV94" first: their letters would otherwise be taken for
 	// digits, or cut off ("G05/TG30"). Each one found is blanked out, so it counts once.
@@ -966,8 +1093,8 @@ function numberCandidates(text) {
 	for (const match of cleaned.matchAll(SVP_NUMBER)) {
 		found.push({ number: "SVP" + match[1], sawSlash: true });
 	}
-	// The "/" can also vanish altogether ("4102") or turn into a digit ("107130").
-	for (const digits of cleaned.match(/(?<!\d)\d{4,6}(?!\d)/g) || []) {
+	// The "/" can also vanish altogether ("4102") or turn into a digit ("107130", "2397091").
+	for (const digits of cleaned.match(/(?<!\d)\d{4,7}(?!\d)/g) || []) {
 		for (const number of splitNumberAndTotal(digits)) found.push({ number: number, sawSlash: false });
 	}
 	return found;
@@ -1022,6 +1149,10 @@ function splitNumberAndTotal(digits) {
 	// Every way a run of digits could be "number/total", likeliest first.
 	// Newer cards pad both halves to three digits: "001132" is "001/132".
 	if (digits.length === 6 && digits.startsWith("0")) return [digits.slice(0, 3) + "/" + digits.slice(3)];
+	// The same with its "/" read as a 7 or a 1, as happens on italic white print: "2397091" is
+	// "239/091". The padding shows which half is which, even when the number is bigger than the
+	// set's size (a secret rare), which the splits below would not allow.
+	if (digits.length === 7 && (digits[3] === "7" || digits[3] === "1")) return [digits.slice(0, 3) + "/" + digits.slice(4)];
 	// Any other leading zero is noise, like "©2025" read as "02025".
 	if (digits.startsWith("0")) return [];
 	const splits = [];

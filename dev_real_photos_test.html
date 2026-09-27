@@ -34,15 +34,16 @@ possible.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.39.2"></script>
-<script src="card-names.js?v=1.39.2"></script>
-<script src="card-finder.js?v=1.39.2"></script>
-<script src="sparkle.js?v=1.39.2"></script>
-<script src="reader.js?v=1.39.2"></script>
-<script src="storage.js?v=1.39.2"></script>
-<script src="card-ids.js?v=1.39.2"></script>
-<script src="cards.js?v=1.39.2"></script>
-<script src="matcher.js?v=1.39.2"></script>
+<script src="pokemon-names.js?v=1.40.0"></script>
+<script src="card-names.js?v=1.40.0"></script>
+<script src="set-codes.js?v=1.40.0"></script>
+<script src="card-finder.js?v=1.40.0"></script>
+<script src="sparkle.js?v=1.40.0"></script>
+<script src="reader.js?v=1.40.0"></script>
+<script src="storage.js?v=1.40.0"></script>
+<script src="card-ids.js?v=1.40.0"></script>
+<script src="cards.js?v=1.40.0"></script>
+<script src="matcher.js?v=1.40.0"></script>
 <script>
 "use strict";
 
@@ -82,7 +83,12 @@ async function runAllPhotos() {
 			const located = reading.cardBox !== null || reading.textArea !== null;
 			const pick = found.cards.length === 1
 				? { cards: found.cards, clear: true }
-				: pickBestMatch(ranked, located, found.setSizes, "", found.numbersRead, Boolean(reading.sparkle && reading.sparkle.reverseHolo));
+				: pickBestMatch(ranked, located, {
+					setSizes: found.setSizes,
+					codeSets: setsOfCode(reading.setCode),
+					numbersRead: found.numbersRead,
+					looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
+				});
 			foundAt = pick.cards.findIndex((card) => card.id === photo.id);
 			if (pick.clear) opened = foundAt === 0 ? "opened by itself: right" : "opened by itself: WRONG";
 			if (found.matchedNumber) matched = "database confirmed " + found.matchedNumber;
@@ -99,6 +105,7 @@ async function runAllPhotos() {
 		const lines = [
 			box ? "card found by " + box.foundBy + ": " + [box.x0, box.x1, box.y0, box.y1].map(Math.round).join(", ") : "card not found in the photo",
 			"guesses: " + (reading.numberGuesses.join(", ") || "(none)"),
+			"set code read: " + (reading.setCode || "(none)"),
 		];
 		if (matched) lines.push(matched);
 		if (looks) lines.push(looks);
