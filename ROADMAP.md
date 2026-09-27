@@ -5,6 +5,26 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.46.0
+
+- **1.9, in part: the edges of silver-bordered cards in photos from the phone's own camera.** A
+  measuring lab (`dev-local/edges2-lab.js`) weighed every box the shape finder considers on 129
+  photos - your real ones, the made-up full-art ones, and 56 without any card - and showed why a
+  lower bar can't work: the Gengar's right box in its toploader scored 1.26, a wallpaper without a
+  card 1.33, both with edges all round and the border's inner edge just inside. So:
+  - A box scoring from 1.0 to 1.3 is doubtful, and counts once the number reads sure (two reads
+    agree) where that box says it is printed - which nothing but a card does. Your Gengar is now
+    found this way, and opens by its number in 3.1 seconds instead of 8.6.
+  - A picture with a card's own shape (a scan, or a photo cut to the card) is the card as a whole:
+    your scanned Legendary Collection Pikachu now tells its reverse holo from the Base Set one by
+    the sparkle, and opens by itself.
+  - On a card under 700 pixels tall (a small scan), the number's place isn't read: its print is a
+    few pixels high (6.6 seconds for nothing on the 450-pixel scan).
+  - Your 46 real photos: 46 first, 45 opened by themselves (44 before), 0 wrong; reverse holo or not
+    46 of 46. Full-art: 27 first, 27 opened. Special numbers: 18 read, 24 first, 22 opened, 0 wrong.
+    Made-up photos: unchanged (13 first, 12 opened, 0 wrong). Learning: 0 wrong; the harder second
+    photos 29 recognised, 8 suggested, 9 neither (10 before).
+
 ## Done in 1.45.0
 
 - **1.10 Celebrations Classic Collection cards (2021) open as themselves**, not as their originals.
@@ -441,7 +461,7 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 |---|---|---|---|
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black: the rest. | 6 of 27 full-art numbers still aren't read in 1.40.0 (8 in 1.28.0). The made-up photos are made from the database's small pictures, so a real photo may read better: worth checking with a few real full-art photos first. The name and the look find these cards anyway. | S |
-| 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: in a toploader, and on a grey table. | The name strip, the number corners and the set code (1.7) need them. Your Gengar in a toploader has none (its best box scores 1.24, where 1.3 is needed), nor do 2 of 27 made-up full-art photos on a grey table, where the card's own edge is too faint to be among the lines tried. Trying more lines didn't help in 1.40.0. The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
+| 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: the rest. Full-art cards on a grey table, and cards touching the photo's edge. | The name strip, the number corners and the set code (1.7) need them. Since 1.46.0 a doubtful box is checked by the number, but a full-art card's white number seldom reads (1.8), so the 2 made-up full-art photos on a grey table still have none; they are found by name and picture anyway. Your Dratini photo is cut so close that the card's edges are the photo's, which the finder leaves out. The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
 
 ## 2. Quicker
 

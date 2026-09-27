@@ -110,6 +110,10 @@ const NUMBER_RECUTS = [
 	{ scale: 1.1, up: 0 },
 	{ scale: 1, up: 0.012 },
 ];
+// On a card fewer pixels tall than this in the full-size photo - a small scan, or a picture from the
+// web - the collector number is under 12 pixels high: reading its place, cut after cut, only costs
+// time (6.6 seconds for nothing on a 450-pixel scan). A card in a phone's photo is 2,000 or more.
+const MIN_CARD_PIXELS_FOR_NUMBER = 700;
 // Where cards since 2023 print their set's code (see set-codes.js): in a little box in the
 // bottom-left corner, before the number - as shares of the card's width and height. The code box
 // itself is about x 0.09-0.16 and y 0.94-0.97; the "place" is a little bigger, as the card's edges
@@ -229,10 +233,11 @@ let reportProgress = () => {};
 async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { look = null, stillWanted = () => true, onSureNumber = null } = {}) {
 	reportProgress = onProgress;
 	onProgress("starting", null);
-	const { original, photo, framed, cardBox } = look || await lookAtPhoto(imageFile, frame);
+	const seen = look || await lookAtPhoto(imageFile, frame);
+	const { original, photo, framed, doubtfulBox } = seen;
+	let cardBox = seen.cardBox;
 	const worker = await getOcrWorker();
 	stopUnlessWanted(stillWanted, original);
-	const cardInOriginal = cardBox ? scaleBox(cardBox, original.width / photo.width) : null;
 
 	// The number first: where it is printed is known once the card's own edges are found, and it
 	// alone often settles which card it is, with the card's picture - in about half the reading
@@ -242,15 +247,29 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 	// pictures, reading the frame first gave one right number fewer: when two cuts read two numbers
 	// once each, the earlier one wins.)
 	let placeGuesses = [];
+	// A doubtful box (see whereIsTheCard) is the card's when the number reads sure where the box says
+	// it is printed: nothing else in a photo reads the same number twice there.
+	let checkedByNumber = false;
+	const numberBigEnough = (box) => (box.y1 - box.y0) * original.height / photo.height >= MIN_CARD_PIXELS_FOR_NUMBER;
+	if (!cardBox && doubtfulBox && numberBigEnough(doubtfulBox)) {
+		const recuts = NUMBER_RECUTS.map((recut) => recutBox(doubtfulBox, recut));
+		const guesses = await readNumberPlacesOfCard(worker, original, photo, doubtfulBox, recuts, stillWanted);
+		if (twoReadsAgree(guesses)) {
+			cardBox = { ...doubtfulBox, foundBy: "shape, checked by its number" };
+			placeGuesses = guesses;
+			checkedByNumber = true;
+		}
+	}
+	const cardInOriginal = cardBox ? scaleBox(cardBox, original.width / photo.width) : null;
 	let codeRead = null;   // the set code read early, and the set size it was read for
-	if (cardBox) {
+	if (cardBox && numberBigEnough(cardBox)) {
 		// (None when the card's box is the frame: its own edges weren't found.)
 		const otherCuts = [];
 		if (cardBox !== framed) {
 			otherCuts.push(...NUMBER_RECUTS.map((recut) => recutBox(cardBox, recut)));
 			if (framed) otherCuts.push(framed);
 		}
-		placeGuesses = await readNumberPlacesOfCard(worker, original, photo, cardBox, otherCuts, stillWanted);
+		if (!checkedByNumber) placeGuesses = await readNumberPlacesOfCard(worker, original, photo, cardBox, otherCuts, stillWanted);
 		if (onSureNumber && twoReadsAgree(placeGuesses)) {
 			const early = likeliestNumbers(placeGuesses).slice(0, MAX_NUMBER_GUESSES);
 			if (mayHaveSetCode(early)) {
@@ -343,23 +362,28 @@ function stopUnlessWanted(stillWanted, original) {
 // ---------- Where the card is (see card-finder.js for finding it) ----------
 
 // Where the card is in the photo, found before any text is read: in a moment, where reading takes
-// 5 to 20 seconds. Returns { original, photo, framed, cardBox }: the full-size photo (close it when
-// done with it), the smaller copy most of the reading works on, the camera's frame in that copy
-// (or null), and the card's box in it (see whereIsTheCard), or null. frame: as for readCardPhoto.
+// 5 to 20 seconds. Returns { original, photo, framed, cardBox, doubtfulBox }: the full-size photo
+// (close it when done with it), the smaller copy most of the reading works on, the camera's frame in
+// that copy (or null), and the card's box in it, or null - or a box that may be the card's, to be
+// checked first (see whereIsTheCard). frame: as for readCardPhoto.
 async function lookAtPhoto(imageFile, frame = null) {
 	// createImageBitmap also turns sideways phone photos the right way up.
 	const original = await createImageBitmap(imageFile);
 	const photo = shrinkPhoto(original);
 	const framed = frame ? frameBoxIn(photo, frame) : null;
-	return { original: original, photo: photo, framed: framed, cardBox: whereIsTheCard(photo, framed) };
+	return { original: original, photo: photo, framed: framed, ...whereIsTheCard(photo, framed) };
 }
 
-// The card's box in the photo, or null. Found by its yellow border or its shape; in a photo from
-// the app's camera, the white frame's box (framed) when nothing is found close to it.
+// { cardBox, doubtfulBox }: the card's box in the photo, found by its yellow border or its shape, or
+// the whole photo when it is a scan; in a photo from the app's camera, the white frame's box
+// (framed) when nothing is found close to it. When none is found, a box of the card's shape that
+// may be it (see MIN_DOUBTFUL_SHAPE_SCORE in card-finder.js), to be checked by the number.
 function whereIsTheCard(photo, framed) {
-	const found = findYellowCard(photo) || findCardByShape(photo);
-	if (!framed) return found;
-	return found && fitsFrame(found, framed) ? found : framed;
+	const yellow = findYellowCard(photo);
+	const shape = yellow ? null : findCardByShape(photo);
+	const found = yellow || (shape && !shape.doubtful ? shape : null) || wholePhotoCard(photo);
+	if (framed) return { cardBox: found && fitsFrame(found, framed) ? found : framed, doubtfulBox: null };
+	return { cardBox: found, doubtfulBox: !found && shape ? shape : null };
 }
 
 function frameBoxIn(photo, frame) {

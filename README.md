@@ -16,7 +16,10 @@ A web page with nothing to install. What happens to a photo:
    card's name (`card-names.js`), so small misreads get corrected. The card is
    found in the photo by its yellow border - counted along lines that may lean a little, as a
    photo is seldom quite straight, and from a single border line when glare hides the others -
-   or, for silver-bordered and foil cards, by its shape (`card-finder.js`). The strip along its
+   or, for silver-bordered and foil cards, by its shape (`card-finder.js`). A shape that only may
+   be the card (a dark card in a toploader on a dark cloth has hardly any colour change around it)
+   counts once the number reads sure where that box says it is printed, and a scan - a picture
+   with the card's own shape - is the card as a whole (version 1.46.0). The strip along its
    top where the name is printed is then read on
    its own, enlarged: as it is, with only its dark ink, and with only its white ink. On full-art
    cards the name sits on the artwork, where a read of the whole card often loses it

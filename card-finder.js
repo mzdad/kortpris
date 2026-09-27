@@ -213,6 +213,12 @@ const CONTRAST_BAND = 0.03;
 const CONTRAST_SCALE = 150;
 const BORDER_BONUS = 0.5;
 const MIN_SHAPE_SCORE = 1.3;
+// A box scoring less, but at least this, may still be the card: a dark card in a toploader on a dark
+// cloth scored 1.26 (hardly any colour change across its sides), made-up full-art cards on a grey
+// table 1.01 and 1.07. But so do wrong boxes - a wallpaper without any card scored 1.33 - so such a
+// box is marked doubtful, and reader.js only takes it once the number reads sure where the box says
+// it is printed (see readCardPhoto).
+const MIN_DOUBTFUL_SHAPE_SCORE = 1.0;
 
 function findCardByShape(photo) {
 	const map = edgeMap(photo);
@@ -245,7 +251,7 @@ function findCardByShape(photo) {
 			}
 		}
 	}
-	if (!best || best.score < MIN_SHAPE_SCORE) return null;
+	if (!best || best.score < MIN_DOUBTFUL_SHAPE_SCORE) return null;
 	const scale = photo.width / map.width;
 	return {
 		x0: best.box.x0 * scale,
@@ -253,7 +259,20 @@ function findCardByShape(photo) {
 		y0: best.box.y0 * scale,
 		y1: best.box.y1 * scale,
 		foundBy: "shape",
+		doubtful: best.score < MIN_SHAPE_SCORE,
 	};
+}
+
+// ---------- A scan ----------
+
+// A scan, or a photo cut to the card, has the card's own shape: then the whole photo is the card.
+// Its edges are the photo's, which findCardByShape leaves out (PHOTO_EDGE_MARGIN). A phone's photo
+// is 0.75 as wide as it is tall, a card 0.716, so this is kept tight.
+const WHOLE_PHOTO_SHAPE_TOLERANCE = 0.015;
+
+function wholePhotoCard(photo) {
+	if (Math.abs(photo.width / photo.height - CARD_SHAPE) > WHOLE_PHOTO_SHAPE_TOLERANCE) return null;
+	return { x0: 0, x1: photo.width, y0: 0, y1: photo.height, foundBy: "whole photo" };
 }
 
 function shapeScore(map, box, weakestSide, uprights, crossings) {
