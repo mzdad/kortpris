@@ -8,10 +8,18 @@
 <meta name="theme-color" content="#EDF0F5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0E141D" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='1' width='22' height='30' rx='3' fill='%23F5C518'/%3E%3Crect x='8' y='4' width='16' height='13' rx='1.5' fill='%23141C28'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- On the home screen: its name, picture and full-screen look (see sw.js and README). -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Kortpris">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<!-- crossorigin lets the service worker keep a copy of the fonts (sw.js). -->
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="style.css?v=1.35.0">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@500&display=swap" crossorigin>
+<link rel="stylesheet" href="style.css?v=1.36.0">
 </head>
 <body>
 
@@ -103,6 +111,20 @@
 			<p id="results-note" class="note"></p>
 			<div id="results-grid" class="grid"></div>
 		</section>
+
+		<!-- Hidden once the app runs from the home screen (renderInstall in app.js). -->
+		<details id="install-settings" class="panel settings">
+			<summary><span data-text="installTitle"></span></summary>
+			<div class="settings-body">
+				<p data-text="installExplain"></p>
+				<div id="install-button-row" class="settings-buttons" hidden>
+					<button type="button" id="install-button" class="button primary" data-text="installButton"></button>
+				</div>
+				<p id="install-iphone" class="hint" data-text="installIphone" hidden></p>
+				<p id="install-iphone-storage" class="hint" data-text="installIphoneStorage" hidden></p>
+				<p id="install-other" class="hint" data-text="installOther" hidden></p>
+			</div>
+		</details>
 
 		<details id="claude-settings" class="panel settings">
 			<summary>
@@ -291,30 +313,30 @@
 	<button type="button" id="camera-phone" class="camera-phone" data-text="cameraUsePhone"></button>
 </div>
 
-<!-- Our own files (these, and style.css at the top) end in ?v=1.35.0. Change it on every
+<!-- Our own files (these, and style.css at the top) end in ?v=1.36.0. Change it on every
      release (see README), so phones never mix new and old files from their cache. -->
 <!-- Tesseract reads text out of pictures (OCR = optical character recognition). -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="strings.js?v=1.35.0"></script>
-<script src="pokemon-names.js?v=1.35.0"></script>
-<script src="card-names.js?v=1.35.0"></script>
-<script src="storage.js?v=1.35.0"></script>
-<script src="currency.js?v=1.35.0"></script>
-<script src="firebase-config.js?v=1.35.0"></script>
-<script src="password.js?v=1.35.0"></script>
-<script src="account.js?v=1.35.0"></script>
-<script src="speech.js?v=1.35.0"></script>
-<script src="card-finder.js?v=1.35.0"></script>
-<script src="sparkle.js?v=1.35.0"></script>
-<script src="reader.js?v=1.35.0"></script>
-<script src="card-ids.js?v=1.35.0"></script>
-<script src="cards.js?v=1.35.0"></script>
-<script src="matcher.js?v=1.35.0"></script>
-<script src="learned.js?v=1.35.0"></script>
-<script src="camera.js?v=1.35.0"></script>
-<script src="collection.js?v=1.35.0"></script>
-<script src="graded.js?v=1.35.0"></script>
-<script src="claude.js?v=1.35.0"></script>
-<script src="app.js?v=1.35.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js" crossorigin="anonymous"></script>
+<script src="strings.js?v=1.36.0"></script>
+<script src="pokemon-names.js?v=1.36.0"></script>
+<script src="card-names.js?v=1.36.0"></script>
+<script src="storage.js?v=1.36.0"></script>
+<script src="currency.js?v=1.36.0"></script>
+<script src="firebase-config.js?v=1.36.0"></script>
+<script src="password.js?v=1.36.0"></script>
+<script src="account.js?v=1.36.0"></script>
+<script src="speech.js?v=1.36.0"></script>
+<script src="card-finder.js?v=1.36.0"></script>
+<script src="sparkle.js?v=1.36.0"></script>
+<script src="reader.js?v=1.36.0"></script>
+<script src="card-ids.js?v=1.36.0"></script>
+<script src="cards.js?v=1.36.0"></script>
+<script src="matcher.js?v=1.36.0"></script>
+<script src="learned.js?v=1.36.0"></script>
+<script src="camera.js?v=1.36.0"></script>
+<script src="collection.js?v=1.36.0"></script>
+<script src="graded.js?v=1.36.0"></script>
+<script src="claude.js?v=1.36.0"></script>
+<script src="app.js?v=1.36.0"></script>
 </body>
 </html>

@@ -5,6 +5,21 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.36.0
+
+- **3.1 Kortpris can be installed as an app.** "Put Kortpris on your home screen" on the Scan
+  screen says how: an Install button where Android offers it, Safari's Share button and "Add to Home
+  Screen" on an iPhone. Installed, it opens full screen with its own icon (a yellow card on dark
+  blue). A service worker keeps the app's files, the text reader, the fonts and the newest 1,500
+  card pictures on the phone, so it starts at once - even without internet, showing the cards saved
+  on the phone with their pictures. Updates still arrive the first time the app opens, and the old
+  version's files are thrown away. On an iPhone the installed app keeps its own saved cards, apart
+  from Safari's, so it starts empty until you sign in; the install panel and My cards say so.
+  Tested in the test browser: everything kept as planned (30 files, the card pictures), the app
+  opened with the local server switched off (all 6 cards and pictures shown), a new version arrived
+  on the first opening and the old files went, and development without `?sw` switches it off again.
+  Not yet: My cards without internet for signed-in accounts (4.3).
+
 ## Done in 1.35.0
 
 - **3.3 Scan a stack of cards.** A card found on the Scan screen now has a yellow "Save and scan
@@ -212,7 +227,6 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 3.1 | **Install it as an app** (home screen icon, opens full screen, starts instantly, My cards works without internet). | Feels like a real app; files load from the phone. (Since 1.32.1 the app already loads a newer version as it opens.) | M |
 | 3.2 | **Take the photo by itself** when the card fills the frame and the phone is still. | No button to press; great for kids. The steadiness measure exists already. | M |
 | 3.4 | **My cards: sort and filter** (by value, set, name, newest) and share the list. | The list grows long. | M |
 | 3.5 | **Hide the camera details** at the bottom of the page once the camera is proven on your phones. | It was added to find out what iPhones give. | S |
@@ -223,6 +237,7 @@ L = several sessions).
 |---|---|---|---|
 | 4.1 | **Kids' own accounts under a parent**: see and move cards between them. | Each kid has their own cards. | L |
 | 4.2 | **The Claude key in the account**, not only on one phone. | It has to be typed again on every phone. | S |
+| 4.3 | **My cards without internet when signed in**: Firestore can keep a copy of the account's cards on the phone. | The installed app on an iPhone needs an account to show your cards (its storage is apart from Safari's), and without internet those wait at "Loading your cards…". Testing it safely needs the Firebase test copy (firebase-tools) installed again. | S |
 
 ## 5. Keeping the app working
 

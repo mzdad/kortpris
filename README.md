@@ -132,6 +132,20 @@ US$0.03 per photo on the key owner's account. If Claude fails, the built-in read
 over and a notice says why. The key is kept in the phone's browser and sent only to
 Anthropic.
 
+**On the home screen.** The app can be installed like an app ("Put Kortpris on your home
+screen" on the Scan screen says how): it then opens full screen, with its own icon
+(`manifest.webmanifest`, the icons from `dev_make_icons.py`). A service worker (`sw.js`) keeps the
+app's own files, the text reader, Firebase's files, the fonts and the newest 1,500 card pictures on
+the phone, so the app starts at once and opens without internet; My cards then shows the cards
+saved on the phone, with their pictures. The start page is still asked for from the internet each
+time (within 3 seconds, or the copy kept is used), so an update arrives the first time the app
+opens, and the older version's files are thrown away. On an iPhone, the home screen app keeps its
+own saved things, apart from Safari's: My cards and the learned cards start empty there until
+someone signs in, which the app says. Signed-in accounts still need the internet for My cards.
+While developing on this PC (localhost) the service worker is off, because files change there
+without a new version number; `?sw` in the address switches it on to test it, and opening the page
+without `?sw` takes it away again.
+
 What comes next, and why: [ROADMAP.md](ROADMAP.md).
 
 ## Files
@@ -165,6 +179,10 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `firebase.json` | Settings for Firebase's command-line tools and local test copy |
 | `SETUP-ACCOUNTS.md` | Click-steps for creating the Firebase project |
 | `app.js` | The screen: buttons, results, prices |
+| `sw.js` | The service worker: keeps the app's files and card pictures on the phone |
+| `manifest.webmanifest` | The app's name, icon and full-screen look on the home screen |
+| `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | The home screen icons, drawn by `dev_make_icons.py` |
+| `dev_make_icons.py` | Development tool: draws the icons (`python dev_make_icons.py`) |
 | `dev_reading_test.html` | Development tool, not part of the app (see below) |
 | `dev_real_photos_test.html` | Development tool: runs real photos from the private `dev-local/` folder |
 | `dev_learning_test.html` | Development tool: checks that learned cards are recognised or suggested, and nothing else is opened |
@@ -185,7 +203,10 @@ version a phone has. It also makes browsers fetch a matching set of files, inste
 new ones with old cached copies, which could break the app for up to ten minutes. A phone may
 still keep the start page itself for up to ten minutes (GitHub Pages) and open the version from
 before an update, so the app asks for the newest start page as it opens, and loads again, once,
-when that names another version (`reloadIfNewerVersion` in `app.js`).
+when that names another version (`reloadIfNewerVersion` in `app.js`). Since 1.36.0 the service
+worker (`sw.js`) asks for the newest start page itself, and keeps each version's files by their
+`?v=` address - which is why the version must go up with every change. `sw.js` itself has no
+version number and doesn't need one.
 
 ## Run it on the computer
 

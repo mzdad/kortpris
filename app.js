@@ -133,6 +133,12 @@ const collectionPage = document.getElementById("collection-page");
 const savedCardView = document.getElementById("saved-card-view");
 const savedCardBack = document.getElementById("saved-card-back");
 const savedCardPanel = document.getElementById("saved-card");
+const installSettings = document.getElementById("install-settings");
+const installButtonRow = document.getElementById("install-button-row");
+const installButton = document.getElementById("install-button");
+const installIphone = document.getElementById("install-iphone");
+const installIphoneStorage = document.getElementById("install-iphone-storage");
+const installOther = document.getElementById("install-other");
 const voiceSettings = document.getElementById("voice-settings");
 const voiceSelects = document.querySelectorAll("[data-voice-language]");
 const learnedSettings = document.getElementById("learned-settings");
@@ -211,6 +217,7 @@ let stopWatchingCards = null;     // stops listening for the signed-in account's
 let stopWatchingLearned = null;   // stops listening for the signed-in account's learned cards
 let savedPage = null;             // the saved card whose page My cards shows (see openSavedCard), or null
 let listScrolledTo = 0;           // how far down My cards' list was when that page opened
+let installOffer = null;          // Android's offer to install the app, once it has come (see renderInstall)
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
@@ -341,6 +348,7 @@ function applyLanguage() {
 	renderVoiceSettings();
 	renderLearned();
 	renderAccount();
+	renderInstall();
 	renderFooter();
 	if (cameraMessage.dataset.key) showCameraMessage(cameraMessage.dataset.key);
 }
@@ -1978,7 +1986,10 @@ function renderCollection() {
 	renderSavedCardPage();   // My cards may be showing a saved card's page instead of the list
 	const totals = collectionTotals();
 	collectionCount.textContent = totals.cards > 0 ? totals.cards : "";
-	collectionWhere.textContent = accountName ? t("savedInAccount", { name: accountName }) : t("savedOnPhone");
+	let where = t("savedOnPhone");
+	if (accountName) where = t("savedInAccount", { name: accountName });
+	else if (installedOnIphone()) where = t("savedOnPhoneInstalled");
+	collectionWhere.textContent = where;
 	if (!collectionReady()) {
 		collectionSummary.innerHTML = `<p class="note">${t("loadingAccountCards")}</p>`;
 		collectionList.innerHTML = "";
@@ -2038,7 +2049,11 @@ function savedValue(entry) {
 }
 
 function collectionSummaryHtml(totals) {
-	if (totals.cards === 0) return `<p class="note">${t("collectionEmpty")}</p>`;
+	if (totals.cards === 0) {
+		// Just installed on an iPhone, the list is empty - the cards saved in Safari aren't here.
+		const empty = installedOnIphone() && !accountName ? "collectionEmptyInstalled" : "collectionEmpty";
+		return `<p class="note">${t(empty)}</p>`;
+	}
 	const countText = totals.cards === 1 ? t("cardCountOne") : t("cardCount", { count: totals.cards });
 	const unpriced = totals.unpriced > 0 ? `<p class="fineprint">${t("notInTotal", { count: totals.unpriced })}</p>` : "";
 	const message = refreshMessage
@@ -2204,6 +2219,75 @@ function backToList() {
 function renderCardPages() {
 	renderResults();
 	renderSavedCardPage();
+}
+
+// ---------- On the home screen ----------
+
+// The service worker (sw.js) keeps the app's files on the phone, so it starts at once and opens
+// without internet. Not while developing on this PC (localhost): files change there without a new
+// version number, and a kept copy would hide the change - unless ?sw is in the address, to test
+// it. Without ?sw, what such a test kept is taken away again.
+if ("serviceWorker" in navigator) {
+	const developing = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+	if (!developing || new URLSearchParams(location.search).has("sw")) {
+		window.addEventListener("load", () => {
+			navigator.serviceWorker.register("sw.js").catch((error) => console.error(error));
+		});
+	} else {
+		navigator.serviceWorker.getRegistrations().then((registrations) => {
+			for (const registration of registrations) registration.unregister();
+		});
+		caches.keys().then((names) => {
+			for (const name of names) caches.delete(name);
+		});
+	}
+}
+
+// Android's browsers offer to install the app by themselves. The offer is kept for the Install
+// button in "Put Kortpris on your home screen" instead. iPhones never offer: there it is Safari's
+// Share button, as that panel says.
+window.addEventListener("beforeinstallprompt", (event) => {
+	event.preventDefault();
+	installOffer = event;
+	renderInstall();
+});
+window.addEventListener("appinstalled", () => {
+	installOffer = null;
+	renderInstall();
+});
+installButton.addEventListener("click", async () => {
+	if (!installOffer) return;
+	const offer = installOffer;
+	installOffer = null;   // each offer can be shown once
+	offer.prompt();
+	await offer.userChoice;
+	renderInstall();
+});
+
+// The app was opened from the home screen, not in the browser.
+function runsFromHomeScreen() {
+	return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+}
+
+function isIphone() {
+	// iPads say they are Macs, but Macs have no touch screen.
+	return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+// On an iPhone the home screen app keeps its own saved things, apart from Safari's: My cards starts
+// empty there until someone signs in (accounts keep the cards online, see account.js).
+function installedOnIphone() {
+	return runsFromHomeScreen() && isIphone() && accountsAvailable();
+}
+
+// "Put Kortpris on your home screen": the Install button where the browser offered it, Safari's
+// steps on an iPhone, the browser's menu elsewhere. Not shown in the installed app itself.
+function renderInstall() {
+	installSettings.hidden = runsFromHomeScreen();
+	installButtonRow.hidden = installOffer === null;
+	installIphone.hidden = !isIphone();
+	installIphoneStorage.hidden = !isIphone() || !accountsAvailable();
+	installOther.hidden = isIphone() || installOffer !== null;
 }
 
 // A phone may keep the start page for up to ten minutes (GitHub Pages), and then opens the version
