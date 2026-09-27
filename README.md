@@ -63,6 +63,11 @@ A web page with nothing to install. What happens to a photo:
    Cloudflare that keeps its key secret (`relay/`, see `relay/README.md`). They are only
    fetched while "Fetch PSA prices automatically" is ticked on the card page, because the free
    plan allows about 50 cards a day; prices fetched in the last day are shown either way.
+   Each grade's price is the price service's estimate of today's price (recent sales count
+   most, odd ones left out), not the middle of months of sales. A menu under the table, closed
+   at first, lists every grade with its number of sales, how sure the price is and its last
+   sale, the other grading companies' grades (CGC, BGS, SGC, TAG, ACE), and a link to each
+   grade's sales on eBay (`gradedMoreHtml`).
 4. **My cards.** Cards can be saved with how many of each, and the list shows the total
    value in kroner. For a stack of cards, "Save and scan the next" on a found card saves it and
    opens the camera again at once. It is split into Pokémon, Trainer cards and Energy cards (the database's

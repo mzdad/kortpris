@@ -469,6 +469,22 @@ footer p { margin: 0; }
 footer p:empty { display: none; }
 .app-version { font-family: var(--font-mono); font-size: 0.75rem; }
 .graded-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+/* The graded prices' menu (every grade, the other companies, eBay links): closed at first, so the
+   card page stays calm. Its words look like a link, with an arrow that turns when it opens. */
+.graded-more > summary {
+	display: flex; align-items: center; gap: 8px; min-height: 44px;
+	font-weight: 600; color: var(--link);
+	cursor: pointer; list-style: none;
+}
+.graded-more > summary::-webkit-details-marker { display: none; }
+.graded-more > summary::before { content: "▸"; transition: transform 0.15s; }
+.graded-more[open] > summary::before { transform: rotate(90deg); }
+.graded-more > summary:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; border-radius: 4px; }
+.graded-more[open] { display: grid; gap: 8px; }
+.graded-more-table td { vertical-align: top; }
+.graded-more-table td:first-child, .graded-more-table td:last-child { white-space: nowrap; }
+/* under a grade's price, a line each: how many sales, and how sure */
+.graded-facts { display: block; font-size: 0.78rem; color: var(--muted); }
 /* a tick box with its words, the whole row tappable */
 .check-row { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 600; cursor: pointer; justify-self: start; }
 .check-row input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); cursor: pointer; }

@@ -15,7 +15,12 @@ The app's side is `graded.js`; `PSA_RELAY_URL` there must be this relay's addres
 
 The price service answers with `data.ebay.salesByGrade`: `psa10`, `psa9`, `psa8_5` (8.5) and so
 on, each with `count`, `medianPrice`, `averagePrice`, `lastSaleDate` and more, next to other
-graders (`cgc9`, `bgs9_5`, `tag8`, `ace7`) and `ungraded`. The relay passes on only PSA's.
+graders (`cgc9`, `bgs9_5`, `tag8`, `ace7`) and `ungraded`. Each grade also has
+`smartMarketPrice` (`price`, and `confidence`: high, medium or low), the service's estimate of
+today's price. Since app version 1.41.0 the relay passes on PSA's grades as `grades` and the
+other companies' (CGC, BGS, SGC, TAG, ACE) as `otherGrades`, each with `count`, `median`,
+`average`, `price`, `sure` and `lastSale` (see the top of `psa-prices.js`). Remembered answers'
+keys start with `ANSWER_SHAPE` ("2:"), so answers in an older shape aren't handed out.
 Sales are per TCGplayer product, so a card's normal and reverse holo prints are counted together.
 
 The same answer has TCGplayer prices under `data.variants` (per print: `marketPrice`, `lowPrice`,

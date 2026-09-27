@@ -5,6 +5,25 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.41.0
+
+- **Better graded prices, in a menu.** You asked for the PSA improvements and a way to see the eBay
+  sales, without cluttering the card page. The price service already sent more than the app showed;
+  the relay now passes it on (deployed 27 September 2026):
+  - **Each grade's price is today's price**: the price service's own estimate, which counts recent
+    sales most and leaves odd ones out, instead of the middle of months of sales. For the Mewtwo
+    from 151 in PSA 10 that is $174 instead of $115, because its price has been rising.
+  - **A menu under the PSA table**, "Last sales, other companies and eBay", closed at first. It
+    lists every grade with its number of sales, how sure the price is (sure, fairly sure,
+    unsure), the day of its last sale, and a link to that grade's sales on eBay for the version
+    picked. It stays open while the page is drawn again, like when you pick another version.
+  - **Other grading companies**: CGC, BGS, SGC, TAG and ACE, in the same menu.
+
+  The two fixed "PSA 10 / PSA 9 sales on eBay" links now show only when there's no table. Prices
+  the relay and the phone kept from before are fetched again once, in the new shape. Tested in the
+  test browser with a saved answer (no lookups spent), in English and Danish at phone width, and
+  once against the real relay.
+
 ## Done in 1.40.0
 
 You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.7 is done; 1.8 and

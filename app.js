@@ -227,6 +227,7 @@ let savedPage = null;             // the saved card whose page My cards shows (s
 let listScrolledTo = 0;           // how far down My cards' list was when that page opened
 let installOffer = null;          // Android's offer to install the app, once it has come (see renderInstall)
 let shareMessage = null;          // what sharing My cards last said: a text key, or null
+let gradedMoreOpen = false;       // the graded prices' "More" menu is open (see gradedMoreHtml)
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
@@ -715,6 +716,13 @@ detail.addEventListener("click", (event) => {
 	// "Save and scan the next": straight back to the camera, still from the tap (see openCamera).
 	if (andNext && !saveFailed) openCamera(true);
 });
+
+// The graded prices' "More" menu stays as the viewer left it when the card page is drawn again,
+// which happens often (a price arriving, a version picked). "toggle" doesn't bubble up from the
+// menu, so it is caught on its way down instead (the true at the end).
+document.addEventListener("toggle", (event) => {
+	if (event.target.classList && event.target.classList.contains("graded-more")) gradedMoreOpen = event.target.open;
+}, true);
 
 // The "fetch PSA prices" tick box on the open card: remembered, and the card drawn again, which
 // fetches its PSA prices straight away when it was just ticked.
@@ -1739,24 +1747,31 @@ function tcgplayerTableHtml(tcgplayer) {
 function gradedLinksHtml(card, version) {
 	const priceCharting = "https://www.pricecharting.com/search-products?type=prices&q="
 		+ encodeURIComponent(card.name + " " + card.set.name + " " + card.number);
+	const known = gradedPricesAvailable() ? gradedPricesOf(card, renderCardPages) : null;
+	// With prices shown, every grade links to its own eBay sales (in the "More" menu), so the
+	// PSA 10 and PSA 9 links are only needed without them.
+	const gradesShown = known !== null && known.state === "done" && known.grades.length + known.others.length > 0;
+	const ebayLinks = gradesShown ? "" : `
+				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 10"), t("gradedEbay", { grade: "PSA 10" }))}
+				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 9"), t("gradedEbay", { grade: "PSA 9" }))}`;
 	return `
 		<div class="source">
 			<h3>${t("gradedTitle")}</h3>
 			<p class="hint">${t("gradedExplain")}</p>
-			${gradedPricesHtml(card)}
+			${known !== null ? gradedPricesHtml(card, version, known) : ""}
 			<div class="graded-links">
-				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 10"), t("gradedEbay", { grade: "PSA 10" }))}
-				${storeLinkHtml(ebaySoldUrl(card, version, "PSA 9"), t("gradedEbay", { grade: "PSA 9" }))}
+				${ebayLinks}
 				${storeLinkHtml(priceCharting, t("gradedPriceCharting"))}
 			</div>
 		</div>`;
 }
 
-function gradedPricesHtml(card) {
-	// A table of what the card sold for in each PSA grade: the middle price of the sales, in the
-	// chosen currency and in dollars as sold, and how many sales it is based on.
-	if (!gradedPricesAvailable()) return "";
-	// The tick box that switches fetching on and off (see fetchPsaPrices in graded.js), and how
+// known: the card's graded prices as far as they are known (gradedPricesOf in graded.js).
+function gradedPricesHtml(card, version, known) {
+	// A table of what the card sells for in each PSA grade: the price in the chosen currency and in
+	// dollars as sold, and how many sales it is based on. Under it, a menu with more about each
+	// grade and the other companies' grades (gradedMoreHtml), closed at first to keep the page calm.
+	// The tick box switches fetching on and off (see fetchPsaPrices in graded.js), and says how
 	// many cards can still be looked up today. Either arriving draws the open card again.
 	const allowance = psaAllowanceNow(renderCardPages);
 	let left = "";
@@ -1770,14 +1785,16 @@ function gradedPricesHtml(card) {
 			${t("gradedFetchToggle")}
 		</label>
 		${left}`;
-	const known = gradedPricesOf(card, renderCardPages);
 	if (known.state === "off") return toggle + `<p class="note">${t("gradedOff")}</p>`;
 	if (known.state === "usedUp") return toggle + `<p class="note">${t("gradedUsedUp", { time: clockTime(psaRefillTime()) })}</p>`;
 	if (known.state === "loading") return toggle + `<p class="note">${t("gradedLoading")}</p>`;
 	if (known.state === "failed") return toggle + `<p class="note">${t("gradedFailed")}</p>`;
-	if (known.grades.length === 0) return toggle + `<p class="note">${t("gradedNone")}</p>`;
+	if (known.grades.length + known.others.length === 0) return toggle + `<p class="note">${t("gradedNone")}</p>`;
+	const more = gradedMoreHtml(card, version, known);
+	// Only other companies' sales: they are in the menu.
+	if (known.grades.length === 0) return toggle + `<p class="note">${t("gradedNone")}</p>` + more;
 	const rows = known.grades.map((entry) => {
-		const dollars = entry.median || entry.average;
+		const dollars = gradedDollars(entry);
 		const local = localPrice(null, dollars);
 		// Whole amounts: a price guessed from a few sales has no meaningful øre or cents.
 		const shown = local !== null ? money.whole.format(local) : "–";
@@ -1790,10 +1807,63 @@ function gradedPricesHtml(card) {
 	const mixed = cardVersions(card).length > 1 ? " " + t("gradedAllVersions") : "";
 	return toggle + `
 		<table class="price-table">
-			<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedMiddle")}</th><th>${t("gradedDollars")}</th><th>${t("gradedSales")}</th></tr></thead>
+			<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedPrice")}</th><th>${t("gradedDollars")}</th><th>${t("gradedSales")}</th></tr></thead>
 			<tbody>${rows.join("")}</tbody>
 		</table>
-		<p class="hint">${t("gradedFrom")}${mixed}</p>`;
+		<p class="hint">${t("gradedFrom")}${mixed}</p>
+		${more}`;
+}
+
+// A grade's price in dollars: the price service's estimate of today's price, which counts recent
+// sales most and leaves odd ones out, or else the middle of its sales (the relay's answers before
+// 1.41.0 had only that). For a card whose price is rising, the middle of months of sales lags.
+function gradedDollars(entry) {
+	return entry.price || entry.median || entry.average || null;
+}
+
+// How sure the price service is of a grade's price, in words.
+const GRADED_SURE_TEXT = { high: "gradedSureHigh", medium: "gradedSureMedium", low: "gradedSureLow" };
+
+function gradedMoreHtml(card, version, known) {
+	// Every grade of every company, PSA first: its price with how many sales and how sure, the day
+	// of its last sale, and a link to its sales on eBay, where the real sales can be seen.
+	const entries = [...known.grades.map((entry) => ({ company: "PSA", ...entry })), ...known.others];
+	const rows = entries.map((entry) => {
+		const name = entry.company + " " + entry.grade;
+		const local = localPrice(null, gradedDollars(entry));
+		const shown = local !== null ? money.whole.format(local) : "–";
+		const facts = [];
+		if (Number.isFinite(entry.count)) {
+			facts.push(entry.count === 1 ? t("gradedSalesOne") : t("gradedSalesCount", { count: entry.count }));
+		}
+		if (GRADED_SURE_TEXT[entry.sure]) facts.push(t(GRADED_SURE_TEXT[entry.sure]));
+		const factsHtml = facts.map((fact) => `<span class="graded-facts">${fact}</span>`).join("");
+		const ebay = `<a class="store-link" href="${escapeHtml(ebaySoldUrl(card, version, name))}" target="_blank" rel="noopener"`
+			+ ` aria-label="${escapeHtml(t("gradedEbay", { grade: name }))}">${t("gradedEbayLink")} ↗</a>`;
+		return `<tr><td>${escapeHtml(name)}</td><td>${shown}${factsHtml}</td><td>${saleDay(entry.lastSale)}</td><td>${ebay}</td></tr>`;
+	});
+	const others = known.others.length > 0 ? `<p class="hint">${t("gradedOthersExplain")}</p>` : "";
+	return `
+		<details class="graded-more"${gradedMoreOpen ? " open" : ""}>
+			<summary>${t("gradedMore")}</summary>
+			<table class="price-table graded-more-table">
+				<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedPrice")}</th><th>${t("gradedLastSale")}</th><th>${t("gradedEbayColumn")}</th></tr></thead>
+				<tbody>${rows.join("")}</tbody>
+			</table>
+			<p class="hint">${t("gradedSureExplain")}</p>
+			${others}
+		</details>`;
+}
+
+function saleDay(day) {
+	// The relay writes days as "2026-09-15": shown as "15 Sep" ("15. sep." in Danish), and one from
+	// an earlier year as "Dec 2025". "–" when it isn't known.
+	const parts = String(day || "").split("-").map(Number);
+	if (parts.length !== 3 || parts.some(Number.isNaN)) return "–";
+	const date = new Date(parts[0], parts[1] - 1, parts[2]);
+	const thisYear = date.getFullYear() === new Date().getFullYear();
+	const shape = thisYear ? { day: "numeric", month: "short" } : { month: "short", year: "numeric" };
+	return escapeHtml(date.toLocaleDateString(money.locale, shape));
 }
 
 function clockTime(date) {

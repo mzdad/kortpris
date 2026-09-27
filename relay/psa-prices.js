@@ -9,9 +9,14 @@
 //         the app gets from TCGdex with the card's prices)
 //     or  GET https://<this relay>/?card=base6-86   (its id in pokemontcg.io: the app before
 //         version 1.32.0, while that database lasts)
-// Answer: { card or product, grades: [{ grade: "10", count, median, average }, ...], found,
+// Answer: { card or product, grades: [{ grade: "10", count, median, average, price, sure,
+//           lastSale }, ...], otherGrades: [{ company: "CGC", grade: "10", ... }], found,
 //           cardsLeft, resetsAt }
-//         Prices are in US dollars: what the card sold for on eBay in that PSA grade.
+//         grades are PSA's, best first; otherGrades the other grading companies' (CGC, BGS, SGC,
+//         TAG, ACE), kept apart so app versions before 1.41.0 don't show them as PSA grades.
+//         Prices are in US dollars: what the card sold for on eBay in that grade. price is the
+//         price service's own estimate of today's price (recent sales, odd ones left out), sure
+//         how much it trusts that ("high", "medium" or "low"), lastSale the day of the last sale.
 //         cardsLeft is how many more cards can be looked up today; resetsAt when that refills.
 // Ask:    GET https://<this relay>/?credits=1   ->  { cardsLeft, resetsAt }   (costs nothing)
 //
@@ -35,6 +40,13 @@ const PRODUCT_SHAPE = /^\d{1,9}$/;
 const DAILY_CREDITS = 100;
 const CREDITS_PER_CARD = 2;
 const CREDITS_KEY = "credits";
+// Put before each remembered answer's key. Changed whenever the answer gets new parts, so answers
+// remembered in the old shape aren't handed out ("2:": the other companies, price, sure, lastSale).
+const ANSWER_SHAPE = "2:";
+// The grading companies whose sales are passed on, as the price service writes them ("bgs9_5" is
+// BGS 9.5) and as the app shows them, in the app's order.
+const COMPANIES = { psa: "PSA", cgc: "CGC", bgs: "BGS", sgc: "SGC", tag: "TAG", ace: "ACE" };
+const CONFIDENCES = ["high", "medium", "low"];
 
 export default {
 	async fetch(request, env, context) {
@@ -54,7 +66,7 @@ export default {
 		const raw = url.searchParams.get("raw") === "1";   // the price service's own answer, for checking
 
 		// Asked already today: the remembered answer costs no credits.
-		const memoryKey = (raw ? "raw:" : "") + (productId ? "product:" + productId : "card:" + cardId);
+		const memoryKey = ANSWER_SHAPE + (raw ? "raw:" : "") + (productId ? "product:" + productId : "card:" + cardId);
 		const remembered = env.REMEMBERED ? await env.REMEMBERED.get(memoryKey) : null;
 		if (remembered) return reply({ ...JSON.parse(remembered), ...(await allowance(env)) }, 200, allowOrigin);
 
@@ -91,8 +103,13 @@ async function gradedPrices(knownProductId, cardId, env, raw) {
 	if (!response.ok) throw new Error("price service answered " + response.status);
 	const body = await response.json();
 	if (raw) return body;
-	const grades = psaGrades(body);
-	return { ...(knownProductId ? { product: knownProductId } : { card: cardId }), found: grades.length > 0, grades: grades };
+	const { grades, otherGrades } = gradedSales(body);
+	return {
+		...(knownProductId ? { product: knownProductId } : { card: cardId }),
+		found: grades.length + otherGrades.length > 0,
+		grades: grades,
+		otherGrades: otherGrades,
+	};
 }
 
 async function tcgplayerProductId(cardId) {
@@ -105,25 +122,36 @@ async function tcgplayerProductId(cardId) {
 	return match[1];
 }
 
-function psaGrades(body) {
+function gradedSales(body) {
 	// The answer lists the card's eBay sales per grade under data.ebay.salesByGrade: "psa10",
-	// "psa9", "psa8_5" (that is 8.5) and so on, next to other graders (cgc, bgs, tag) that the
-	// app doesn't show. Best grade first.
+	// "psa9", "psa8_5" (that is 8.5), "cgc10", "bgs9_5" and so on, and "ungraded", which is left
+	// out: it mixes in other cards' sales (a $2 card showed $22). Best grade first.
 	const card = Array.isArray(body.data) ? body.data[0] : body.data;
 	const salesByGrade = (card && card.ebay && card.ebay.salesByGrade) || {};
 	const grades = [];
+	const otherGrades = [];
 	for (const [key, sales] of Object.entries(salesByGrade)) {
-		const match = key.match(/^psa(\d+)(_5)?$/);
-		if (!match || !sales) continue;
+		const match = key.match(/^([a-z]+?)(\d+)(_5)?$/);
+		if (!match || !COMPANIES[match[1]] || !sales) continue;
+		const smart = sales.smartMarketPrice || {};
 		const entry = {
-			grade: match[2] ? match[1] + ".5" : match[1],
+			grade: match[3] ? match[2] + ".5" : match[2],
 			count: numberOrNull(sales.count),
 			median: numberOrNull(sales.medianPrice),
 			average: numberOrNull(sales.averagePrice),
+			price: numberOrNull(smart.price),
+			sure: CONFIDENCES.includes(smart.confidence) ? smart.confidence : null,
+			lastSale: /^\d{4}-\d{2}-\d{2}/.test(sales.lastSaleDate || "") ? sales.lastSaleDate.slice(0, 10) : null,
 		};
-		if (entry.median !== null || entry.average !== null) grades.push(entry);
+		if (entry.price === null && entry.median === null && entry.average === null) continue;
+		if (match[1] === "psa") grades.push(entry);
+		else otherGrades.push({ company: COMPANIES[match[1]], ...entry });
 	}
-	return grades.sort((a, b) => Number(b.grade) - Number(a.grade));
+	const companyOrder = Object.values(COMPANIES);
+	grades.sort((a, b) => Number(b.grade) - Number(a.grade));
+	otherGrades.sort((a, b) => companyOrder.indexOf(a.company) - companyOrder.indexOf(b.company)
+		|| Number(b.grade) - Number(a.grade));
+	return { grades, otherGrades };
 }
 
 async function rememberCredits(env, credits) {
