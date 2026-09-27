@@ -295,10 +295,9 @@ const AUTO_LONGEST_WAIT_MS = 3000;
 const AUTO_EMPTY_LOOKS = 2;
 const CAMERA_AUTO_STORAGE_KEY = "kortpris.cameraAuto";
 
-// A look at the live picture: { cardFits, box }. cardFits: a card is found in it (by its border or
-// shape, card-finder.js) about the size and place of the white frame (fitsFrame in reader.js), whose
-// place frameShares gives as shares of the picture. box: where the card was found, as shares of the
-// picture, to compare with the next look's (see cardMove); null when no card was found.
+// A look at the live picture: the card-shaped boxes found about the size and place of the white frame
+// (findCardShapesInFrame in card-finder.js), whose place frameShares gives as shares of the picture.
+// The boxes are shares of the picture too; none when there is no card in the frame.
 function lookForCard(video, frameShares) {
 	const width = AUTO_LOOK_WIDTH;
 	const height = Math.round(video.videoHeight * width / video.videoWidth);
@@ -312,13 +311,23 @@ function lookForCard(video, frameShares) {
 		y0: frameShares.y0 * height,
 		y1: frameShares.y1 * height,
 	};
-	const found = findYellowCard(look) || findCardByShape(look);
+	const boxes = findCardShapesInFrame(look, frame);
 	freeCanvas(look);
-	if (!found) return { cardFits: false, box: null };
-	return {
-		cardFits: fitsFrame(found, frame),
-		box: { x0: found.x0 / width, x1: found.x1 / width, y0: found.y0 / height, y1: found.y1 / height },
-	};
+	return boxes;
+}
+
+// Of the boxes found in a look, the one nearest where the card was in the look before (before), and
+// how far that is (see cardMove): the card's own edges, a toploader's and a straight line in its
+// picture can all make a card-shaped box, and following the same one keeps a still card still.
+// Without a look before, the box with the clearest edges.
+function nearestBox(before, boxes) {
+	let nearest = { box: boxes[0], move: Infinity };
+	if (!before) return nearest;
+	for (const box of boxes) {
+		const move = cardMove(before, box);
+		if (move < nearest.move) nearest = { box: box, move: move };
+	}
+	return nearest;
 }
 
 // How far the card moved between two looks: the largest move of any of its four edges, as a share of

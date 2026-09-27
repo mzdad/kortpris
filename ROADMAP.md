@@ -5,6 +5,23 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.39.2
+
+- **Auto finds dark and silver-bordered cards.** Your screen recording showed Auto saying "Fill
+  the frame with the card" for about 10 seconds while a Mega Darkrai ex in a toploader filled it,
+  on a dark red-and-black cloth with the light on; it took the photo at 22 seconds. Auto used the
+  same card finders as the photo reading, and those only trust a box with a sharp colour change
+  across its edges or a border line just inside - which a dark card on a dark cloth has neither of:
+  in 80 frames of the recording they found the card 4 times. Auto now uses a gentler check of its
+  own (`findCardShapesInFrame` in `card-finder.js`): it looks only around the white frame, and a
+  card-shaped box that fits the frame with edges all round is enough, as the photo is checked
+  properly afterwards anyway. As the card's edges, the toploader's and a line in the card's picture
+  can all make such a box, it follows the one nearest where the card just was. Tested on the
+  recording, turned back into what the camera saw: the photo would be taken at 6.5 seconds, a
+  second after the card settled. No card found in 756 cuts of pictures without one (Windows'
+  photos and the Ordriget game); your 39 card photos all found; and the shaky pretend-camera tests
+  of 1.39.1 all still pass.
+
 ## Done in 1.39.1
 
 - **Auto now takes the photo on a real phone.** You tried Auto and it kept saying "Hold still…"

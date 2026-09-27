@@ -562,8 +562,8 @@ async function watchForCard(afterSave) {
 		await new Promise((resolve) => setTimeout(resolve, AUTO_LOOK_MS));
 		if (!stillWatching()) return;
 		if (cameraVideo.videoWidth === 0) continue;   // no live picture yet
-		const look = lookForCard(cameraVideo, cameraFrameShares());
-		if (!look.cardFits) {
+		const boxes = lookForCard(cameraVideo, cameraFrameShares());
+		if (boxes.length === 0) {
 			emptyLooks++;
 			if (emptyLooks >= AUTO_EMPTY_LOOKS) readyForCard = true;
 			before = null;
@@ -575,8 +575,9 @@ async function watchForCard(afterSave) {
 		emptyLooks = 0;
 		if (!readyForCard) continue;
 		if (fitSince === null) fitSince = performance.now();
-		stillLooks = cardMove(before, look.box) <= STILL_MOVE ? stillLooks + 1 : 0;
-		before = look.box;
+		const nearest = nearestBox(before, boxes);
+		stillLooks = nearest.move <= STILL_MOVE ? stillLooks + 1 : 0;
+		before = nearest.box;
 		const waitedLongest = performance.now() - fitSince >= AUTO_LONGEST_WAIT_MS;
 		if (stillLooks >= AUTO_STILL_LOOKS || waitedLongest) {
 			takeCameraPhoto();

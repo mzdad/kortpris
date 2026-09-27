@@ -333,3 +333,73 @@ function borderEdgeFound(map, box, direction, uprights, crossings) {
 		return lineSupport(map, line, side.from, side.to) >= BORDER_LINE_SUPPORT;
 	}));
 }
+
+// ---------- For "Auto": a card-shaped thing in the camera's white frame ----------
+
+// Auto (camera.js) only needs to know that something card-shaped fills the frame: the photo it then
+// takes is looked at properly by findYellowCard and findCardByShape. So this asks less than
+// findCardByShape - edges all round are enough, without the sharp colour change across them or the
+// border just inside - as a dark card in a toploader on a dark cloth has neither. It looks only this
+// far around the frame (share of the frame's size), so lines in the table or cloth around it can't
+// crowd out the card's own.
+const AROUND_FRAME = 0.15;
+
+// All card-shaped boxes about the frame's place and size (fitsFrame in reader.js) with an edge along
+// at least MIN_SIDE_SUPPORT of every side, strongest edges first. frame: the white frame's box in the
+// picture. The boxes are given as shares of the picture's width and height.
+function findCardShapesInFrame(picture, frame) {
+	const frameWidth = frame.x1 - frame.x0;
+	const frameHeight = frame.y1 - frame.y0;
+	const area = {
+		x0: Math.max(0, Math.round(frame.x0 - frameWidth * AROUND_FRAME)),
+		x1: Math.min(picture.width, Math.round(frame.x1 + frameWidth * AROUND_FRAME)),
+		y0: Math.max(0, Math.round(frame.y0 - frameHeight * AROUND_FRAME)),
+		y1: Math.min(picture.height, Math.round(frame.y1 + frameHeight * AROUND_FRAME)),
+	};
+	const around = document.createElement("canvas");
+	around.width = area.x1 - area.x0;
+	around.height = area.y1 - area.y0;
+	around.getContext("2d").drawImage(picture, -area.x0, -area.y0);
+	const map = edgeMap(around);
+	const scale = around.width / map.width;   // before the canvas is freed, which empties it
+	freeCanvas(around);
+	const uprights = straightLines(map, true);
+	const crossings = straightLines(map, false);
+	const found = [];
+	for (const left of uprights) {
+		for (const right of uprights) {
+			if (right.offset <= left.offset) continue;
+			for (const top of crossings) {
+				for (const bottom of crossings) {
+					if (bottom.offset <= top.offset) continue;
+					const width = right.offset - left.offset;
+					const height = bottom.offset - top.offset;
+					if (Math.abs(width / height - CARD_SHAPE) > CARD_SHAPE_TOLERANCE) continue;
+					// Back from the edge map to the picture.
+					const box = {
+						x0: area.x0 + left.offset * scale,
+						x1: area.x0 + right.offset * scale,
+						y0: area.y0 + top.offset * scale,
+						y1: area.y0 + bottom.offset * scale,
+					};
+					if (!fitsFrame(box, frame)) continue;
+					const weakestSide = Math.min(
+						lineSupport(map, left, top.offset, bottom.offset),
+						lineSupport(map, right, top.offset, bottom.offset),
+						lineSupport(map, top, left.offset, right.offset),
+						lineSupport(map, bottom, left.offset, right.offset),
+					);
+					if (weakestSide < MIN_SIDE_SUPPORT) continue;
+					found.push({
+						x0: box.x0 / picture.width,
+						x1: box.x1 / picture.width,
+						y0: box.y0 / picture.height,
+						y1: box.y1 / picture.height,
+						weakestSide: weakestSide,
+					});
+				}
+			}
+		}
+	}
+	return found.sort((a, b) => b.weakestSide - a.weakestSide);
+}
