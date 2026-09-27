@@ -5,6 +5,20 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.39.1
+
+- **Auto now takes the photo on a real phone.** You tried Auto and it kept saying "Hold still…"
+  without ever taking the photo. The stillness check compared the whole picture between looks, and
+  a real camera's grain alone changed it more than it allowed - a test camera with grain and no
+  movement at all never passed, nor did any hand shake. Now it checks that the card's edges stay
+  put (each may move at most 3% of the card's size between looks, `STILL_MOVE` in `camera.js`),
+  and once the card has filled the frame for 3 seconds the photo is taken anyway, so it can't get
+  stuck again. After "Save and scan the next" the frame must now look empty twice in a row before
+  a new card counts, as one look can miss a card that is there. Tested with a pretend camera
+  showing one of your photos with grain and hand shake: still or shaking a little, taken after
+  1.0-1.2 seconds; shaking a lot, after 3.6 seconds; the saved card not taken again in 5 seconds;
+  the next card after 1.0 seconds; one missed look not taken for a new card; Auto off, nothing.
+
 ## Done in 1.39.0
 
 - **"Install app" at the top.** You asked for a button at the top, like Kids mode, that says how

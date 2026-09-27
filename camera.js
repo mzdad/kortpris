@@ -281,18 +281,24 @@ function chooseCameraLight(on) {
 // How often the live picture is looked at, and how small: finding the card in it takes a moment.
 const AUTO_LOOK_MS = 250;
 const AUTO_LOOK_WIDTH = 480;
-// Stillness is measured on an even smaller copy, where the camera's grain evens out: the average
-// change in brightness per pixel since the look before (out of 255) may be at most this...
-const STILL_WIDTH = 96;
-const STILL_CHANGE = 3;
-// ...for this many looks in a row: about a second.
-const AUTO_STILL_LOOKS = 4;
+// "Still" means the card's edges stayed put: between two looks, no edge may move more than this share
+// of the card's size. (Comparing the whole picture didn't work: a real camera's grain and the
+// smallest hand shake change it more than a card moving would.)
+const STILL_MOVE = 0.03;
+// ...for this many looks in a row: about a second, with the first look the card was seen in.
+const AUTO_STILL_LOOKS = 3;
+// A hand that never gets quite still still gets its photo: once the card has filled the frame this
+// long, the photo is taken anyway.
+const AUTO_LONGEST_WAIT_MS = 3000;
+// After "Save and scan the next", the frame must first be empty for this many looks in a row: one
+// look can miss a card that is there (or come while the camera's picture is still dark).
+const AUTO_EMPTY_LOOKS = 2;
 const CAMERA_AUTO_STORAGE_KEY = "kortpris.cameraAuto";
 
-// A look at the live picture: { cardFits, brightness }. cardFits: a card is found in it (by its
-// border or shape, card-finder.js) about the size and place of the white frame (fitsFrame in
-// reader.js), whose place frameShares gives as shares of the picture. brightness: the small copy's
-// brightness, to compare with the next look's (see pictureChange).
+// A look at the live picture: { cardFits, box }. cardFits: a card is found in it (by its border or
+// shape, card-finder.js) about the size and place of the white frame (fitsFrame in reader.js), whose
+// place frameShares gives as shares of the picture. box: where the card was found, as shares of the
+// picture, to compare with the next look's (see cardMove); null when no card was found.
 function lookForCard(video, frameShares) {
 	const width = AUTO_LOOK_WIDTH;
 	const height = Math.round(video.videoHeight * width / video.videoWidth);
@@ -307,37 +313,27 @@ function lookForCard(video, frameShares) {
 		y1: frameShares.y1 * height,
 	};
 	const found = findYellowCard(look) || findCardByShape(look);
-	const cardFits = Boolean(found) && fitsFrame(found, frame);
-	const brightness = brightnessOf(look);
 	freeCanvas(look);
-	return { cardFits: cardFits, brightness: brightness };
+	if (!found) return { cardFits: false, box: null };
+	return {
+		cardFits: fitsFrame(found, frame),
+		box: { x0: found.x0 / width, x1: found.x1 / width, y0: found.y0 / height, y1: found.y1 / height },
+	};
 }
 
-function brightnessOf(picture) {
-	// Each pixel's brightness in a copy STILL_WIDTH wide.
-	const width = STILL_WIDTH;
-	const height = Math.round(picture.height * width / picture.width);
-	const small = document.createElement("canvas");
-	small.width = width;
-	small.height = height;
-	const ctx = small.getContext("2d", { willReadFrequently: true });
-	ctx.drawImage(picture, 0, 0, width, height);
-	const pixels = ctx.getImageData(0, 0, width, height).data;
-	const values = new Float32Array(width * height);
-	for (let i = 0; i < values.length; i++) {
-		values[i] = 0.299 * pixels[i * 4] + 0.587 * pixels[i * 4 + 1] + 0.114 * pixels[i * 4 + 2];
-	}
-	freeCanvas(small);
-	return values;
-}
-
-// How much the picture changed between two looks: the average change in brightness per pixel.
-// Infinity when there was no look before.
-function pictureChange(before, after) {
-	if (!before || before.length !== after.length) return Infinity;
-	let total = 0;
-	for (let i = 0; i < after.length; i++) total += Math.abs(after[i] - before[i]);
-	return total / after.length;
+// How far the card moved between two looks: the largest move of any of its four edges, as a share of
+// the card's width (left and right edges) or height (top and bottom). Infinity when there was no
+// look before.
+function cardMove(before, after) {
+	if (!before) return Infinity;
+	const width = after.x1 - after.x0;
+	const height = after.y1 - after.y0;
+	return Math.max(
+		Math.abs(after.x0 - before.x0) / width,
+		Math.abs(after.x1 - before.x1) / width,
+		Math.abs(after.y0 - before.y0) / height,
+		Math.abs(after.y1 - before.y1) / height,
+	);
 }
 
 // Whether the viewer switched "Auto" on or off, or null when they never did (then kids mode decides).

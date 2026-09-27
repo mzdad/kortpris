@@ -546,31 +546,39 @@ function autoShutterOn() {
 	return cameraAuto === null ? kidsMode : cameraAuto;
 }
 
-// "Auto": the photo is taken by itself once the card fills the white frame and the picture has
-// stayed still for about a second (lookForCard in camera.js). afterSave: opened by "Save and scan the
-// next", when the card just saved may still be in the frame - so the frame must first have been
-// without a card, or the same card would be taken again.
+// "Auto": the photo is taken by itself once the card fills the white frame and has stayed still for
+// about a second - or has filled it for 3 seconds, still or not (lookForCard in camera.js).
+// afterSave: opened by "Save and scan the next", when the card just saved may still be in the frame -
+// so the frame must first have been without a card, or the same card would be taken again.
 async function watchForCard(afterSave) {
 	const watch = ++autoWatch;
 	const stillWatching = () => watch === autoWatch && liveCamera !== null && autoShutterOn() && !cameraShutterButton.disabled;
 	let readyForCard = !afterSave;
-	let before = null;
+	let before = null;       // where the card was in the look before
 	let stillLooks = 0;
+	let fitSince = null;     // when the card came into the frame
+	let emptyLooks = 0;      // looks in a row without a card in the frame
 	while (stillWatching()) {
 		await new Promise((resolve) => setTimeout(resolve, AUTO_LOOK_MS));
 		if (!stillWatching()) return;
+		if (cameraVideo.videoWidth === 0) continue;   // no live picture yet
 		const look = lookForCard(cameraVideo, cameraFrameShares());
-		const change = pictureChange(before, look.brightness);
-		before = look.brightness;
 		if (!look.cardFits) {
-			readyForCard = true;
+			emptyLooks++;
+			if (emptyLooks >= AUTO_EMPTY_LOOKS) readyForCard = true;
+			before = null;
 			stillLooks = 0;
+			fitSince = null;
 			if (cameraMessage.dataset.key !== "cameraAutoHint") showCameraMessage("cameraAutoHint");
 			continue;
 		}
+		emptyLooks = 0;
 		if (!readyForCard) continue;
-		stillLooks = change <= STILL_CHANGE ? stillLooks + 1 : 0;
-		if (stillLooks >= AUTO_STILL_LOOKS) {
+		if (fitSince === null) fitSince = performance.now();
+		stillLooks = cardMove(before, look.box) <= STILL_MOVE ? stillLooks + 1 : 0;
+		before = look.box;
+		const waitedLongest = performance.now() - fitSince >= AUTO_LONGEST_WAIT_MS;
+		if (stillLooks >= AUTO_STILL_LOOKS || waitedLongest) {
 			takeCameraPhoto();
 			return;
 		}
