@@ -192,6 +192,7 @@ const cameraCloseButton = document.getElementById("camera-close");
 const cameraLightButton = document.getElementById("camera-light");
 const cameraShutterButton = document.getElementById("camera-shutter");
 const cameraZoomButton = document.getElementById("camera-zoom");
+const cameraAutoButton = document.getElementById("camera-auto");
 const cameraPhoneButton = document.getElementById("camera-phone");
 
 // ---------- What is on screen right now ----------
@@ -240,6 +241,10 @@ let resultsForPhoto = false;
 let liveCamera = null;
 let cameraZoom = chosenCameraZoom();
 let cameraLight = chosenCameraLight();
+// "Auto": the camera takes the photo by itself (see watchForCard). null until the viewer switches it
+// on or off: then it is on in kids mode only.
+let cameraAuto = chosenCameraAuto();
+let autoWatch = 0;   // counts the watches, so an older one stops when a newer one starts
 // The size and kind of the last photo from the app's camera, shown at the bottom of the page.
 let lastCameraPhoto = null;
 // The number the reader put in the box, and every other number it thought possible.
@@ -453,8 +458,11 @@ async function openLiveCamera(afterSave = false) {
 	liveCamera = camera;
 	fitCameraBox();
 	await setLiveCameraSafely();
-	showCameraMessage(afterSave ? "cameraSavedHint" : "cameraHint");
+	let hint = autoShutterOn() ? "cameraAutoHint" : "cameraHint";
+	if (afterSave) hint = "cameraSavedHint";
+	showCameraMessage(hint);
 	renderCameraButtons();
+	if (autoShutterOn()) watchForCard(afterSave);
 }
 
 function fitCameraBox() {
@@ -465,6 +473,7 @@ function fitCameraBox() {
 cameraVideo.addEventListener("resize", fitCameraBox);
 
 function closeLiveCamera() {
+	autoWatch++;   // stops watching for the card (see watchForCard)
 	if (liveCamera) stopLiveCamera(liveCamera, cameraVideo);
 	liveCamera = null;
 	liveCameraView.hidden = true;
@@ -491,7 +500,9 @@ function renderCameraButtons() {
 	cameraShutterButton.disabled = !running;
 	cameraLightButton.hidden = !running || !liveCamera.canLight;
 	cameraZoomButton.hidden = !running || !liveCamera.zoomRange;
+	cameraAutoButton.hidden = !running;
 	cameraLightButton.setAttribute("aria-pressed", String(cameraLight));
+	cameraAutoButton.setAttribute("aria-pressed", String(autoShutterOn()));
 	cameraZoomButton.textContent = cameraZoom + "×";
 }
 
@@ -516,8 +527,62 @@ cameraZoomButton.addEventListener("click", async () => {
 	await setLiveCameraSafely();
 });
 
-cameraShutterButton.addEventListener("click", async () => {
+cameraAutoButton.addEventListener("click", () => {
+	cameraAuto = !autoShutterOn();
+	chooseCameraAuto(cameraAuto);
+	renderCameraButtons();
+	if (cameraAuto) {
+		showCameraMessage("cameraAutoHint");
+		watchForCard(false);
+	} else {
+		autoWatch++;
+		showCameraMessage("cameraHint");
+	}
+});
+
+// "Auto" is on when switched on, or - until it has been switched either way - in kids mode.
+function autoShutterOn() {
+	return cameraAuto === null ? kidsMode : cameraAuto;
+}
+
+// "Auto": the photo is taken by itself once the card fills the white frame and the picture has
+// stayed still for about a second (lookForCard in camera.js). afterSave: opened by "Save and scan the
+// next", when the card just saved may still be in the frame - so the frame must first have been
+// without a card, or the same card would be taken again.
+async function watchForCard(afterSave) {
+	const watch = ++autoWatch;
+	const stillWatching = () => watch === autoWatch && liveCamera !== null && autoShutterOn() && !cameraShutterButton.disabled;
+	let readyForCard = !afterSave;
+	let before = null;
+	let stillLooks = 0;
+	while (stillWatching()) {
+		await new Promise((resolve) => setTimeout(resolve, AUTO_LOOK_MS));
+		if (!stillWatching()) return;
+		const look = lookForCard(cameraVideo, cameraFrameShares());
+		const change = pictureChange(before, look.brightness);
+		before = look.brightness;
+		if (!look.cardFits) {
+			readyForCard = true;
+			stillLooks = 0;
+			if (cameraMessage.dataset.key !== "cameraAutoHint") showCameraMessage("cameraAutoHint");
+			continue;
+		}
+		if (!readyForCard) continue;
+		stillLooks = change <= STILL_CHANGE ? stillLooks + 1 : 0;
+		if (stillLooks >= AUTO_STILL_LOOKS) {
+			takeCameraPhoto();
+			return;
+		}
+		if (cameraMessage.dataset.key !== "cameraHoldStill") showCameraMessage("cameraHoldStill");
+	}
+}
+
+cameraShutterButton.addEventListener("click", takeCameraPhoto);
+
+// The shutter, pressed or by itself ("Auto").
+async function takeCameraPhoto() {
 	if (!liveCamera || cameraShutterButton.disabled) return;
+	autoWatch++;   // the photo is being taken: stop watching for the card
 	cameraShutterButton.disabled = true;   // one photo per press
 	showCameraMessage("cameraHoldStill");
 	const frame = cameraFrameShares();
@@ -536,7 +601,7 @@ cameraShutterButton.addEventListener("click", async () => {
 	// The white frame is where the card is in a live picture. A full-size photo may show more
 	// than the live picture did, so there the frame's place isn't known.
 	scanPhoto(photo.file, photo.source === "video" ? frame : null);
-});
+}
 
 function cameraFrameShares() {
 	// Where the white frame is on the live picture, as shares of the picture's width and height.

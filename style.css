@@ -516,6 +516,8 @@ body.camera-open { overflow: hidden; }
 .camera-round:focus-visible, .camera-shutter:focus-visible, .camera-phone:focus-visible { outline: 3px solid #8FB2FF; outline-offset: 3px; }
 .camera-close { position: absolute; right: 16px; top: calc(12px + env(safe-area-inset-top, 0px)); font-size: 1.3rem; }
 .camera-zoom { font-size: 1.15rem; }
+/* "Auto" at the top left, across from the close button. */
+.camera-auto { position: absolute; left: 16px; top: calc(12px + env(safe-area-inset-top, 0px)); font-size: 0.85rem; }
 .camera-controls {
 	position: absolute; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px));
 	display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; justify-items: center;

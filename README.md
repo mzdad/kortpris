@@ -74,6 +74,12 @@ A web page with nothing to install. What happens to a photo:
 Zoomed in, the phone is held further away, so the card is in focus and out of the phone's shadow; the
 light stays on, so a glare spot shows before the photo is taken. Zoom needs iOS 17 or Chrome on
 Android, the light iOS 18; the buttons for them only show when the phone can. Both are remembered.
+With "Auto" on (the button at the top left; on by itself in kids mode until switched either way),
+the camera takes the photo by itself: a few times a second it looks for the card in a small copy of
+the live picture (`lookForCard`), and once the card fills the white frame and the picture has stayed
+still for about a second, it presses the shutter (`watchForCard` in `app.js`). After "Save and
+scan the next" it first waits for the frame to be without a card, so the card just saved isn't
+taken again.
 Where the browser can (Safari 18.4, Chrome), the photo is the camera's own full-size photo, otherwise
 the live picture (an iPhone gives 2160×3840). The reader is told where the white frame was
 (`readCardPhoto`'s `frame`): the card's own edges are used when found close to it, and the frame

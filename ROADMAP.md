@@ -5,6 +5,20 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.38.0
+
+- **3.2 The camera takes the photo by itself.** With "Auto" on - the button at the top left of the
+  camera, on by itself in kids mode until someone switches it either way - the camera looks for the
+  card four times a second, and once the card fills the white frame and the picture has stayed
+  still for about a second, the photo is taken. "Hold still…" shows while the card moves. After
+  "Save and scan the next", it waits until the frame has been empty, so the card just saved isn't
+  taken twice: taking a stack of cards is now put a card in, wait, "Save and scan the next", swap.
+  The shutter button still works. Tested in the test browser with a pretend camera: with Auto off
+  nothing is taken; on, a still card was taken after 2 seconds and found; a moving card never; after
+  "Save and scan the next" the card still there not, and the next one after 1.9 seconds. A look takes
+  about 8 ms on the PC. Not yet tried with a real phone camera: how still "still" must be
+  (`STILL_CHANGE` in `camera.js`) may need tuning to your phones.
+
 ## Done in 1.37.0
 
 - **3.4 Sort and share My cards.** Under the search box: "Sort by" value (as before), name, set
@@ -238,7 +252,6 @@ L = several sessions).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 3.2 | **Take the photo by itself** when the card fills the frame and the phone is still. | No button to press; great for kids. The steadiness measure exists already. | M |
 | 3.5 | **Hide the camera details** at the bottom of the page once the camera is proven on your phones. | It was added to find out what iPhones give. | S |
 
 ## 4. Accounts and keeping things

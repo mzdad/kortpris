@@ -273,3 +273,79 @@ function chooseCameraZoom(zoom) {
 function chooseCameraLight(on) {
 	writeStorage(CAMERA_LIGHT_STORAGE_KEY, on ? "on" : "off");
 }
+
+// ---------- Taking the photo by itself ("Auto") ----------
+// The live picture is looked at a few times a second, and the photo is taken once the card fills
+// the white frame and the picture has stayed still for a moment (watchForCard in app.js decides).
+
+// How often the live picture is looked at, and how small: finding the card in it takes a moment.
+const AUTO_LOOK_MS = 250;
+const AUTO_LOOK_WIDTH = 480;
+// Stillness is measured on an even smaller copy, where the camera's grain evens out: the average
+// change in brightness per pixel since the look before (out of 255) may be at most this...
+const STILL_WIDTH = 96;
+const STILL_CHANGE = 3;
+// ...for this many looks in a row: about a second.
+const AUTO_STILL_LOOKS = 4;
+const CAMERA_AUTO_STORAGE_KEY = "kortpris.cameraAuto";
+
+// A look at the live picture: { cardFits, brightness }. cardFits: a card is found in it (by its
+// border or shape, card-finder.js) about the size and place of the white frame (fitsFrame in
+// reader.js), whose place frameShares gives as shares of the picture. brightness: the small copy's
+// brightness, to compare with the next look's (see pictureChange).
+function lookForCard(video, frameShares) {
+	const width = AUTO_LOOK_WIDTH;
+	const height = Math.round(video.videoHeight * width / video.videoWidth);
+	const look = document.createElement("canvas");
+	look.width = width;
+	look.height = height;
+	look.getContext("2d", { willReadFrequently: true }).drawImage(video, 0, 0, width, height);
+	const frame = {
+		x0: frameShares.x0 * width,
+		x1: frameShares.x1 * width,
+		y0: frameShares.y0 * height,
+		y1: frameShares.y1 * height,
+	};
+	const found = findYellowCard(look) || findCardByShape(look);
+	const cardFits = Boolean(found) && fitsFrame(found, frame);
+	const brightness = brightnessOf(look);
+	freeCanvas(look);
+	return { cardFits: cardFits, brightness: brightness };
+}
+
+function brightnessOf(picture) {
+	// Each pixel's brightness in a copy STILL_WIDTH wide.
+	const width = STILL_WIDTH;
+	const height = Math.round(picture.height * width / picture.width);
+	const small = document.createElement("canvas");
+	small.width = width;
+	small.height = height;
+	const ctx = small.getContext("2d", { willReadFrequently: true });
+	ctx.drawImage(picture, 0, 0, width, height);
+	const pixels = ctx.getImageData(0, 0, width, height).data;
+	const values = new Float32Array(width * height);
+	for (let i = 0; i < values.length; i++) {
+		values[i] = 0.299 * pixels[i * 4] + 0.587 * pixels[i * 4 + 1] + 0.114 * pixels[i * 4 + 2];
+	}
+	freeCanvas(small);
+	return values;
+}
+
+// How much the picture changed between two looks: the average change in brightness per pixel.
+// Infinity when there was no look before.
+function pictureChange(before, after) {
+	if (!before || before.length !== after.length) return Infinity;
+	let total = 0;
+	for (let i = 0; i < after.length; i++) total += Math.abs(after[i] - before[i]);
+	return total / after.length;
+}
+
+// Whether the viewer switched "Auto" on or off, or null when they never did (then kids mode decides).
+function chosenCameraAuto() {
+	const saved = readStorage(CAMERA_AUTO_STORAGE_KEY);
+	return saved === null ? null : saved === "on";
+}
+
+function chooseCameraAuto(on) {
+	writeStorage(CAMERA_AUTO_STORAGE_KEY, on ? "on" : "off");
+}
