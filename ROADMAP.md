@@ -5,6 +5,21 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.43.0
+
+- **2.3 Remember database answers for a day** on the phone (`askTcgdex` in `cards.js`). Every
+  answer from TCGdex - searches, a card's prices, the list of sets - is kept in a cache of its own
+  (Cache Storage, which holds far more than localStorage) and used again for a day. Scanning a card
+  again, or opening a saved card, asks the database nothing, and a card scanned earlier that day
+  opens even without internet (checked with the internet cut off). "Update prices" in My cards
+  still asks for today's prices. Answers over a day old, and the oldest past 1,000, are thrown away
+  once a visit; an answer reporting errors isn't kept. The sets' own day-long copy in localStorage
+  ("kortpris.sets") is gone: they are kept like any other answer now.
+  - Your 46 real photos, twice: 2.9 seconds a photo with nothing kept, 2.7 seconds the second time
+    (59 answers kept), with the same results (46 first, 44 opened, 0 wrong). A card that opens also
+    asks for its prices (0.1 seconds here), which the test doesn't, so a card scanned again opens
+    about 0.3 seconds sooner on this PC - more on a phone's mobile internet.
+
 ## Done in 1.42.0
 
 - **2.4 The number first, the name only when needed.** Once the card's edges are found, the number
@@ -385,7 +400,6 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 
 | | What | Why | Size |
 |---|---|---|---|
-| 2.3 | **Remember database answers for a day** on the phone. | Scanning a card twice, or opening My cards, would not ask again. Worth less since 1.32.0: TCGdex answers in about 0.2 seconds and seldom fails. | S |
 | 2.6 | **A paid card database (Scrydex)**, from the makers of pokemontcg.io. | Graded prices and picture recognition built in. Costs money (from $29 a month, September 2026): your decision. Since 1.32.0 the free TCGdex (5.1) is quick, reliable and up to date. | M |
 | 2.8 | **Prices by condition** for ungraded cards: "What condition is your card in?" (Near Mint, Lightly Played, Moderately Played, Heavily Played, Damaged) changes the price. | The prices shown are for cards in top condition, and a worn card sells for much less. Checked 27 September 2026: PokemonPriceTracker's free plan (the PSA relay's source) gives only each version's Near Mint price, the same as TCGdex's TCGplayer price. The other conditions look like a paid plan: your decision. Its eBay "ungraded" sales can't stand in: for a $2 Mewtwo they said $22, with other cards' sales mixed in. | M |
 

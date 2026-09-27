@@ -2543,7 +2543,8 @@ function renderCardPages() {
 // The service worker (sw.js) keeps the app's files on the phone, so it starts at once and opens
 // without internet. Not while developing on this PC (localhost): files change there without a new
 // version number, and a kept copy would hide the change - unless ?sw is in the address, to test
-// it. Without ?sw, what such a test kept is taken away again.
+// it. Without ?sw, what such a test kept is taken away again (not the card database's answers,
+// which the app keeps itself: see askTcgdex in cards.js).
 if ("serviceWorker" in navigator) {
 	const developing = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 	if (!developing || new URLSearchParams(location.search).has("sw")) {
@@ -2555,7 +2556,9 @@ if ("serviceWorker" in navigator) {
 			for (const registration of registrations) registration.unregister();
 		});
 		caches.keys().then((names) => {
-			for (const name of names) caches.delete(name);
+			for (const name of names) {
+				if (name !== ANSWERS_CACHE) caches.delete(name);
+			}
 		});
 	}
 }

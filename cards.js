@@ -23,9 +23,18 @@ const WIDE_PAGE_SIZE = 250;
 // TCGdex seldom fails (none of 40 requests in September 2026); a question that does is asked again.
 const MAX_API_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 400;
-// Every set's name, size and release date comes in one question, kept on the phone for a day.
-const SETS_STORAGE_KEY = "kortpris.sets";
-const SETS_KEEP_MS = 24 * 60 * 60 * 1000;
+// TCGdex's answers are kept on the phone for a day (see askTcgdex), so scanning a card again, or
+// opening a saved card, doesn't ask again - and works without internet. They are kept in the
+// browser's Cache Storage, which holds far more than localStorage; sw.js leaves them alone.
+// ("kortpris.sets" kept the sets alone in localStorage until 1.43.0, and is removed.)
+const ANSWERS_CACHE = "kortpris-answers";
+removeStorage("kortpris.sets");
+const ANSWER_KEEP_MS = 24 * 60 * 60 * 1000;
+// A name search can be 60 KB and a card's prices 3 KB, so this is a few MB at most. A day's
+// scanning asks a few hundred questions.
+const MOST_ANSWERS = 1000;
+// When each answer was kept: a header of its own, so tidying needn't read the answers.
+const KEPT_AT_HEADER = "Kortpris-Kept-At";
 // TCGdex also has the sets of the TCG Pocket phone game, which aren't cards anyone can hold.
 const DIGITAL_SERIES = ["tcgp"];
 // TCGdex's pictures (WebP: a quarter of the PNG's size), and the old database's for the cards TCGdex
@@ -371,30 +380,21 @@ function allSets() {
 }
 
 async function loadSets() {
-	let kept = null;
-	try {
-		kept = JSON.parse(readStorage(SETS_STORAGE_KEY) || "null");
-	} catch (error) {
-		kept = null;   // spoilt somehow: ask again
-	}
-	let list = kept && Date.now() - kept.savedAt < SETS_KEEP_MS ? kept.sets : null;
-	if (!list) {
-		const answer = await askGraphql("{ sets { id name releaseDate cardCount { official } serie { id } } }");
-		list = (answer.sets || [])
-			.filter((set) => !DIGITAL_SERIES.includes(set.serie && set.serie.id))
-			.map((set) => ({ id: set.id, name: set.name, printedTotal: (set.cardCount && set.cardCount.official) || null, releaseDate: set.releaseDate || "" }));
-		writeStorage(SETS_STORAGE_KEY, JSON.stringify({ savedAt: Date.now(), sets: list }));
-	}
+	const answer = await askGraphql("{ sets { id name releaseDate cardCount { official } serie { id } } }");
+	const list = (answer.sets || [])
+		.filter((set) => !DIGITAL_SERIES.includes(set.serie && set.serie.id))
+		.map((set) => ({ id: set.id, name: set.name, printedTotal: (set.cardCount && set.cardCount.official) || null, releaseDate: set.releaseDate || "" }));
 	return new Map(list.map((set) => [set.id, set]));
 }
 
 // Adds the card's prices to it - tcgplayer and cardmarket, each left out when that shop has none -
-// and returns it. Asked from TCGdex once per visit. Throws when TCGdex doesn't answer; the card
-// then stays without prices, and they are asked for again the next time.
-async function withPrices(card) {
-	if (card.pricesLoaded) return card;
-	if (!pricesAsked.has(card.id)) {
-		const asking = askTcgdex(TCGDEX_API + "/cards/" + encodeURIComponent(card.id)).then((full) => pricesFrom(full.pricing));
+// and returns it. Asked from TCGdex once per visit, or kept from the last day (see askTcgdex).
+// fresh = true asks TCGdex again even so: "Update prices" in My cards. Throws when TCGdex doesn't
+// answer; the card then stays without prices, and they are asked for again the next time.
+async function withPrices(card, fresh = false) {
+	if (card.pricesLoaded && !fresh) return card;
+	if (!pricesAsked.has(card.id) || fresh) {
+		const asking = askTcgdex(TCGDEX_API + "/cards/" + encodeURIComponent(card.id), null, fresh).then((full) => pricesFrom(full.pricing));
 		asking.catch(() => pricesAsked.delete(card.id));
 		pricesAsked.set(card.id, asking);
 	}
@@ -583,10 +583,81 @@ async function askGraphql(query) {
 	return body.data || {};
 }
 
-// Asks TCGdex (GET, or POST with a body) and returns its answer. A failed question is asked again a
-// couple of times. Throws when there is no answer, marked tooManyLookups when TCGdex says it has
-// been asked too often (429): asking again would only make that last longer.
-async function askTcgdex(url, postBody = null) {
+// Asks TCGdex (GET, or POST with a body) and returns its answer: the one kept on the phone, when it
+// is less than a day old and fresh isn't true. A new answer is kept for next time, unless it
+// reports errors. Throws when there is no answer (see askTcgdexNow).
+async function askTcgdex(url, postBody = null, fresh = false) {
+	const keptAs = await answerAddress(url, postBody);
+	if (keptAs && !fresh) {
+		const kept = await keptAnswer(keptAs);
+		if (kept) return kept;
+	}
+	const answer = await askTcgdexNow(url, postBody);
+	// Written down now, before the caller can change it.
+	if (keptAs && !answer.errors) keepAnswer(keptAs, JSON.stringify(answer));
+	return answer;
+}
+
+// Where an answer is kept: the question's own address - with its body's fingerprint added when it
+// has one, as GraphQL asks everything at the same address. null when the browser can't make
+// fingerprints (only on pages not served over https): the answer then isn't kept.
+async function answerAddress(url, postBody) {
+	if (!postBody) return url;
+	try {
+		const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(postBody)));
+		const fingerprint = [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+		return url + "?question=" + fingerprint;
+	} catch (error) {
+		return null;
+	}
+}
+
+// The answer kept at this address when it is less than a day old, or null.
+async function keptAnswer(address) {
+	try {
+		const kept = await (await caches.open(ANSWERS_CACHE)).match(address);
+		return kept && keptLessThanADay(kept) ? await kept.json() : null;
+	} catch (error) {
+		return null;   // no Cache Storage here (private browsing can block it): ask the internet
+	}
+}
+
+function keptLessThanADay(kept) {
+	return Date.now() - Number(kept.headers.get(KEPT_AT_HEADER)) < ANSWER_KEEP_MS;
+}
+
+let answersTidied = false;   // once per visit (see tidyAnswers)
+
+async function keepAnswer(address, text) {
+	try {
+		const cache = await caches.open(ANSWERS_CACHE);
+		await cache.put(address, new Response(text, { headers: { "Content-Type": "application/json", [KEPT_AT_HEADER]: String(Date.now()) } }));
+		if (!answersTidied) {
+			answersTidied = true;
+			await tidyAnswers(cache);
+		}
+	} catch (error) {
+		// The phone is full, or keeping isn't allowed: the question is asked again next time.
+	}
+}
+
+// Throws away the answers kept more than a day ago, and the oldest when there are more than
+// MOST_ANSWERS. Once per visit is enough: until then they are only added to.
+async function tidyAnswers(cache) {
+	const fresh = [];
+	for (const address of await cache.keys()) {
+		const kept = await cache.match(address);
+		if (kept && keptLessThanADay(kept)) fresh.push({ address: address, keptAt: Number(kept.headers.get(KEPT_AT_HEADER)) });
+		else await cache.delete(address);
+	}
+	fresh.sort((a, b) => b.keptAt - a.keptAt);   // newest first
+	for (const old of fresh.slice(MOST_ANSWERS)) await cache.delete(old.address);
+}
+
+// Asks TCGdex itself. A failed question is asked again a couple of times. Throws when there is no
+// answer, marked tooManyLookups when TCGdex says it has been asked too often (429): asking again
+// would only make that last longer.
+async function askTcgdexNow(url, postBody) {
 	let lastProblem = null;
 	for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
 		try {

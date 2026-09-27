@@ -177,14 +177,19 @@ button where the browser offers it. Installed, it opens full screen, with its ow
 (`manifest.webmanifest`, the icons from `dev_make_icons.py`). A service worker (`sw.js`) keeps the
 app's own files, the text reader, Firebase's files, the fonts and the newest 1,500 card pictures on
 the phone, so the app starts at once and opens without internet; My cards then shows the cards
-saved on the phone, with their pictures. The start page is still asked for from the internet each
+saved on the phone, with their pictures. The card database's answers are kept on the phone for a
+day as well (version 1.43.0, `askTcgdex` in `cards.js`, in a cache of their own): scanning a card
+again, or opening a saved card, asks the database nothing, and a card scanned earlier that day
+opens even without internet. "Update prices" in My cards still asks for today's prices. (A card
+from a set TCGdex adds that day can be missing from a search kept from earlier the same day.) The
+start page is still asked for from the internet each
 time (within 3 seconds, or the copy kept is used), so an update arrives the first time the app
 opens, and the older version's files are thrown away. On an iPhone, the home screen app keeps its
 own saved things, apart from Safari's: My cards and the learned cards start empty there until
 someone signs in, which the app says. Signed-in accounts still need the internet for My cards.
 While developing on this PC (localhost) the service worker is off, because files change there
 without a new version number; `?sw` in the address switches it on to test it, and opening the page
-without `?sw` takes it away again.
+without `?sw` takes it away again (but not the database's answers kept).
 
 What comes next, and why: [ROADMAP.md](ROADMAP.md).
 
@@ -201,7 +206,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `card-finder.js` | Finds where the card is in the photo (yellow border, or shape) |
 | `set-codes.js` | The set codes printed on cards since 2023 ("PAF"), with their sets and sizes |
 | `reader.js` | Photo → name and number |
-| `cards.js` | Searches the card database (TCGdex), and asks for the prices of the cards shown |
+| `cards.js` | Searches the card database (TCGdex), asks for the prices of the cards shown, and keeps its answers for a day |
 | `card-ids.js` | The old database's set ids and TCGdex's, and the 30th Celebration reprints' numbers |
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
 | `collection.js` | "My cards": saved cards, how many of each, total value |

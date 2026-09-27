@@ -133,10 +133,11 @@ function addToCollection(card, version) {
 	return saveCollection();
 }
 
-// Adds their prices to these cards, a few at a time (see withPrices in cards.js).
-async function withPricesOf(cards) {
+// Adds their prices to these cards, a few at a time (see withPrices in cards.js). fresh = true asks
+// the database again, rather than taking the prices kept on the phone.
+async function withPricesOf(cards, fresh = false) {
 	for (let at = 0; at < cards.length; at += PRICE_REQUESTS_AT_ONCE) {
-		await Promise.all(cards.slice(at, at + PRICE_REQUESTS_AT_ONCE).map((card) => withPrices(card)));
+		await Promise.all(cards.slice(at, at + PRICE_REQUESTS_AT_ONCE).map((card) => withPrices(card, fresh)));
 	}
 }
 
@@ -235,11 +236,12 @@ function pricesOf(card, version) {
 	};
 }
 
+// "Update prices": today's prices, even for cards whose prices were kept earlier today.
 async function refreshCollectionPrices() {
 	const ids = [...new Set(collection.map((saved) => saved.id))];   // each card once, even if saved in two versions
 	for (let start = 0; start < ids.length; start += REFRESH_BATCH_SIZE) {
 		const cards = await findCardsById(ids.slice(start, start + REFRESH_BATCH_SIZE));
-		await withPricesOf(cards);
+		await withPricesOf(cards, true);
 		for (const card of cards) {
 			for (const entry of collection.filter((saved) => saved.id === card.id)) {
 				Object.assign(entry, pricesOf(card, entry.version));

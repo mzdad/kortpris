@@ -3,7 +3,8 @@
 // Kortpris's service worker: a small script the browser keeps beside the app, which answers the
 // app's requests for files. It keeps the app's own files, the text reader, the fonts and the card
 // pictures on the phone, so the app starts at once and opens without internet (app.js registers
-// it). The card database, the prices and accounts always go to the internet.
+// it). The card database, the prices and accounts go to the internet: the app itself keeps the
+// card database's answers for a day, in a cache of its own (ANSWERS, see askTcgdex in cards.js).
 //
 // How each kind of request is answered:
 // - The start page: from the internet, checked to be the newest, so an update arrives at once -
@@ -16,6 +17,8 @@
 
 const FILES = "kortpris-files";
 const PICTURES = "kortpris-pictures";
+// Kept by the app itself, not by this file - but in the same Cache Storage, so it must be spared.
+const ANSWERS = "kortpris-answers";
 // Card pictures are about 20 KB each, so this is about 30 MB at most.
 const MOST_PICTURES = 1500;
 // The oldest pictures are thrown away after this many new ones, not after every one.
@@ -41,7 +44,7 @@ self.addEventListener("activate", (event) => {
 	event.waitUntil((async () => {
 		// Whatever an older version of this file kept under other names goes.
 		for (const name of await caches.keys()) {
-			if (name !== FILES && name !== PICTURES) await caches.delete(name);
+			if (name !== FILES && name !== PICTURES && name !== ANSWERS) await caches.delete(name);
 		}
 		// The app pages open right now are answered by this file from now on too.
 		await self.clients.claim();
