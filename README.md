@@ -58,7 +58,9 @@ A web page with nothing to install. What happens to a photo:
    value in kroner. It is split into Pokémon, Trainer cards and Energy cards (the database's
    "supertype"; cards saved before 1.25.0 are asked for theirs when My cards opens). A search box
    narrows the list by name, set, number, version or kind ("jungle holo", "pika", "58",
-   "trainer") and says what the cards found are worth together.
+   "trainer") and says what the cards found are worth together. Tapping a card opens its page
+   there - the page the Scan screen shows for a card it found, with the saved version picked -
+   and "Back to My cards" or the phone's own Back (a swipe on an iPhone) returns to the list.
    Without an account it is kept in the phone's browser only.
 
 **The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed

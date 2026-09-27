@@ -14,7 +14,8 @@ const PRICE_REQUESTS_AT_ONCE = 6;
 // Each saved card looks like:
 // { id, version, name, setName, number, image, count, priceEur, updatedAt, priceUsd, kind }
 // version is which print it is, like "reverseHolofoil" (cards saved before versions existed
-// have none). The same card in two versions is two entries, because their prices differ.
+// have none until their page is opened, see nameSavedVersion). The same card in two versions is
+// two entries, because their prices differ.
 // Only what "My cards" shows is kept, so even a big collection fits in the browser's storage.
 // kind is the database's "supertype": "Pokémon", "Trainer" or "Energy" (see CARD_KINDS). Cards
 // saved before version 1.25.0 have none until fillMissingKinds has asked the database.
@@ -198,6 +199,20 @@ function sameCardsTogether(entries) {
 		else together.push(entry);
 	}
 	return together;
+}
+
+// A card saved before versions were kept (the app's first day) has none, and its price is its main
+// version's (see pricesOf). When its page opens, that version is saved with it, so the page shows
+// it as the one saved, and "Add one more" there adds to it. Returns the version.
+function nameSavedVersion(card) {
+	const key = versionOf(card, null).key;
+	const entry = findSaved(card.id, null);
+	if (entry && collectionReady()) {
+		entry.version = key;
+		collection = sameCardsTogether(collection);   // it may be saved in that version already
+		saveCollection();
+	}
+	return key;
 }
 
 // change is +1 or -1. At zero the card leaves the list.

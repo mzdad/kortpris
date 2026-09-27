@@ -5,6 +5,21 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.33.0
+
+- **A saved card opens its page.** You asked to be able to tap a card in My cards and see more
+  about it. Tapping one now opens its page right there: the page the Scan screen shows for a card
+  it found, with the version you saved picked - today's price of each version, the Cardmarket and
+  TCGplayer tables, the PSA prices and "Add one more". "Back to My cards", the My cards button or
+  the phone's own Back (a swipe from the left edge on an iPhone) goes back to the list, scrolled to
+  where it was; the Scan screen keeps its own card meanwhile. Kids mode gets the kids' page, read
+  aloud. Cards saved on the app's first day, before versions were kept, are given the version
+  their price already was when their page first opens, so the page says "You have 1". Also: the
+  bottom of the page now names TCGdex as where the cards and prices come from, not the old
+  database. Tested in the test browser at phone size: open, back (button, tab and browser Back),
+  adding from the page, − and + in the list, kids mode in Danish, a database that doesn't answer
+  (and "Try again"), and a card the database doesn't have.
+
 ## Done in 1.32.1
 
 - **Updates reach the phone at once, and the move to TCGdex brings today's prices.** After 1.32.0
@@ -165,6 +180,7 @@ L = several sessions).
 | 3.3 | **Scan several cards in a row**: after each card, "Save and next" goes straight back to the camera. | Adding a stack of cards to My cards is many taps today. | S |
 | 3.4 | **My cards: sort and filter** (by value, set, name, newest) and share the list. | The list grows long. | M |
 | 3.5 | **Hide the camera details** at the bottom of the page once the camera is proven on your phones. | It was added to find out what iPhones give. | S |
+| 3.6 | **Leave out Cardmarket's "reverse holo" rows for cards never printed that way.** Since 1.32.0 the version boxes do, but the Cardmarket table on a card's page still lists "Reverse holo, 30-day average" for Base Set Charizard and Pikachu. | It looks like a price for a card that doesn't exist, and a saved card's page (1.33.0) shows it more often. | S |
 
 ## 4. Accounts and keeping things
 

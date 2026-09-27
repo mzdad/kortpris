@@ -128,6 +128,10 @@ const collectionList = document.getElementById("collection-list");
 const collectionSearchRow = document.getElementById("collection-search-row");
 const collectionSearch = document.getElementById("collection-search");
 const collectionSearchNote = document.getElementById("collection-search-note");
+const collectionPage = document.getElementById("collection-page");
+const savedCardView = document.getElementById("saved-card-view");
+const savedCardBack = document.getElementById("saved-card-back");
+const savedCardPanel = document.getElementById("saved-card");
 const voiceSettings = document.getElementById("voice-settings");
 const voiceSelects = document.querySelectorAll("[data-voice-language]");
 const learnedSettings = document.getElementById("learned-settings");
@@ -204,6 +208,8 @@ let accountMessage = null;        // { key, values, tone } shown under the accou
 let passwordsShown = false;       // the password boxes show their letters
 let stopWatchingCards = null;     // stops listening for the signed-in account's cards
 let stopWatchingLearned = null;   // stops listening for the signed-in account's learned cards
+let savedPage = null;             // the saved card whose page My cards shows (see openSavedCard), or null
+let listScrolledTo = 0;           // how far down My cards' list was when that page opened
 
 // Each new photo or search gets a number. When an older one finishes late,
 // its answer is thrown away so it can't overwrite the newer one.
@@ -775,10 +781,57 @@ collectionList.addEventListener("click", (event) => {
 	const button = event.target.closest("[data-action]");
 	if (!button || !collectionReady()) return;
 	const version = button.dataset.savedVersion || null;   // older saved cards have no version
+	// The card's picture, name and price open its page; − and + change how many there are.
+	if (button.dataset.action === "open") {
+		openSavedCard(button.dataset.cardId, version);
+		return;
+	}
 	changeSavedCount(button.dataset.cardId, version, button.dataset.action === "more" ? 1 : -1);
 	renderCollection();
 	renderResults();   // the open card's "You have 2" line may have changed
 });
+
+// A saved card's page works like the Scan screen's card page (detail, above), with its own
+// version picked: savedPage.version.
+savedCardPanel.addEventListener("click", (event) => {
+	const page = savedPage;
+	if (!page) return;
+	if (event.target.closest("[data-action='retry']")) {
+		fetchSavedCard(page);
+		return;
+	}
+	const card = page.card;
+	if (!card) return;
+	const versionButton = event.target.closest("[data-version]");
+	if (versionButton) {
+		page.version = versionButton.dataset.version;
+		renderSavedCardPage();
+		if (kidsMode) sayCard(card, page.version);
+		return;
+	}
+	if (event.target.closest("[data-action='read-aloud']")) {
+		sayCard(card, page.version);
+		return;
+	}
+	if (!event.target.closest("[data-action='add-to-collection']") || !collectionReady()) return;
+	saveFailed = !addToCollection(card, versionOf(card, page.version).key);
+	renderCollection();   // the list, and this page's "You have 3" line
+	renderResults();      // the Scan screen may show the same card
+	if (kidsMode && !saveFailed) say(t("saySaved"));
+});
+savedCardPanel.addEventListener("change", (event) => {
+	if (!event.target.matches("[data-action='fetch-psa']")) return;
+	setFetchPsaPrices(event.target.checked);
+	renderSavedCardPage();
+});
+
+savedCardBack.addEventListener("click", backToList);
+// Opening a saved card's page adds a step to the browser's history (see openSavedCard), so the
+// phone's own Back - a swipe from the left edge on an iPhone - closes the page, as in an app,
+// instead of leaving Kortpris.
+window.addEventListener("popstate", backToList);
+// The app puts the list back where it was itself; the browser mustn't scroll as well.
+history.scrollRestoration = "manual";
 
 collectionSummary.addEventListener("click", async (event) => {
 	if (event.target.closest("[data-action='read-aloud']")) {
@@ -1204,13 +1257,17 @@ function scrollToDetail() {
 	detail.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
 }
 
-function cardDetailHtml(card) {
+// pickedKey: the version picked on the page (see versionOf). onScanScreen: false for a saved card's
+// page in My cards, where no photo picked the version and there is no search to fix.
+function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanScreen = true) {
 	const meta = [escapeHtml(card.set.name), `<span class="mono">${escapeHtml(collectorNumber(card))}</span>`];
 	if (card.rarity) meta.push(escapeHtml(card.rarity));
 
 	const versions = cardVersions(card);
-	const version = versionOf(card);
-	const notYours = shownCards.length === 1 ? `<p class="fineprint">${t("notYours")}</p>` : "";
+	const version = versionOf(card, pickedKey);
+	const notYours = onScanScreen && shownCards.length === 1 ? `<p class="fineprint">${t("notYours")}</p>` : "";
+	// The photo picked the reverse holo (see sparkle.js), and the viewer hasn't picked another yet.
+	const fromPhoto = onScanScreen && !chosenVersion && versionHint === "reverseHolofoil";
 
 	const owned = savedCount(card.id, version.key);
 	let ownedNote = "";
@@ -1240,7 +1297,7 @@ function cardDetailHtml(card) {
 				<p class="detail-meta">${meta.join(" · ")}</p>
 			</div>
 		</div>
-		${versionsHtml(versions, version.key, card.pricesFailed)}
+		${versionsHtml(versions, version.key, card.pricesFailed, fromPhoto)}
 		${versions.length === 0 ? `<p>${storeLinkHtml(ebaySoldUrl(card, version), t("soldOnEbay"))}</p>` : ""}
 		${own}
 		${cardmarketTableHtml(card.cardmarket)}
@@ -1316,7 +1373,8 @@ function versionOf(card, pickedKey = chosenVersion || versionHint) {
 }
 
 // pricesFailed: the database didn't answer when the card's prices were asked for.
-function versionsHtml(versions, chosenKey, pricesFailed = false) {
+// fromPhoto: the photo picked the reverse holo, not the viewer (see cardDetailHtml).
+function versionsHtml(versions, chosenKey, pricesFailed = false, fromPhoto = false) {
 	if (versions.length === 0) return `<p class="note">${t(pricesFailed ? "pricesFailed" : "noPrices")}</p>`;
 	const choosing = versions.length > 1;
 	const tiles = versions.map((version) => {
@@ -1345,8 +1403,8 @@ function versionsHtml(versions, chosenKey, pricesFailed = false) {
 	});
 	const question = choosing ? `<p class="versions-question">${t("whichVersion")}</p>` : "";
 	// Say so when the photo picked the reverse holo (see sparkle.js), so a wrong guess is noticed.
-	const fromPhoto = choosing && !chosenVersion && versionHint === "reverseHolofoil" && chosenKey === "reverseHolofoil";
-	const hint = choosing ? `<p class="hint">${t(fromPhoto ? "versionFromPhoto" : "versionHint")}</p>` : "";
+	const byPhoto = choosing && fromPhoto && chosenKey === "reverseHolofoil";
+	const hint = choosing ? `<p class="hint">${t(byPhoto ? "versionFromPhoto" : "versionHint")}</p>` : "";
 	return `<div class="versions-block">${question}<div class="versions">${tiles.join("")}</div>${hint}</div>`;
 }
 
@@ -1445,7 +1503,7 @@ function gradedPricesHtml(card) {
 	if (!gradedPricesAvailable()) return "";
 	// The tick box that switches fetching on and off (see fetchPsaPrices in graded.js), and how
 	// many cards can still be looked up today. Either arriving draws the open card again.
-	const allowance = psaAllowanceNow(() => renderResults());
+	const allowance = psaAllowanceNow(renderCardPages);
 	let left = "";
 	if (allowance) {
 		const values = { count: allowance.cardsLeft, time: clockTime(psaRefillTime()) };
@@ -1457,7 +1515,7 @@ function gradedPricesHtml(card) {
 			${t("gradedFetchToggle")}
 		</label>
 		${left}`;
-	const known = gradedPricesOf(card, () => renderResults());
+	const known = gradedPricesOf(card, renderCardPages);
 	if (known.state === "off") return toggle + `<p class="note">${t("gradedOff")}</p>`;
 	if (known.state === "usedUp") return toggle + `<p class="note">${t("gradedUsedUp", { time: clockTime(psaRefillTime()) })}</p>`;
 	if (known.state === "loading") return toggle + `<p class="note">${t("gradedLoading")}</p>`;
@@ -1530,9 +1588,10 @@ function storeLinkHtml(url, text) {
 // For children who can't read well yet: the card's picture and name, a row of Poké Balls for how
 // valuable it is, one rounded price and big buttons - and the phone says it out loud.
 
-function kidCardDetailHtml(card) {
+// pickedKey: the version picked on the page (see versionOf).
+function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint) {
 	const versions = cardVersions(card);
-	const version = versionOf(card);
+	const version = versionOf(card, pickedKey);
 	const owned = savedCount(card.id, version.key);
 	const ownedNote = owned > 0 ? `<p class="own-note">${t("kidHave", { count: owned })}</p>` : "";
 	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
@@ -1611,7 +1670,8 @@ function ballsHtml(count) {
 		balls.push(place <= count ? ballPictureHtml(kind) : `<span class="ball empty"></span>`);
 	}
 	const label = t("balls", { count: count, ball: t("ball_" + kind) });
-	return `<div class="balls" role="img" aria-label="${label}">${balls.join("")}</div>`;
+	// A span, not a div: in My cards the balls are inside a button (see savedCardHtml).
+	return `<span class="balls" role="img" aria-label="${label}">${balls.join("")}</span>`;
 }
 
 function ballPictureHtml(kind) {
@@ -1716,14 +1776,15 @@ function stopSpeaking() {
 	if (canSpeak()) speechSynthesis.cancel();
 }
 
-function sayCard(card) {
-	if (card) say(cardSentence(card));
+// pickedKey: the version picked on the card's page (see versionOf).
+function sayCard(card, pickedKey = chosenVersion || versionHint) {
+	if (card) say(cardSentence(card, pickedKey));
 }
 
-function cardSentence(card) {
+function cardSentence(card, pickedKey) {
 	// "Pikachu, Reverse holo. It's worth about 1500 kroner." The version is only named when the
 	// card comes in more than one.
-	const version = versionOf(card);
+	const version = versionOf(card, pickedKey);
 	const local = localPrice(version.eur, version.usd);
 	if (local === null) return t("sayNoPrice", { name: card.name });
 	const values = { name: card.name, version: t(version.key), price: spokenMoney(local) };
@@ -1751,17 +1812,21 @@ function sayCollection() {
 // ---------- My cards ----------
 
 function showView(view) {
+	if (view !== "collection") closeSavedCard();
 	scanView.hidden = view !== "scan";
 	collectionView.hidden = view !== "collection";
 	for (const button of viewButtons) button.setAttribute("aria-pressed", String(button.dataset.view === view));
 	if (view === "collection") {
 		renderCollection();
+		// From a saved card's page, "My cards" goes back to the list, as in an app.
+		backToList();
 		// Cards saved before their kind was kept are put in the right group once the database says.
 		fillMissingKinds().then((changed) => { if (changed) renderCollection(); }, (error) => console.error(error));
 	}
 }
 
 function renderCollection() {
+	renderSavedCardPage();   // My cards may be showing a saved card's page instead of the list
 	const totals = collectionTotals();
 	collectionCount.textContent = totals.cards > 0 ? totals.cards : "";
 	collectionWhere.textContent = accountName ? t("savedInAccount", { name: accountName }) : t("savedOnPhone");
@@ -1860,21 +1925,136 @@ function savedCardHtml(entry) {
 	const versionName = entry.version ? " · " + t(entry.version) : "";
 	const balls = ballCount(entry.priceEur, entry.priceUsd);
 	const kidBalls = kidsMode && balls > 0 ? ballsHtml(balls) : "";
+	// The picture, name and price are one button, which opens the card's page (see openSavedCard).
 	return `
-		<li class="saved-card">
-			<img class="card-image" src="${escapeHtml(readablePictureUrl(entry.image))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
-			<div class="saved-info">
-				<span class="saved-name">${escapeHtml(entry.name)}</span>
-				${kidBalls}
-				<span class="saved-meta">${escapeHtml(entry.setName)} · <span class="mono">${escapeHtml(entry.number)}</span>${versionName}</span>
-				<span class="saved-price">${t("each", { price: each })}${lineTotal}</span>
-			</div>
+		<li class="saved-card opens">
+			<button type="button" class="saved-open" data-action="open" data-card-id="${id}" data-saved-version="${version}">
+				<img class="card-image" src="${escapeHtml(readablePictureUrl(entry.image))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
+				<span class="saved-info">
+					<span class="saved-name">${escapeHtml(entry.name)}</span>
+					${kidBalls}
+					<span class="saved-meta">${escapeHtml(entry.setName)} · <span class="mono">${escapeHtml(entry.number)}</span>${versionName}</span>
+					<span class="saved-price">${t("each", { price: each })}${lineTotal}</span>
+				</span>
+			</button>
 			<div class="stepper">
 				<button type="button" data-action="fewer" data-card-id="${id}" data-saved-version="${version}" aria-label="${t("oneFewer")}">−</button>
 				<span class="stepper-count">${entry.count}</span>
 				<button type="button" data-action="more" data-card-id="${id}" data-saved-version="${version}" aria-label="${t("oneMore")}">+</button>
 			</div>
 		</li>`;
+}
+
+// ---------- A saved card's page ----------
+// Tapping a card in My cards opens its page there: the page the Scan screen shows for a card it
+// found, with the saved version picked. Whatever the Scan screen shows stays as it was.
+
+// version: the saved card's version, or null for a card saved before versions were kept.
+async function openSavedCard(cardId, version) {
+	const entry = findSaved(cardId, version);
+	if (!entry) return;
+	listScrolledTo = window.scrollY;
+	savedPage = { entry: entry, card: null, version: version, problem: null };
+	collectionPage.hidden = true;
+	savedCardView.hidden = false;
+	// A step in the browser's history, for the phone's own Back to take away again (see popstate).
+	history.pushState({ savedCard: true }, "");
+	window.scrollTo(0, 0);
+	savedCardBack.focus({ preventScroll: true });
+	await fetchSavedCard(savedPage);
+}
+
+// The page shows the saved picture and name at once, and the rest when the database has sent the
+// card and its prices. page.problem says why they didn't come: a text key, or null.
+async function fetchSavedCard(page) {
+	page.problem = null;
+	renderSavedCardPage();
+	try {
+		const [card] = await findCardsById([page.entry.id]);
+		if (card) {
+			await withPrices(card);
+			page.card = card;
+		} else {
+			// A card saved before 1.32.0 that TCGdex doesn't have (see moveSavedCardsToTcgdex).
+			page.problem = "savedCardMissing";
+		}
+	} catch (error) {
+		console.error(error);
+		// Asked too often today from this internet connection (see askOnce in cards.js).
+		page.problem = error.tooManyLookups ? "apiTooMany" : "savedCardFailed";
+	}
+	if (page !== savedPage) return;   // closed meanwhile, or another card's page opened
+	if (page.card && page.version === null) page.version = nameSavedVersion(page.card);
+	renderCollection();   // the page - and the list behind it, which may name that version now
+	if (page.card && kidsMode) sayCard(page.card, page.version);
+}
+
+function renderSavedCardPage() {
+	const page = savedPage;
+	if (!page) return;
+	if (!page.card) savedCardPanel.innerHTML = savedCardWaitingHtml(page.entry, page.problem);
+	else if (kidsMode) savedCardPanel.innerHTML = kidCardDetailHtml(page.card, page.version);
+	else savedCardPanel.innerHTML = cardDetailHtml(page.card, page.version, false);
+}
+
+// Until the card arrives, or when it can't: the saved picture, name and number, and why.
+function savedCardWaitingHtml(entry, problem) {
+	const picture = escapeHtml(readablePictureUrl(entry.image));
+	const name = escapeHtml(entry.name);
+	let message = `<p class="note">${t("savedCardLoading")}</p>`;
+	if (problem) message = `<p class="status error">${t(problem)}</p>`;
+	// Trying again helps when the database didn't answer, not when it hasn't got the card.
+	if (problem && problem !== "savedCardMissing") {
+		message += `<button type="button" class="button secondary" data-action="retry">${t("tryAgain")}</button>`;
+	}
+	if (kidsMode) {
+		return `
+			<div class="kid-card">
+				<img class="card-image kid-card-image" src="${picture}" alt="${name}" crossorigin="anonymous" width="245" height="342">
+				<h2 class="detail-name">${name}</h2>
+				${message}
+			</div>`;
+	}
+	return `
+		<div class="detail-head">
+			<img class="card-image" src="${picture}" alt="${name}" crossorigin="anonymous" width="245" height="342">
+			<div>
+				<h2 class="detail-name">${name}</h2>
+				<p class="detail-meta">${escapeHtml(entry.setName)} · <span class="mono">${escapeHtml(entry.number)}</span></p>
+			</div>
+		</div>
+		${message}`;
+}
+
+// Closes a saved card's page, if one is open, and shows the list again. Returns true when one was.
+function closeSavedCard() {
+	if (!savedPage) return false;
+	savedPage = null;
+	savedCardView.hidden = true;
+	savedCardPanel.innerHTML = "";
+	collectionPage.hidden = false;
+	// The step the page added to the browser's history goes too, so Back doesn't stop there later.
+	if (history.state && history.state.savedCard) history.back();
+	return true;
+}
+
+// Back from a saved card's page to the list, where it was scrolled to: by the page's own Back
+// button, the phone's Back, or the "My cards" button.
+function backToList() {
+	const page = savedPage;
+	if (!closeSavedCard()) return;
+	window.scrollTo(0, listScrolledTo);
+	// Someone using a keyboard carries on from the card they opened.
+	const opened = [...collectionList.querySelectorAll("[data-action='open']")]
+		.find((button) => button.dataset.cardId === page.entry.id);
+	if (opened) opened.focus({ preventScroll: true });
+}
+
+// Both card pages - the Scan screen's and a saved card's - drawn again, for news that may concern
+// either, like PSA prices arriving (see gradedPricesHtml).
+function renderCardPages() {
+	renderResults();
+	renderSavedCardPage();
 }
 
 // A phone may keep the start page for up to ten minutes (GitHub Pages), and then opens the version
