@@ -5,6 +5,22 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.41.2
+
+You picked 2.2 and 3.5 after the graded prices.
+
+- **2.2 The text reader starts when the app opens**, a second after the page has loaded, not at
+  the first photo (`startReaderEarly`). It needs about 7 MB (3.9 MB program, 2.9 MB English), kept on
+  the phone after the first time, and a moment to start on every visit; the first scan used to wait
+  for whatever of that the finding of the card didn't cover. Now it's ready while you point the
+  camera. It starts even when Claude reads the cards, as it takes over whenever Claude can't.
+  Tested in the test browser: started 1.1 seconds after opening, and the example card read as
+  before.
+- **3.5 The camera details are hidden.** The line at the bottom that said what the camera gave
+  ("camera 2160×3840 (live picture) · soft (0.08), sharpened") now shows only the version. To see
+  the details again, open the app in the browser with `?camera` at the end of the address:
+  https://mzdad.github.io/kortpris/?camera
+
 ## Done in 1.41.1
 
 - **The links are in a menu too.** With "Fetch PSA prices automatically" unticked, the card page
@@ -347,18 +363,11 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 
 | | What | Why | Size |
 |---|---|---|---|
-| 2.2 | **Start the text reader when the page opens**, not at the first photo. | The first scan of a visit waits for a few megabytes to download. | S |
 | 2.3 | **Remember database answers for a day** on the phone. | Scanning a card twice, or opening My cards, would not ask again. Worth less since 1.32.0: TCGdex answers in about 0.2 seconds and seldom fails. | S |
 | 2.4 | **Read the number first, the name only when needed.** | Name and number are read one after the other. A clear number alone finds the card. | M |
 | 2.5 | **Compare fewer pictures**: when only the name is known, the app compares the photo with up to 250 cards' pictures. Using the set size read, or learned cards, narrows that down. | The slowest searches are these. | M |
 | 2.6 | **A paid card database (Scrydex)**, from the makers of pokemontcg.io. | Graded prices and picture recognition built in. Costs money (from $29 a month, September 2026): your decision. Since 1.32.0 the free TCGdex (5.1) is quick, reliable and up to date. | M |
 | 2.8 | **Prices by condition** for ungraded cards: "What condition is your card in?" (Near Mint, Lightly Played, Moderately Played, Heavily Played, Damaged) changes the price. | The prices shown are for cards in top condition, and a worn card sells for much less. Checked 27 September 2026: PokemonPriceTracker's free plan (the PSA relay's source) gives only each version's Near Mint price, the same as TCGdex's TCGplayer price. The other conditions look like a paid plan: your decision. Its eBay "ungraded" sales can't stand in: for a $2 Mewtwo they said $22, with other cards' sales mixed in. | M |
-
-## 3. Smoother
-
-| | What | Why | Size |
-|---|---|---|---|
-| 3.5 | **Hide the camera details** at the bottom of the page once the camera is proven on your phones. | It was added to find out what iPhones give. | S |
 
 ## 4. Accounts and keeping things
 

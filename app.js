@@ -7,6 +7,12 @@
 const APP_VERSION = new URL(document.currentScript.src).searchParams.get("v") || "dev";
 // Prices older than this get an "out of date" label.
 const STALE_AFTER_DAYS = 14;
+// How long after the page has loaded the text reader starts (see startReaderEarly): long enough
+// for the page's own start to finish first, short enough to be ready before the first photo.
+const READER_START_DELAY_MS = 1000;
+// The camera's details (photo size, sharpness) at the bottom of the page, only with ?camera in the
+// address: they were shown to everyone to find out what iPhones give, which is known now (1.41.2).
+const SHOWS_CAMERA_DETAILS = new URLSearchParams(location.search).has("camera");
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EXAMPLE_CARD_IMAGE = "https://assets.tcgdex.net/en/base/base1/4/high.png";
 // Where the phone remembers the chosen language between visits.
@@ -372,8 +378,8 @@ function applyLanguage() {
 function renderFooter() {
 	appVersionText.textContent = t("appVersion", { version: APP_VERSION });
 	// How big the last photo from the app's camera was, and which kind: it helps find out why a
-	// phone's photos read badly.
-	if (lastCameraPhoto) {
+	// phone's photos read badly (see SHOWS_CAMERA_DETAILS).
+	if (lastCameraPhoto && SHOWS_CAMERA_DETAILS) {
 		appVersionText.textContent += " · " + t("cameraPhotoSize", {
 			size: lastCameraPhoto.width + "×" + lastCameraPhoto.height,
 			source: t(lastCameraPhoto.source === "photo" ? "cameraSourcePhoto" : "cameraSourceVideo"),
@@ -979,6 +985,15 @@ function takeFileFrom(input) {
 }
 
 // ---------- Step 1: read the photo ----------
+
+// The text reader starts a moment after the app opens, not at the first photo: it downloads about
+// 7 MB the first time (kept on the phone after that) and takes a moment to get going on every
+// visit, which the first scan would otherwise wait for. It is started even when Claude reads the
+// cards, as it takes over whenever Claude can't.
+function startReaderEarly() {
+	setTimeout(getOcrWorker, READER_START_DELAY_MS);
+}
+window.addEventListener("load", startReaderEarly);
 
 // frame: where the white frame was, for a photo from the app's own camera (see readCardPhoto).
 async function scanPhoto(imageFile, frame = null) {

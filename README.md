@@ -8,7 +8,8 @@ A web page with nothing to install. What happens to a photo:
 
 1. **Photo → text.** [Tesseract.js](https://github.com/naptha/tesseract.js) reads the
    card's name and collector number (like `4/102`, or a promo's code like `SWSH193` or
-   `SVP EN 001`) on the phone itself. Numbers of a set within a set, like `GG01/GG70` (Galarian
+   `SVP EN 001`) on the phone itself. It starts a second after the app opens (`startReaderEarly`),
+   so its download (about 7 MB, once) and start don't hold up the first scan. Numbers of a set within a set, like `GG01/GG70` (Galarian
    Gallery) or `TG05/TG30` (Trainer Gallery), are recognised by the set size after the "/", as
    their tiny letters are often misread as digits: "6Go1/6670" is GG01 (`LETTERED_SETS` in
    `reader.js`). The name is checked against all 1025 Pokémon names and every Trainer and Energy
@@ -105,9 +106,10 @@ the camera's real picture (the screen shows the whole of it), the sharpest of si
 0.6 s after the press is kept (pressing shakes the phone), and a picture that measures soft
 (`softnessOf`) is sharpened, by an amount scaled to its size. Sharp pictures are left alone:
 sharpening them made numbers read worse. On 10 old cards, sharp and slightly soft pictures (4K and
-1080p) read 9 or 10 numbers, as many as the phone's own photos. The bottom of the page then says
-what the camera gave ("camera 2160×3840 (live picture) · soft (0.18), sharpened"), to find out
-what a phone does. "Use the phone's own camera" at the bottom opens the old camera screen, and so does
+1080p) read 9 or 10 numbers, as many as the phone's own photos. With `?camera` in the address,
+the bottom of the page then says what the camera gave ("camera 2160×3840 (live picture) · soft
+(0.18), sharpened"), to find out what a phone does (`SHOWS_CAMERA_DETAILS`; shown to everyone
+until 1.41.2). "Use the phone's own camera" at the bottom opens the old camera screen, and so does
 the button when the page can't have a live camera.
 
 **Learning.** When the app can't tell which card a photo shows (or opens the wrong one) and the
