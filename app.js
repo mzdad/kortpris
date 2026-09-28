@@ -1804,7 +1804,7 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 			</div>
 		</div>
 		${versionsHtml(versions, version.key, card.pricesFailed, fromPhoto)}
-		${versions.length === 0 ? `<p>${storeLinkHtml(ebaySoldUrl(card, version), t("soldOnEbay"))}</p>` : ""}
+		${versions.length === 0 ? `<p>${storeLinkHtml(priceChartingUrl(card, version, "Ungraded"), t("soldOnPriceCharting"))}</p>` : ""}
 		${own}
 		${cardmarketTableHtml(card)}
 		${tcgplayerTableHtml(card.tcgplayer)}
@@ -2000,8 +2000,8 @@ function tcgplayerTableHtml(tcgplayer) {
 function gradedLinksHtml(card, version) {
 	const known = gradedPricesAvailable() ? gradedPricesOf(card, renderCardPages) : null;
 	// The links are always in a menu, closed at first. With prices shown it is the one under them
-	// (gradedMoreHtml), where every grade links to its own eBay sales; without them, this one links
-	// to the most sold grades' sales. Either way the page shows one line to tap.
+	// (gradedMoreHtml), where every grade links to its own sales on PriceCharting; without them, this
+	// one links to the most sold grades' sales. Either way the page shows one line to tap.
 	const gradesShown = known !== null && known.state === "done" && known.grades.length + known.others.length > 0;
 	return `
 		<div class="source">
@@ -2012,26 +2012,92 @@ function gradedLinksHtml(card, version) {
 		</div>`;
 }
 
-// The grades whose eBay sales the menu links to when no prices are shown: the ones sold most.
-const EBAY_LINKED_GRADES = ["PSA 10", "PSA 9", "PSA 8", "CGC 10", "BGS 9.5"];
+// The grades whose sales the menu links to when no prices are shown: the ones sold most.
+const SALES_LINKED_GRADES = ["PSA 10", "PSA 9", "PSA 8", "CGC 10", "BGS 9.5"];
 
 function gradedLinksMenuHtml(card, version) {
-	const links = EBAY_LINKED_GRADES.map((grade) =>
-		storeLinkHtml(ebaySoldUrl(card, version, grade), t("gradedEbay", { grade: grade })));
+	const links = SALES_LINKED_GRADES.map((grade) =>
+		storeLinkHtml(priceChartingUrl(card, version, grade), t("gradedSalesOn", { grade: grade })));
 	return `
 		<details class="graded-more"${gradedMoreOpen ? " open" : ""}>
 			<summary>${t("gradedLinksMenu")}</summary>
 			<div class="graded-more-body">
 				${links.join("")}
-				${storeLinkHtml(priceChartingUrl(card), t("gradedPriceCharting"))}
+				${storeLinkHtml(priceChartingUrl(card, version), t("gradedPriceCharting"))}
+				<p class="hint">${t("gradedSalesExplain")}</p>
 			</div>
 		</details>`;
 }
 
-function priceChartingUrl(card) {
-	// PriceCharting's search, whose page for the card lists its prices in every grade.
-	return "https://www.pricecharting.com/search-products?type=prices&q="
-		+ encodeURIComponent(card.name + " " + card.set.name + " " + card.number);
+// ---------- Sales on PriceCharting ----------
+// What a card really sold for, grade by grade. eBay shows its sold listings only to people signed
+// in to eBay (since the summer of 2026), and kids can't have an eBay account; PriceCharting lists
+// the same eBay sales for free, without an account.
+
+// A card's page on PriceCharting has a list of sales for each grade, and opens on the one named
+// after "#completed-auctions-" in its address. PSA, CGC, BGS, SGC, TAG and ACE 10s each have their
+// own list; from 9.5 down the companies share one (a PSA 9 and a CGC 9 are in the same list, and
+// each sale's title says which). Other half grades are in the list of the grade below: a CGC 8.5
+// among the 8s.
+const PRICECHARTING_SALES_LISTS = {
+	"Ungraded": "used",
+	"PSA 10": "manual-only",
+	"CGC 10": "grade-seventeen",
+	"BGS 10": "loose-and-box",
+	"SGC 10": "grade-eighteen",
+	"TAG 10": "grade-twenty-one",
+	"ACE 10": "grade-twenty-two",
+	"9.5": "box-only",
+	"9": "graded",
+	"8": "new",
+	"7": "cib",
+	"6": "grade-six",
+	"5": "grade-five",
+	"4": "grade-four",
+	"3": "grade-three",
+	"2": "box-and-manual",
+	"1": "loose-and-manual",
+};
+
+// grade: "PSA 10", "CGC 9.5", "Ungraded"... whose sales the page should open on; without one, it
+// opens at the top, where the card's price in every grade is.
+function priceChartingUrl(card, version = null, grade = "") {
+	// PriceCharting's search for the card. When it finds just this card, PriceCharting opens the
+	// card's page and keeps the part after "#", so the page opens on the grade's sales. When it finds
+	// several - the card's other versions, or cards with the same name and number in other sets - it
+	// lists them, with pictures, to pick from.
+	const words = [card.name, priceChartingSetName(card.set.name), priceChartingNumber(card)];
+	if (version && version.key === "reverseHolofoil") words.push("reverse holo");
+	if (version && version.key.startsWith("firstEdition")) words.push("1st edition");
+	const number = grade.split(" ").pop();
+	const list = PRICECHARTING_SALES_LISTS[grade] || PRICECHARTING_SALES_LISTS[number]
+		|| PRICECHARTING_SALES_LISTS[String(Math.floor(Number(number)))];
+	return "https://www.pricecharting.com/search-products?type=prices&q=" + encodeURIComponent(words.join(" "))
+		+ (list ? "#completed-auctions-" + list : "");
+}
+
+// Sets PriceCharting names differently from the card database.
+const PRICECHARTING_SET_NAMES = {
+	"Expedition Base Set": "Expedition",
+	"30th Classic Collection": "30th Celebration",
+	"Celebrations Classic Collection": "Celebrations",
+};
+
+function priceChartingSetName(name) {
+	// PriceCharting keeps all promos in one set, "Promo", and a set's galleries and shiny vaults with
+	// the set itself. Words it doesn't have make its search list other cards first: "SWSH Black Star
+	// Promos" put dozens of other SWSH promos before the one asked for.
+	if (PRICECHARTING_SET_NAMES[name]) return PRICECHARTING_SET_NAMES[name];
+	if (/promo/i.test(name)) return "Promo";
+	return name.replace(/ (Galarian Gallery|Trainer Gallery|Shiny Vault)$/, "").replace("McDonald's Collection", "McDonalds");
+}
+
+function priceChartingNumber(card) {
+	// The number as printed on the card, which is how PriceCharting names cards. The database writes
+	// the e-Card holos' "H1" as "H01", and two Black & White promos' "BW004" as "BW04".
+	if (/^H0\d$/.test(card.number)) return "H" + card.number.slice(2);
+	if (card.set.id === "bwp" && /^BW0[45]$/.test(card.number)) return "BW00" + card.number.slice(3);
+	return card.number;
 }
 
 // known: the card's graded prices as far as they are known (gradedPricesOf in graded.js).
@@ -2094,7 +2160,7 @@ const GRADED_SURE_TEXT = { high: "gradedSureHigh", medium: "gradedSureMedium", l
 
 function gradedMoreHtml(card, version, known) {
 	// Every grade of every company, PSA first: its price with how many sales and how sure, the day
-	// of its last sale, and a link to its sales on eBay, where the real sales can be seen.
+	// of its last sale, and a link to its sales on PriceCharting, where the real sales can be seen.
 	const entries = [...known.grades.map((entry) => ({ company: "PSA", ...entry })), ...known.others];
 	const rows = entries.map((entry) => {
 		const name = entry.company + " " + entry.grade;
@@ -2106,9 +2172,9 @@ function gradedMoreHtml(card, version, known) {
 		}
 		if (GRADED_SURE_TEXT[entry.sure]) facts.push(t(GRADED_SURE_TEXT[entry.sure]));
 		const factsHtml = facts.map((fact) => `<span class="graded-facts">${fact}</span>`).join("");
-		const ebay = `<a class="store-link" href="${escapeHtml(ebaySoldUrl(card, version, name))}" target="_blank" rel="noopener"`
-			+ ` aria-label="${escapeHtml(t("gradedEbay", { grade: name }))}">${t("gradedEbayLink")} ↗</a>`;
-		return `<tr><td>${escapeHtml(name)}</td><td>${shown}${factsHtml}</td><td>${saleDay(entry.lastSale)}</td><td>${ebay}</td></tr>`;
+		const sales = `<a class="store-link" href="${escapeHtml(priceChartingUrl(card, version, name))}" target="_blank" rel="noopener"`
+			+ ` aria-label="${escapeHtml(t("gradedSalesOn", { grade: name }))}">${t("gradedSalesLink")} ↗</a>`;
+		return `<tr><td>${escapeHtml(name)}</td><td>${shown}${factsHtml}</td><td>${saleDay(entry.lastSale)}</td><td>${sales}</td></tr>`;
 	});
 	const others = known.others.length > 0 ? `<p class="hint">${t("gradedOthersExplain")}</p>` : "";
 	return `
@@ -2116,12 +2182,13 @@ function gradedMoreHtml(card, version, known) {
 			<summary>${t("gradedMore")}</summary>
 			<div class="graded-more-body">
 				<table class="price-table graded-more-table">
-					<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedPrice")}</th><th>${t("gradedLastSale")}</th><th>${t("gradedEbayColumn")}</th></tr></thead>
+					<thead><tr><th>${t("gradedGrade")}</th><th>${t("gradedPrice")}</th><th>${t("gradedLastSale")}</th><th>${t("gradedSalesColumn")}</th></tr></thead>
 					<tbody>${rows.join("")}</tbody>
 				</table>
 				<p class="hint">${t("gradedSureExplain")}</p>
+				<p class="hint">${t("gradedSalesExplain")}</p>
 				${others}
-				${storeLinkHtml(priceChartingUrl(card), t("gradedPriceCharting"))}
+				${storeLinkHtml(priceChartingUrl(card, version), t("gradedPriceCharting"))}
 			</div>
 		</details>`;
 }
@@ -2140,19 +2207,6 @@ function saleDay(day) {
 function clockTime(date) {
 	// "02.00" in Danish, "02:00" in English: the time of day on this phone's clock.
 	return new Intl.DateTimeFormat(money.locale, { hour: "2-digit", minute: "2-digit" }).format(date);
-}
-
-function ebaySoldUrl(card, version, grade = "") {
-	// eBay's finished sales of this card: what people really paid. For a reprint, the number is
-	// left out - the database has only half of it ("69" of "69/132"), which titles never show
-	// alone - and so is anything after a colon in the set's name, which sellers skip.
-	const words = isAnniversaryReprint(card)
-		? ["Pokemon", card.name, card.set.name.split(":")[0]]
-		: ["Pokemon", card.name, collectorNumber(card), card.set.name];
-	if (version.key === "reverseHolofoil") words.push("reverse holo");
-	if (version.key.startsWith("firstEdition")) words.push("1st edition");
-	if (grade) words.push(grade);
-	return "https://www.ebay.com/sch/i.html?LH_Sold=1&LH_Complete=1&_nkw=" + encodeURIComponent(words.join(" "));
 }
 
 function formatDollars(value) {

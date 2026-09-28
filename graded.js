@@ -7,7 +7,8 @@
 // service knows a card by its TCGplayer product number, which comes with the card's prices
 // (card.tcgplayer.productId, see withPrices in cards.js).
 
-// Where the relay is online. Empty = no relay: the card page then only links to eBay.
+// Where the relay is online. Empty = no relay: the card page then only links to the sales on
+// PriceCharting.
 const PSA_RELAY_URL = "https://kortpris-psa.kortpris.workers.dev/";
 // Each card's answer is also kept on this phone for a day: the prices change once a day, and
 // the free price service allows about 50 cards a day in all (see also fetchPsaPrices below).

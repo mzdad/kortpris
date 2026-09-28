@@ -5,6 +5,28 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.54.0
+
+- **PSA sales without an eBay account** (you asked: "Is there a way we can in a free get around the
+  account creating for checking the psa prices on ebay?. I dont want my kids to have a Ebay account
+  just yet", then "Yes swich them"). Since the summer of 2026, eBay shows its sold listings only to
+  people signed in to eBay, so the app's sales links ended on eBay's sign-in page. They now go to
+  PriceCharting, which lists the same eBay sales - the day, the listing's title and the price - for
+  free and without an account. The PSA price table itself is unchanged: it never needed an account.
+  - Each grade's "See" link opens the card's sales in that grade. When PriceCharting knows only that
+    one card, it opens straight on the list; when it knows several versions (for example a normal
+    card, a Prize Pack one and a Jumbo), it lists them to pick from first.
+  - From 9.5 down, PriceCharting keeps the companies in one list (PSA 9 and CGC 9 together), and each
+    sale's title says which; a half grade like CGC 8.5 is among the 8s.
+  - PriceCharting names some sets its own way, so the app asks for them that way: every promo is
+    "Promo", galleries and shiny vaults belong to their set, and Expedition, the anniversary sets and
+    McDonald's cards have PriceCharting's names.
+  - The menu under the PSA table is now called "Last sales and other companies"; without prices it
+    is "See sales on PriceCharting".
+  - Tried on 104 cards - the 40 cards in your photos, 27 full-arts, 27 special numbers and 10 more:
+    61 open straight on the card's sales, 36 show the card first in a short list, and 7 second or
+    third. With the database's own set names, 16 had been 4th to 33rd in the list.
+
 ## Done in 1.53.0
 
 - **The whole code checked, and 8 mistakes fixed** (you asked: "Check the code from start to end for
