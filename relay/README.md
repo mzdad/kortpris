@@ -54,4 +54,6 @@ When the credits are used up, the relay answers 429.
 ## Changing it
 
 Edit `psa-prices.js`, then `npx wrangler deploy` again. `npx wrangler tail` shows its log live.
-`?card=<id>&raw=1` returns the price service's own answer, to check what it sends.
+`?card=<id>&raw=1` returns the price service's own answer, to check what it sends. Every question
+needs the app's address as its Origin, as in the curl above: since app version 1.53.0 one without
+it is refused (403), so other web pages can't spend the day's credits through a picture or script.

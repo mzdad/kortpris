@@ -46,7 +46,12 @@ function psaAllowanceNow(onReady) {
 				noteAllowance(answer);
 				onReady();
 			})
-			.catch((problem) => console.error(problem));   // no count shown; the prices still work
+			.catch((problem) => {
+				// No count shown; the prices still work. Asked again the next time a card page is drawn, a
+				// minute from now at the soonest (until 1.53.0, not again until the app was opened again).
+				console.error(problem);
+				setTimeout(() => { psaAllowanceAsked = false; }, GRADED_RETRY_MS);
+			});
 	}
 	return psaAllowance;
 }

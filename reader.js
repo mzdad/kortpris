@@ -245,6 +245,18 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 	reportProgress = onProgress;
 	onProgress("starting", null);
 	const seen = look || await lookAtPhoto(imageFile, frame);
+	try {
+		return await readSeenPhoto(seen, stillWanted, onSureNumber);
+	} catch (error) {
+		// Whatever went wrong - a canvas the phone refused, say - the full-size photo is let go of: it takes a
+		// lot of memory, which the next photo needs. (Letting go of it twice is harmless.)
+		seen.original.close();
+		throw error;
+	}
+}
+
+// The reading itself, of a photo looked at already (see readCardPhoto).
+async function readSeenPhoto(seen, stillWanted, onSureNumber) {
 	const { original, photo, framed, doubtfulBox } = seen;
 	let cardBox = seen.cardBox;
 	const worker = await getOcrWorker();
@@ -771,13 +783,25 @@ function matchPokemonName(text) {
 		const mistakes = countMistakes(read, pokemon.key);
 		if (mistakes === null) continue;
 		if (!best || mistakes < best.mistakes) {
-			best = { name: pokemon.name, mistakes: mistakes };
+			best = { name: pokemon.name, key: pokemon.key, mistakes: mistakes };
 			tied = false;
+		} else if (mistakes === best.mistakes && pokemon.key === best.key) {
+			// Names with the very same letters ("Nidoran♀" and "Nidoran♂", "Porygon" and "Porygon2") aren't a
+			// tie: the letters read fit both, and so does the start they share, "Nidoran" - which the search
+			// finds them both by. (Until version 1.53.0 they counted as one, and neither name was ever known.)
+			best.name = sharedStart(best.name, pokemon.name);
 		} else if (mistakes === best.mistakes) {
 			tied = true;
 		}
 	}
-	return best && !tied ? best : null;
+	return best && !tied ? { name: best.name, mistakes: best.mistakes } : null;
+}
+
+function sharedStart(a, b) {
+	// The start two texts have in common: "Nidoran" of "Nidoran♀" and "Nidoran♂".
+	let end = 0;
+	while (end < a.length && end < b.length && a[end] === b[end]) end++;
+	return a.slice(0, end);
 }
 
 function countMistakes(read, name) {

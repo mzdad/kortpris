@@ -114,7 +114,10 @@ async function takeLivePhoto(camera, video) {
 			// screen: a photo turned on its side would hide the card's text from the reader.
 			const bigger = width * height > steadiest.width * steadiest.height;
 			const sameWayUp = (width > height) === (steadiest.width > steadiest.height);
-			if (bigger && sameWayUp) return { file: photo, source: "photo", width: width, height: height, photoNote: null };
+			if (bigger && sameWayUp) {
+				freeCanvas(steadiest);   // the live picture isn't needed: its memory goes back at once (see freeCanvas)
+				return { file: photo, source: "photo", width: width, height: height, photoNote: null };
+			}
 			photoNote = { key: sameWayUp ? "cameraPhotoSmall" : "cameraPhotoSideways", values: { size: width + "×" + height } };
 		} catch (error) {
 			console.error(error);   // the live picture will do

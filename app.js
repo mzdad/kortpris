@@ -1163,8 +1163,8 @@ collectionSummary.addEventListener("click", async (event) => {
 	refreshMessage = null;
 	renderCollection();
 	try {
-		await refreshCollectionPrices();
-		refreshMessage = "pricesUpdated";
+		// Another list shown meanwhile (a kid's, or after signing in or out): nothing to report about it.
+		refreshMessage = (await refreshCollectionPrices()) ? "pricesUpdated" : null;
 	} catch (error) {
 		console.error(error);
 		// Asked too often today from this internet connection (see askOnce in cards.js).

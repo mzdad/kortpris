@@ -28,7 +28,12 @@ const PRICE_API = "https://www.pokemonpricetracker.com/api/v2/cards";
 // pokemontcg.io forwards this address to the card's page on TCGplayer, whose product number
 // is how pokemonpricetracker.com knows the card.
 const TCGPLAYER_LINK = "https://prices.pokemontcg.io/tcgplayer/";
-// Only the app may use this relay, so strangers can't use up the day's credits from a web page.
+// Only the app may use this relay, so strangers can't use up the day's credits from a web page. A page
+// that asks another site, as the app asks this one, is always named by the browser (the Origin header);
+// a request without that name - from a picture or script tag on some other page, which browsers send
+// without one - is refused as well (since app version 1.53.0; before, it was answered). A program
+// outside a browser can still pretend to be the app: that can't be stopped without a password, which a
+// public web page can't keep.
 const ALLOWED_ORIGINS = ["https://mzdad.github.io", "http://localhost:8765"];
 const REMEMBER_SECONDS = 24 * 60 * 60;
 // Card ids look like "base6-86", "swsh7-215" or "me55c-106m"; TCGplayer's product numbers are digits.
@@ -53,7 +58,7 @@ export default {
 		const origin = request.headers.get("Origin") || "";
 		const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
 		if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(allowOrigin) });
-		if (origin && !ALLOWED_ORIGINS.includes(origin)) return reply({ error: "not allowed" }, 403, allowOrigin);
+		if (!ALLOWED_ORIGINS.includes(origin)) return reply({ error: "not allowed" }, 403, allowOrigin);
 
 		const url = new URL(request.url);
 		if (url.searchParams.get("credits") === "1") return reply(await allowance(env), 200, allowOrigin);

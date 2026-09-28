@@ -127,7 +127,7 @@ async function learnCard(card, photo, textArea, cardBox, photoKey) {
 	learned.push({
 		cardId: card.id,
 		name: card.name,
-		number: card.number + "/" + card.set.printedTotal,
+		number: collectorNumber(card),   // (an anniversary reprint has no set size: "69", not "69/null")
 		setName: card.set.name,
 		image: card.images ? card.images.small : null,
 		thumbnail: packThumbnail(seen.grid),

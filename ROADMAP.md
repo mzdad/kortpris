@@ -5,6 +5,36 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.53.0
+
+- **The whole code checked, and 8 mistakes fixed** (you asked: "Check the code from start to end for
+  errors", then "fix them please"). Every file was read, and the texts in both languages, the syntax
+  of every file and the Claude settings were checked by machine too: those were all right.
+  - **"Update prices" could erase a list of cards.** Picking a kid's cards, or signing in, while the
+    prices were still being updated saved an empty list over that account's cards - when its cards
+    hadn't arrived yet, as on the first time on a phone. Now a list is never saved before its cards
+    have arrived, and the update stops when another list is shown. Tried on the test copy: a parent
+    with 40 cards and a kid with 3, the kid picked during the update with Firebase cut off - the
+    kid's 3 cards were still there. A simulation of 1.52.0's code in the same case saved an empty
+    list over the kid's cards.
+  - **Moving the phone's cards into the account mixed up versions**: a reverse holo saved on the
+    phone was added to the normal print of the same card in the account. Now each version stays its
+    own.
+  - **The app's camera kept a big picture (about 33 MB) after each photo** on phones that give the
+    camera's full photo (Chrome on Android, newer iPhones), until the phone cleared it; after many
+    quick photos in a row, the phone could refuse to draw more. Now it is let go of at once.
+  - **Nidoran and Porygon were never known by their names**: Nidoran♀ and Nidoran♂, and Porygon and
+    Porygon2, have the same letters, and counted as a tie. Now the name read is "Nidoran" or
+    "Porygon", and the search finds them all, the number deciding which.
+  - **The PSA price relay answered anyone** whose request didn't say which site it came from, so
+    another web page could use up the day's 50 PSA lookups. Now only the app is answered (the relay
+    was updated on Cloudflare; checked: the app's questions are answered, others refused).
+  - Smaller: a reading that failed kept the full-size photo (about 48 MB) until the phone cleared it;
+    a learned anniversary reprint was listed as "69/null"; and when the first question about the
+    PSA lookups left failed, it wasn't asked again until the app was opened again.
+  - Your 46 real photos read exactly as before: 46 first, 45 opened by themselves, 0 wrong, 25 by the
+    number alone.
+
 ## Done in 1.52.0
 
 - **Kids mode first on a kid's account, and a way out** (you asked: "the kids mode should always be

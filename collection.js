@@ -43,8 +43,12 @@ function loadCollection() {
 	}
 }
 
-// Returns true when it was saved (or, with an account, sent off to be saved).
+// Returns true when it was saved (or, with an account, sent off to be saved). Never before the account's
+// cards have arrived (see collectionReady): the list is empty until then, and saving it would wipe the
+// account's cards - as "Update prices" did in versions before 1.53.0, when a kid's cards were picked, or
+// someone signed in, while it was still running.
 function saveCollection() {
+	if (!collectionReady()) return false;
 	if (accountName) {
 		// The screen shows the change at once; Firebase saves it in the background,
 		// and keeps trying if the phone is briefly offline.
@@ -108,7 +112,8 @@ function phoneCardCount() {
 
 function movePhoneCardsIntoAccount() {
 	for (const entry of loadCollection()) {
-		const existing = collection.find((saved) => saved.id === entry.id);
+		// The same card in the same version: a reverse holo is kept apart from the normal print.
+		const existing = findSaved(entry.id, entry.version);
 		if (existing) existing.count += entry.count;
 		else collection.push(entry);
 	}
@@ -267,12 +272,18 @@ function pricesOf(card, version) {
 	};
 }
 
-// "Update prices": today's prices, even for cards whose prices were kept earlier today.
+// "Update prices": today's prices, even for cards whose prices were kept earlier today. Returns true when
+// done; false when My cards shows another list meanwhile (a kid's picked, or someone signed in or out),
+// which is then left alone.
 async function refreshCollectionPrices() {
+	const owner = collectionOwner;
+	const account = accountName;
+	const sameList = () => collectionOwner === owner && accountName === account;
 	const ids = [...new Set(collection.map((saved) => saved.id))];   // each card once, even if saved in two versions
 	for (let start = 0; start < ids.length; start += REFRESH_BATCH_SIZE) {
 		const cards = await findCardsById(ids.slice(start, start + REFRESH_BATCH_SIZE));
 		await withPricesOf(cards, true);
+		if (!sameList()) return false;
 		for (const card of cards) {
 			for (const entry of collection.filter((saved) => saved.id === card.id)) {
 				Object.assign(entry, pricesOf(card, entry.version));
@@ -281,6 +292,7 @@ async function refreshCollectionPrices() {
 		}
 	}
 	saveCollection();
+	return true;
 }
 
 // Which part of "My cards" a saved card goes in: one of CARD_KINDS. Cards saved before kinds were
