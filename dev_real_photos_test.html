@@ -34,20 +34,21 @@ possible.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.46.0"></script>
-<script src="card-names.js?v=1.46.0"></script>
-<script src="set-codes.js?v=1.46.0"></script>
-<script src="card-finder.js?v=1.46.0"></script>
-<script src="sparkle.js?v=1.46.0"></script>
-<script src="reader.js?v=1.46.0"></script>
-<script src="storage.js?v=1.46.0"></script>
-<script src="card-ids.js?v=1.46.0"></script>
-<script src="cards.js?v=1.46.0"></script>
-<script src="matcher.js?v=1.46.0"></script>
+<script src="pokemon-names.js?v=1.47.0"></script>
+<script src="card-names.js?v=1.47.0"></script>
+<script src="set-codes.js?v=1.47.0"></script>
+<script src="card-finder.js?v=1.47.0"></script>
+<script src="sparkle.js?v=1.47.0"></script>
+<script src="reader.js?v=1.47.0"></script>
+<script src="storage.js?v=1.47.0"></script>
+<script src="card-ids.js?v=1.47.0"></script>
+<script src="cards.js?v=1.47.0"></script>
+<script src="matcher.js?v=1.47.0"></script>
 <script>
 "use strict";
 
-const PHOTO_LIST_URL = "dev-local/real-photos.json";
+// ?list=cut-photos reads dev-local/cut-photos.json instead: another set of photos, listed the same way.
+const PHOTO_LIST_URL = "dev-local/" + (new URLSearchParams(location.search).get("list") || "real-photos") + ".json";
 
 const rows = document.getElementById("rows");
 const summary = document.getElementById("summary");

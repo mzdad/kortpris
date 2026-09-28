@@ -19,7 +19,11 @@ A web page with nothing to install. What happens to a photo:
    or, for silver-bordered and foil cards, by its shape (`card-finder.js`). A shape that only may
    be the card (a dark card in a toploader on a dark cloth has hardly any colour change around it)
    counts once the number reads sure where that box says it is printed, and a scan - a picture
-   with the card's own shape - is the card as a whole (version 1.46.0). The strip along its
+   with the card's own shape - is the card as a whole (version 1.46.0). A card photographed so
+   close that it reaches the photo's edge, or runs past it, is looked for with the photo's edge
+   as one or two of its sides, the sides cut off placed by the card's shape; such a box counts
+   once the number or the name reads where the box says it is printed (`findCardAtPhotoEdge`,
+   version 1.47.0). The strip along its
    top where the name is printed is then read on
    its own, enlarged: as it is, with only its dark ink, and with only its white ink. On full-art
    cards the name sits on the artwork, where a read of the whole card often loses it
@@ -293,7 +297,9 @@ The photos are the same every run, so run it before and after changing `reader.j
 Real photos matter more. Put them in `dev-local/` (never published) and list them, with the
 right answers, in `dev-local/real-photos.json`; then open
 <http://localhost:8765/dev_real_photos_test.html>. Use the phone's original files: photos
-sent through a chat app are shrunk to half the size or less on the way.
+sent through a chat app are shrunk to half the size or less on the way. `?only=IMG_2022` runs
+just some of them, and `?list=cut-photos` reads another list, `dev-local/cut-photos.json`, the
+same way.
 
 The number scores in the fake-photo test are pessimistic: the fakes are made from 1024-pixel card
 pictures, so their tiny print has far less detail than a real phone photo.

@@ -249,15 +249,30 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 	let placeGuesses = [];
 	// A doubtful box (see whereIsTheCard) is the card's when the number reads sure where the box says
 	// it is printed: nothing else in a photo reads the same number twice there.
-	let checkedByNumber = false;
+	let placesRead = false;   // the number places of cardBox were read already
+	let stripName = null;     // the name strip of cardBox was read already, and found this name
 	const numberBigEnough = (box) => (box.y1 - box.y0) * original.height / photo.height >= MIN_CARD_PIXELS_FOR_NUMBER;
 	if (!cardBox && doubtfulBox && numberBigEnough(doubtfulBox)) {
 		const recuts = NUMBER_RECUTS.map((recut) => recutBox(doubtfulBox, recut));
 		const guesses = await readNumberPlacesOfCard(worker, original, photo, doubtfulBox, recuts, stillWanted);
 		if (twoReadsAgree(guesses)) {
-			cardBox = { ...doubtfulBox, foundBy: "shape, checked by its number" };
+			cardBox = { ...doubtfulBox, foundBy: doubtfulBox.foundBy + ", checked by its number" };
 			placeGuesses = guesses;
-			checkedByNumber = true;
+			placesRead = true;
+		} else if (doubtfulBox.atPhotoEdge) {
+			// A box reaching the photo's edge is also the card's when a known name is printed where the
+			// box says the name is: its sides cut off by the photo are placed by the card's shape from
+			// the sides seen, which pins it down. (Not a doubtful box that is only of the card's shape:
+			// made-up full-art photos on a grey table had one around just the card's top-left part, whose
+			// name strip is the card's own.) The foil around a reverse holo's number can hide it (the
+			// Dratini in IMG_2022), but hardly ever its name.
+			stopUnlessWanted(stillWanted, original);
+			stripName = await readNameStrip(worker, original, scaleBox(doubtfulBox, original.width / photo.width));
+			if (stripName) {
+				cardBox = { ...doubtfulBox, foundBy: doubtfulBox.foundBy + ", checked by its name" };
+				placeGuesses = guesses;
+				placesRead = true;
+			}
 		}
 	}
 	const cardInOriginal = cardBox ? scaleBox(cardBox, original.width / photo.width) : null;
@@ -269,7 +284,7 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 			otherCuts.push(...NUMBER_RECUTS.map((recut) => recutBox(cardBox, recut)));
 			if (framed) otherCuts.push(framed);
 		}
-		if (!checkedByNumber) placeGuesses = await readNumberPlacesOfCard(worker, original, photo, cardBox, otherCuts, stillWanted);
+		if (!placesRead) placeGuesses = await readNumberPlacesOfCard(worker, original, photo, cardBox, otherCuts, stillWanted);
 		if (onSureNumber && twoReadsAgree(placeGuesses)) {
 			const early = likeliestNumbers(placeGuesses).slice(0, MAX_NUMBER_GUESSES);
 			if (mayHaveSetCode(early)) {
@@ -299,7 +314,7 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 	// name, even when the whole card's read found another one somewhere else on the card.
 	if (cardBox) {
 		stopUnlessWanted(stillWanted, original);
-		const stripName = await readNameStrip(worker, original, cardInOriginal);
+		if (!stripName) stripName = await readNameStrip(worker, original, cardInOriginal);
 		if (stripName) name = stripName;
 	}
 	// No known Pokémon found: read it a second time, the other way.
@@ -376,14 +391,18 @@ async function lookAtPhoto(imageFile, frame = null) {
 
 // { cardBox, doubtfulBox }: the card's box in the photo, found by its yellow border or its shape, or
 // the whole photo when it is a scan; in a photo from the app's camera, the white frame's box
-// (framed) when nothing is found close to it. When none is found, a box of the card's shape that
-// may be it (see MIN_DOUBTFUL_SHAPE_SCORE in card-finder.js), to be checked by the number.
+// (framed) when nothing is found close to it. When none is found, a box that may be it, to be
+// checked first (see readCardPhoto): of the card's shape but scoring low (see MIN_DOUBTFUL_SHAPE_SCORE
+// in card-finder.js), or else one reaching the photo's edge (see findCardAtPhotoEdge). Not the other
+// way round: that one can take the photo's corner for the card's where the card's own edges show a
+// little further in (the Gengar in IMG_2032).
 function whereIsTheCard(photo, framed) {
 	const yellow = findYellowCard(photo);
 	const shape = yellow ? null : findCardByShape(photo);
 	const found = yellow || (shape && !shape.doubtful ? shape : null) || wholePhotoCard(photo);
 	if (framed) return { cardBox: found && fitsFrame(found, framed) ? found : framed, doubtfulBox: null };
-	return { cardBox: found, doubtfulBox: !found && shape ? shape : null };
+	if (found) return { cardBox: found, doubtfulBox: null };
+	return { cardBox: null, doubtfulBox: shape || findCardAtPhotoEdge(photo) };
 }
 
 function frameBoxIn(photo, frame) {

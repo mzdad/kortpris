@@ -321,7 +321,8 @@ function edgeMap(photo) {
 
 // A straight line is { isUpright, lean, offset }: an upright line passes x = offset at the photo's
 // middle height and leans lean degrees; a crossing line likewise passes y = offset at the middle width.
-function straightLines(map, isUpright) {
+// Lines closer to the photo's own edge than margin (share of its size) are left out.
+function straightLines(map, isUpright, margin = PHOTO_EDGE_MARGIN) {
 	// Every edge pixel votes for each line it could lie on, for every lean from -6 to 6 degrees.
 	// Long straight edges collect far more votes than the short edges in patterns and pictures.
 	// (This is known as a Hough transform.)
@@ -354,7 +355,7 @@ function straightLines(map, isUpright) {
 	const chosen = [];
 	for (const line of all) {
 		if (chosen.length === EDGE_LINES_TRIED) break;
-		if (line.offset < across * PHOTO_EDGE_MARGIN || line.offset > across * (1 - PHOTO_EDGE_MARGIN)) continue;
+		if (line.offset < across * margin || line.offset > across * (1 - margin)) continue;
 		if (chosen.some((other) => Math.abs(other.offset - line.offset) <= 4)) continue;
 		chosen.push(line);
 	}
@@ -427,9 +428,10 @@ function averageColour(map, area) {
 	return count > 0 ? sums.map((sum) => sum / count) : null;
 }
 
-function borderEdgeFound(map, box, direction, uprights, crossings) {
+function borderEdgeFound(map, box, direction, uprights, crossings, atPhotoEdge = [false, false, false, false]) {
 	// True when all four sides have a parallel edge one border's width away: inside the box
-	// (direction 1) or outside it (direction -1).
+	// (direction 1) or outside it (direction -1). Sides at the photo's edge (atPhotoEdge: left, right,
+	// top, bottom - see findCardAtPhotoEdge) have none to see, and are left out.
 	const width = box.x1 - box.x0;
 	const sides = [
 		{ lines: uprights, at: box.x0, inward: 1, from: box.y0, to: box.y1 },
@@ -437,11 +439,146 @@ function borderEdgeFound(map, box, direction, uprights, crossings) {
 		{ lines: crossings, at: box.y0, inward: 1, from: box.x0, to: box.x1 },
 		{ lines: crossings, at: box.y1, inward: -1, from: box.x0, to: box.x1 },
 	];
-	return sides.every((side) => side.lines.some((line) => {
+	return sides.every((side, index) => atPhotoEdge[index] || side.lines.some((line) => {
 		const distance = (line.offset - side.at) * side.inward * direction;
 		if (distance < width * BORDER_WIDTH_MIN || distance > width * BORDER_WIDTH_MAX) return false;
 		return lineSupport(map, line, side.from, side.to) >= BORDER_LINE_SUPPORT;
 	}));
+}
+
+// ---------- A card reaching the photo's edge ----------
+
+// A card photographed close up can reach the photo's edge, or run past it (the Dratini in IMG_2022:
+// its top at the photo's top, its left side a few pixels from the photo's left). Then one or two of
+// its sides are the photo's own edge, which findCardByShape leaves out (PHOTO_EDGE_MARGIN): this
+// tries those boxes too, when nothing else was found. Lines closer than this to the photo's edge
+// (share of its size) are still left out: a line so close is the photo's edge itself.
+const EDGE_CARD_LINE_MARGIN = 0.005;
+// Of the four sides, at least this many must be lines seen in the photo.
+const MIN_SEEN_SIDES = 2;
+// A side at the photo's edge only shows where the photo ends: where the card ends is worked out from
+// the card's shape and its two sides seen across it. A box is only taken when that lands at the
+// photo's edge - from this far inside the photo (share of the card's size; further in, the card's own
+// edge would have shown as a line) to this far beyond it.
+const CUT_SIDE_INSIDE = 0.02;
+const CUT_SIDE_BEYOND = 0.12;
+// The least score (see edgeCardScore) for such a box - which is doubtful anyway: it counts once the
+// number reads sure where the box says it is printed (see readCardPhoto in reader.js). Tuned on 117
+// made-up photos of real cards cut so the card reaches the photo's edge, and 56 without a card (none
+// of which gets a box from 1.5; 2 do from 1.3). The Dratini's box scores 2.03.
+const MIN_EDGE_CARD_SCORE = 1.5;
+
+function findCardAtPhotoEdge(photo) {
+	const map = edgeMap(photo);
+	const uprights = straightLines(map, true, EDGE_CARD_LINE_MARGIN);
+	const crossings = straightLines(map, false, EDGE_CARD_LINE_MARGIN);
+	// The photo's own edges, as lines that can be a side.
+	const photoEdge = (isUpright, offset) => ({ isUpright: isUpright, lean: 0, slope: 0, offset: offset, photoEdge: true });
+	const lefts = [photoEdge(true, 0), ...uprights];
+	const rights = [...uprights, photoEdge(true, map.width)];
+	const tops = [photoEdge(false, 0), ...crossings];
+	const bottoms = [...crossings, photoEdge(false, map.height)];
+	let best = null;
+	for (const left of lefts) {
+		for (const right of rights) {
+			if (right.offset <= left.offset) continue;
+			for (const top of tops) {
+				for (const bottom of bottoms) {
+					if (bottom.offset <= top.offset) continue;
+					const sides = [left, right, top, bottom];
+					// With no side at or close to the photo's edge, it is findCardByShape's box.
+					if (!sides.some((side) => nearPhotoEdge(map, side))) continue;
+					const atPhotoEdge = sides.map((side) => Boolean(side.photoEdge));
+					if (atPhotoEdge.filter((edge) => !edge).length < MIN_SEEN_SIDES) continue;
+					const box = { x0: left.offset, x1: right.offset, y0: top.offset, y1: bottom.offset };
+					const width = box.x1 - box.x0;
+					const height = box.y1 - box.y0;
+					if (height < map.height * MIN_CARD_HEIGHT_SHARE) continue;
+					if (Math.abs(width / height - CARD_SHAPE) > CARD_SHAPE_TOLERANCE) continue;
+					// How much of each side seen really is an edge.
+					let weakestSide = 1;
+					if (!left.photoEdge) weakestSide = Math.min(weakestSide, lineSupport(map, left, box.y0, box.y1));
+					if (!right.photoEdge) weakestSide = Math.min(weakestSide, lineSupport(map, right, box.y0, box.y1));
+					if (!top.photoEdge) weakestSide = Math.min(weakestSide, lineSupport(map, top, box.x0, box.x1));
+					if (!bottom.photoEdge) weakestSide = Math.min(weakestSide, lineSupport(map, bottom, box.x0, box.x1));
+					if (weakestSide < MIN_SIDE_SUPPORT) continue;
+					const whole = wholeCardPastEdge(map, box, atPhotoEdge);
+					if (!whole) continue;
+					const score = edgeCardScore(map, box, weakestSide, atPhotoEdge, uprights, crossings);
+					if (!best || score > best.score) best = { box: whole, score: score };
+				}
+			}
+		}
+	}
+	if (!best || best.score < MIN_EDGE_CARD_SCORE) return null;
+	const scale = photo.width / map.width;
+	return {
+		x0: best.box.x0 * scale,
+		x1: best.box.x1 * scale,
+		y0: best.box.y0 * scale,
+		y1: best.box.y1 * scale,
+		foundBy: "shape, at the photo's edge",
+		doubtful: true,
+		atPhotoEdge: true,
+	};
+}
+
+function nearPhotoEdge(map, line) {
+	// The photo's own edge, or a line closer to it than findCardByShape looks.
+	const across = line.isUpright ? map.width : map.height;
+	return Boolean(line.photoEdge) || line.offset < across * PHOTO_EDGE_MARGIN || line.offset > across * (1 - PHOTO_EDGE_MARGIN);
+}
+
+function wholeCardPastEdge(map, box, atPhotoEdge) {
+	// The card's whole box, which may run past the photo's edge. A side at the photo's edge is placed
+	// where the card's shape puts it, when both sides across are lines: from the height, how wide the
+	// card is, and the other way round. Both sides at the photo's edge (the card longer than the photo
+	// is, that way): it runs past as far at each end. Null when a side placed that way doesn't land at
+	// the photo's edge (see CUT_SIDE_INSIDE). With a side at the photo's edge each way (a corner of
+	// the card cut off), its size can't be worked out: the part seen is taken.
+	const [left, right, top, bottom] = atPhotoEdge;
+	const whole = { ...box };
+	if ((left || right) && !(top || bottom)) {
+		const width = CARD_SHAPE * (box.y1 - box.y0);
+		if (left && right) {
+			whole.x0 = (map.width - width) / 2;
+			whole.x1 = whole.x0 + width;
+		} else if (left) {
+			whole.x0 = box.x1 - width;
+		} else {
+			whole.x1 = box.x0 + width;
+		}
+		if (left && !landsAtEdge(whole.x0, width)) return null;
+		if (right && !landsAtEdge(map.width - whole.x1, width)) return null;
+	}
+	if ((top || bottom) && !(left || right)) {
+		const height = (box.x1 - box.x0) / CARD_SHAPE;
+		if (top && bottom) {
+			whole.y0 = (map.height - height) / 2;
+			whole.y1 = whole.y0 + height;
+		} else if (top) {
+			whole.y0 = box.y1 - height;
+		} else {
+			whole.y1 = box.y0 + height;
+		}
+		if (top && !landsAtEdge(whole.y0, height)) return null;
+		if (bottom && !landsAtEdge(map.height - whole.y1, height)) return null;
+	}
+	return whole;
+}
+
+function landsAtEdge(inside, cardSize) {
+	// inside: how far a placed side lies inside the photo (below 0: beyond its edge).
+	return inside <= cardSize * CUT_SIDE_INSIDE && inside >= -cardSize * CUT_SIDE_BEYOND;
+}
+
+function edgeCardScore(map, box, weakestSide, atPhotoEdge, uprights, crossings) {
+	// As shapeScore, over the sides seen: the photo's edge has no colour change across it to measure
+	// (weakestContrast leaves it out, as there is nothing outside it) and no border edge beside it.
+	let score = weakestSide + weakestContrast(map, box) / CONTRAST_SCALE;
+	if (borderEdgeFound(map, box, 1, uprights, crossings, atPhotoEdge)) score += BORDER_BONUS;
+	if (borderEdgeFound(map, box, -1, uprights, crossings, atPhotoEdge)) score -= BORDER_BONUS;
+	return score;
 }
 
 // ---------- For "Auto": a card-shaped thing in the camera's white frame ----------

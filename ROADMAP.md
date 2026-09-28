@@ -5,6 +5,28 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.47.0
+
+- **1.9, more: cards reaching the photo's edge.** A lab (`dev-local/edges3-lab.js`) cut 39 of your
+  photos three ways each, so the card reaches the photo's edge: top and bottom (like your Dratini),
+  one side, or a corner, from 2% past the edge to 1% inside it. The finder already coped with most
+  of them - a yellow border shows how big the card is even with a side cut off - and missed 6 of 117.
+  - New: when nothing else is found, the app looks for a card-shaped box with one or two sides at
+    the photo's edge, and works out where a cut-off side must be from the card's shape and the sides
+    it can see. Like 1.46.0's doubtful boxes, it counts once the number reads where the box says it
+    is printed - or, for these boxes, the name: their shape pins them down.
+  - The 6 cut photos and your Dratini: the right card first in 5 of 7 (2 before), opened by itself 5
+    (2 before), none wrong. Two cuts of your Erika's Jigglypuff now open as the 30th Celebration
+    reprint, as the box lets its "30" stamp be checked.
+  - Your Dratini itself: its box is found and checked by the name, and it opens right as before -
+    but in 8 seconds instead of 3, as the number corners are now read, and the foil around its number
+    hides it (see 1.8). None of the 56 photos without a card gets such a box.
+  - Your 46 real photos: 46 first, 45 opened by themselves, 0 wrong (as before). Full-art: 27 first,
+    27 opened. Special numbers: 18 read, 24 first, 22 opened, 0 wrong. Made-up photos: 13 first, 12
+    opened, 0 wrong. Learning: 0 wrong; the harder second photos 29 recognised, 7 suggested, 10
+    neither (the Dratini's is no longer suggested: 0.602 from its learned look, where the line is 0.6,
+    as it is now learned with its box).
+
 ## Done in 1.46.0
 
 - **1.9, in part: the edges of silver-bordered cards in photos from the phone's own camera.** A
@@ -461,7 +483,8 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 |---|---|---|---|
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black: the rest. | 6 of 27 full-art numbers still aren't read in 1.40.0 (8 in 1.28.0). The made-up photos are made from the database's small pictures, so a real photo may read better: worth checking with a few real full-art photos first. The name and the look find these cards anyway. | S |
-| 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: the rest. Full-art cards on a grey table, and cards touching the photo's edge. | The name strip, the number corners and the set code (1.7) need them. Since 1.46.0 a doubtful box is checked by the number, but a full-art card's white number seldom reads (1.8), so the 2 made-up full-art photos on a grey table still have none; they are found by name and picture anyway. Your Dratini photo is cut so close that the card's edges are the photo's, which the finder leaves out. The app's own camera doesn't need this: its frame gives the edges (1.1). | M |
+| 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: the rest. Full-art cards on a grey table. | The name strip, the number corners and the set code (1.7) need them. On the 2 made-up full-art photos on a grey table, the best box found covers only the card's top-left part (81% of it): the silver border is the table's colour, so the card's own bottom and right edges hardly show. Checking the box can't help there - the name strip is in that part too, and reads the right name - so it takes a better way to see a silver border on grey. They are found by name and picture anyway, and the app's own camera doesn't need this: its frame gives the edges (1.1). | M |
+| 1.11 | **Numbers on sparkly foil**: the black number of a reverse holo, in the glitter all round it. | Found in 1.47.0: with its box found, your Dratini's number corners are read 30 ways and cuts, and none reads "72/110" - the ink-only copy is clear to the eye, but the specks of foil around the number throw the reader off. That costs 5 seconds (8 instead of 3) for a card that opens anyway. Dropping specks smaller than a digit's stroke before reading may do it. | S |
 
 ## 2. Quicker
 
