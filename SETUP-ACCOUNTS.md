@@ -66,7 +66,9 @@ of learned cards says the account couldn't be used, and they stay on the phone o
 Version 1.48.0 added rules for the Claude key kept in the account and for kids' accounts; until
 they are published, the key stays on each phone as before, and making a kid's account says the
 rules must be updated first. Version 1.49.0 added one for the kids' passwords kept in your account;
-until it is published, a kid's password can't be kept there to look up (the app says so).
+until it is published, a kid's password can't be kept there to look up (the app says so). Version
+1.50.0 added one for deleting a kid's account; until it is published, **Delete** says so, and deletes
+nothing.
 
 ---
 
@@ -86,6 +88,15 @@ its username and password in **Kids' accounts** the same way, and it becomes one
 Authentication → **Settings** → **User actions** → untick **Enable create (sign-up)** →
 **Save**. Signing in keeps working. Tick it again whenever you want to add an account -
 a kid's too.
+
+**Delete a kid's account for good:** **My cards → Kids' accounts → Delete** by the kid's name. It
+deletes the kid's cards, learned cards and settings, and the account itself: the kid can't sign in
+any more, and the username is free again. **Remove** only takes the kid off your list. Deleting
+needs **Enable delete** ticked in Authentication → **Settings** → **User actions** (it is, unless you
+unticked it), and the kid's password kept in the app - for a kid made before 1.49.0, type its
+username and password in **Kids' accounts** once first. Your own account, or one that isn't one of
+your kids': Authentication → **Users** → **⋮** → **Delete account** (its cards stay in Firestore
+Database, under `collections/` and the username, until you delete them there too).
 
 **A child forgot their password:** look it up in **My cards → Kids' accounts → Show password**.
 It is kept there for every kid's account made from version 1.49.0 on; for one made before, type

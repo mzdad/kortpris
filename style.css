@@ -732,10 +732,14 @@ body.kids .kid-start:focus-visible { outline: 3px solid var(--link); outline-off
 .kids-accounts { border-top: 1px solid var(--line); padding-top: 14px; }
 .kid-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .kid-list:empty { display: none; }
-.kid-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px 10px; align-items: center; }
+/* The name on a line of its own, its buttons under it, and the password, when shown, under those. */
+.kid-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.kid-row .kid-name { flex: 1 1 100%; }
+/* Delete: for good, so it looks different from the other buttons. */
+.button.danger { color: var(--bad); border-color: var(--bad); }
 /* A kid's saved password, under the name when "Show password" is pressed. */
 .kid-password-shown {
-	grid-column: 1 / -1;
+	flex: 1 1 100%;
 	font-family: var(--font-mono); font-size: 1.05rem;
 	padding: 8px 10px; border-radius: 8px;
 	background: var(--surface-2); border: 1px solid var(--line);

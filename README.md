@@ -188,7 +188,11 @@ Firebase signs in whoever an account is made for, so a kid's account is made in 
 copy of Firebase on the phone, and the parent stays signed in. The kids' passwords are kept in the
 parent's account (version 1.49.0, `kidPasswords/<username>`, only the parent can read it), so
 "Show password" looks one up when a kid forgets: Firebase keeps the passwords themselves scrambled,
-where nobody can read them back.
+where nobody can read them back. "Delete" deletes a kid's account for good (version 1.50.0,
+`deleteKidAccount`): Firebase only lets an account delete itself, so the hidden copy of Firebase signs
+in as the kid with the kept password, deletes its cards, learned cards and settings and then the
+account, and the parent's app takes away the kid's link (which only the parent may) and its place in
+the list. Before anything is deleted, both the rules and the password are checked.
 
 **Optional: read cards with Claude.** Only for someone signed in to an account: then, under
 "Read cards with Claude" on the Scan screen, they can save their own Anthropic API key.

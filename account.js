@@ -220,6 +220,37 @@ async function addKidAccount(parent, kid, password) {
 	await setDoc(doc(firebase.db, FAMILIES_FOLDER, parent), { kids: arrayUnion(kid), updatedAt: serverTimestamp() }, { merge: true });
 }
 
+// Deletes a kid's account for good: its cards, learned cards and settings, the account itself - so
+// nobody can sign in with it, and its username is free again - and then its link to the parent, its
+// place in the parent's list and its kept password. Firebase only lets an account delete itself, so
+// it is signed in with its password in a second, hidden copy of Firebase (as in addKidAccount), and
+// the parent stays signed in here. Nothing is deleted before both checks have passed: Firebase's rules
+// from version 1.50.0 on (the parent may read the kid's link), and the password.
+async function deleteKidAccount(parent, kid, password) {
+	const { initializeApp, deleteApp } = firebase.appModule;
+	const { initializeAuth, inMemoryPersistence, signInWithEmailAndPassword, deleteUser } = firebase.authModule;
+	const { initializeFirestore, memoryLocalCache, doc, getDocFromServer, deleteDoc } = firebase.firestoreModule;
+	await getDocFromServer(doc(firebase.db, ACCOUNT_INFO_FOLDER, kid));
+	const helper = initializeApp(firebaseSettings(), "kid-remover-" + Date.now());
+	try {
+		const auth = initializeAuth(helper, { persistence: inMemoryPersistence });
+		const db = initializeFirestore(helper, { localCache: memoryLocalCache() });
+		if (USE_FIREBASE_EMULATOR) useEmulator(auth, db, firebase.authModule, firebase.firestoreModule);
+		await signInWithEmailAndPassword(auth, emailFor(kid), password);
+		// Signed in as the kid: its own things, then the account.
+		for (const folder of [CARDS_FOLDER, LEARNED_FOLDER, SETTINGS_FOLDER, FAMILIES_FOLDER, KID_PASSWORDS_FOLDER]) {
+			await deleteDoc(doc(db, folder, kid));
+		}
+		await deleteUser(auth.currentUser);
+	} finally {
+		await deleteApp(helper);
+	}
+	// Back as the parent: the link goes first, while the kid is still on the list (see isParentOf in
+	// firestore.rules).
+	await deleteDoc(doc(firebase.db, ACCOUNT_INFO_FOLDER, kid));
+	await removeKid(parent, kid);
+}
+
 // Keeps a kid's password in the parent's account, to look up later (see firestore.rules).
 async function saveKidPassword(parent, kid, password) {
 	const { doc, setDoc, serverTimestamp } = firebase.firestoreModule;

@@ -31,11 +31,13 @@ service cloud.firestore {
     }
 
     // A kid's account names its parent: written once, by the kid's account itself, on the parent's
-    // phone as the parent makes it (see linkKidAccount in account.js). Nobody can change it
-    // afterwards, so nobody can make themselves another account's parent.
+    // phone as the parent makes it (see addKidAccount in account.js). Nobody can change it
+    // afterwards, so nobody can make themselves another account's parent. Only the parent can take
+    // it away, when deleting the kid's account (see deleteKidAccount).
     match /accounts/{username} {
-      allow read: if isOwner(username);
+      allow read: if isOwner(username) || isParentOf(username);
       allow create: if isOwner(username) && isValidAccountInfo(request.resource.data);
+      allow delete: if isParentOf(username);
     }
 
     // The kids' accounts a parent has made. Seeing a kid's cards takes both: the kid's account

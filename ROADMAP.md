@@ -5,6 +5,25 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.50.0
+
+- **Delete a kid's account, not just remove it** (you asked: "I need a way to also delete accounts
+  not just remove"). **Kids' accounts** gets **Delete** by each kid (in orange, as it can't be
+  undone), asked once more before it happens. It deletes the kid's cards, learned cards and
+  settings, the account itself - the kid can't sign in any more, and the username is free again -
+  and the kid's place in your list and kept password. **Remove** still only takes a kid off the list.
+  - Firebase only lets an account delete itself, so the app signs in as the kid in the background
+    with its kept password (1.49.0), the way it makes kids' accounts. For a kid made in 1.48.0 it
+    asks for that password first.
+  - **Needs you once more: publish the new `firestore.rules`** (SETUP-ACCOUNTS.md, step 6): only you
+    may take away your kid's link to you. Until then **Delete** says so and deletes nothing - it
+    checks the rules and the password before deleting anything.
+  - Needs **Enable delete** ticked in Firebase (it is, in your screenshot).
+  - Tried on the test copy: a kid with cards, learned cards and a setting deleted - all of it gone,
+    and the kid's sign-in refused; with the rules you have now, refused with nothing deleted; without
+    a kept password, it asks for one. The rules one by one, 10 of 10: a kid can't delete its own link
+    to escape you, and a stranger or a look-alike email can't read or delete any of the kid's things.
+
 ## Done in 1.49.0
 
 - **Look up a kid's password** (you asked: "I need a way i can check the kids password"). Firebase

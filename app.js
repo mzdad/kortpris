@@ -986,6 +986,11 @@ kidList.addEventListener("click", async (event) => {
 		renderAccount();
 		return;
 	}
+	const deleteButton = event.target.closest("[data-delete-kid]");
+	if (deleteButton && accountName !== null && !kidBusy) {
+		deleteKid(deleteButton.dataset.deleteKid);
+		return;
+	}
 	const button = event.target.closest("[data-remove-kid]");
 	if (!button || accountName === null) return;
 	const kid = button.dataset.removeKid;
@@ -999,6 +1004,36 @@ kidList.addEventListener("click", async (event) => {
 	}
 	renderAccount();
 });
+
+// Deletes a kid's account for good (see deleteKidAccount in account.js), with its kept password.
+async function deleteKid(kid) {
+	const password = kidPasswords[kid];
+	if (typeof password !== "string") {
+		// Made before passwords were kept: the form below checks and keeps it first.
+		kidMessage = { key: "kidDeleteNeedsPassword", values: { name: kid }, tone: "error" };
+		renderAccount();
+		return;
+	}
+	if (!confirm(t("kidDeleteConfirm", { name: kid }))) return;
+	kidBusy = true;
+	kidMessage = { key: "kidDeleting", values: { name: kid }, tone: "" };
+	renderAccount();
+	try {
+		await deleteKidAccount(accountName, kid, password);
+		kidMessage = { key: "kidDeleted", values: { name: kid }, tone: "" };
+	} catch (error) {
+		console.error(error);
+		let why = accountProblem(error);
+		// Firebase's rules from before version 1.50.0 - checked before anything is deleted.
+		if (error.code === "permission-denied") why = { key: "kidDeleteRulesOld", values: {} };
+		// Deleting accounts switched off in Firebase (Authentication > Settings > User actions).
+		if (why.key === "signUpClosed") why = { key: "kidDeleteClosed", values: {} };
+		if (why.key === "wrongLogin") why = { key: "kidWrongPassword", values: { name: kid } };
+		kidMessage = { ...why, tone: "error" };
+	}
+	kidBusy = false;
+	renderAccount();
+}
 
 // Whose cards My cards shows: the parent's own, or a kid's.
 ownerSwitch.addEventListener("click", (event) => {
@@ -3088,6 +3123,7 @@ function kidRowHtml(kid) {
 	const password = kidPasswords[kid];
 	const saved = typeof password === "string";
 	const shown = saved && shownKidPasswords.has(kid);
+	const busy = kidBusy ? "disabled" : "";
 	const showButton = saved
 		? `<button type="button" class="button secondary" data-show-kid-password="${name}" aria-pressed="${shown}">${t(shown ? "kidHidePassword" : "kidShowPassword")}</button>`
 		: "";
@@ -3095,7 +3131,8 @@ function kidRowHtml(kid) {
 		<li class="kid-row">
 			<span class="kid-name">${name}</span>
 			${showButton}
-			<button type="button" class="button secondary" data-remove-kid="${name}">${t("kidRemove")}</button>
+			<button type="button" class="button secondary" data-remove-kid="${name}" ${busy}>${t("kidRemove")}</button>
+			<button type="button" class="button secondary danger" data-delete-kid="${name}" ${busy}>${t("kidDelete")}</button>
 			${shown ? `<span class="kid-password-shown">${escapeHtml(password)}</span>` : ""}
 		</li>`;
 }
