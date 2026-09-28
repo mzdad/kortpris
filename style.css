@@ -637,6 +637,7 @@ body.kids .saved-meta,
 body.kids #collection-where,
 body.kids .collection-search,
 body.kids #account-panel,
+body.kids #owner-switch,
 body.kids footer p:not(.app-version),
 body.kids .button-words { display: none; }
 /* Before the first photo, the big start picture says it all. */
@@ -725,3 +726,20 @@ body.kids .kid-start:focus-visible { outline: 3px solid var(--link); outline-off
 	.progress.indeterminate .progress-bar { animation: none; width: 100%; opacity: 0.5; }
 	.progress-bar { transition: none; }
 }
+
+/* ---------- Kids' accounts ---------- */
+/* In a parent's account box: a line for each kid's account, and the form to make one. */
+.kids-accounts { border-top: 1px solid var(--line); padding-top: 14px; }
+.kid-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.kid-list:empty { display: none; }
+.kid-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.kid-name { font-weight: 700; }
+#kid-password-feedback:empty, #kid-message:empty { display: none; }
+/* The kid's password in a type that tells 1 from l and 0 from O, when it is written down. */
+input.kid-password { font-family: var(--font-mono); }
+.kid-make-password { justify-self: start; }
+/* My cards: whose cards are shown - the parent's own, or a kid's - a button for each. */
+.owner-switch { grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); }
+/* "Move to" on a saved card's page, for a parent with kids' accounts. */
+.move-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.move-row .sort-select { width: auto; }

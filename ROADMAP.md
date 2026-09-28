@@ -5,6 +5,34 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.48.0
+
+You asked for 4.1 to 4.3. All three were tried on Firebase's local test copy with made-up accounts
+only; nothing touched your real project. **Needs you once: publish the new `firestore.rules`**
+(SETUP-ACCOUNTS.md, step 6). Until then 4.3 works, the Claude key stays on each phone as before, and
+making a kid's account says the rules must be updated first. The app was also tried with the old
+rules, so nothing breaks in between.
+
+- **4.1 Kids' accounts under a parent.** In **My cards → Kids' accounts** you make an account for each
+  kid (a username, and a password - **Make an easy one** gives three words and a number, like
+  "piano-puppy-panda-22"). Signing in with it on the kid's phone opens the app in kids mode, with
+  only the kid's cards. On your phone, My cards gets a button for you and each kid: pick a kid to
+  see their cards - and cards you scan then go to them - and a saved card's page gets **Move to**
+  (one, or all). A kid who already has an account can be added with its username and password.
+  **Remove** takes a kid off your list (their account and cards stay; the password brings it back).
+  - Safe by the rules, tried one by one against the test copy (11 of 11): a kid can't see your cards
+    or your Claude key, can't change who its parent is; a stranger, an account with a look-alike
+    email, or someone listing your kid as theirs can't see the kid's cards.
+  - Moving needs internet: without it, it says so after about 9 seconds.
+- **4.2 The Claude key in the account.** Saved once, it works on every phone you sign in on, and
+  still only for your account. A key already saved on a phone moves into the account by itself -
+  only once Firebase itself has said the account has it, so it can't get lost on the way.
+- **4.3 My cards without internet when signed in.** Firebase keeps a copy of the account's cards on
+  the phone: with the test copy switched off, a reload showed the account's cards, a card added
+  meanwhile stayed through another reload, and it reached the account when the test copy came back.
+  Found and fixed on the way: a brand-new account, with no cards yet, would have waited at "Loading
+  your cards…" forever with the copy on.
+
 ## Done in 1.47.0
 
 - **1.9, more: cards reaching the photo's edge.** A lab (`dev-local/edges3-lab.js`) cut 39 of your
@@ -492,14 +520,6 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 |---|---|---|---|
 | 2.6 | **A paid card database (Scrydex)**, from the makers of pokemontcg.io. | Graded prices and picture recognition built in. Costs money (from $29 a month, September 2026): your decision. Since 1.32.0 the free TCGdex (5.1) is quick, reliable and up to date. | M |
 | 2.8 | **Prices by condition** for ungraded cards: "What condition is your card in?" (Near Mint, Lightly Played, Moderately Played, Heavily Played, Damaged) changes the price. | The prices shown are for cards in top condition, and a worn card sells for much less. Checked 27 September 2026: PokemonPriceTracker's free plan (the PSA relay's source) gives only each version's Near Mint price, the same as TCGdex's TCGplayer price. The other conditions look like a paid plan: your decision. Its eBay "ungraded" sales can't stand in: for a $2 Mewtwo they said $22, with other cards' sales mixed in. | M |
-
-## 4. Accounts and keeping things
-
-| | What | Why | Size |
-|---|---|---|---|
-| 4.1 | **Kids' own accounts under a parent**: see and move cards between them. | Each kid has their own cards. | L |
-| 4.2 | **The Claude key in the account**, not only on one phone. | It has to be typed again on every phone. | S |
-| 4.3 | **My cards without internet when signed in**: Firestore can keep a copy of the account's cards on the phone. | The installed app on an iPhone needs an account to show your cards (its storage is apart from Safari's), and without internet those wait at "Loading your cards…". Testing it safely needs the Firebase test copy (firebase-tools) installed again. | S |
 
 ## 5. Keeping the app working
 

@@ -190,6 +190,17 @@ const moveCardsButton = document.getElementById("move-cards");
 const accountMessageText = document.getElementById("account-message");
 const kidsButton = document.getElementById("kids-button");
 const kidStartButton = document.getElementById("kid-start");
+const kidsAccounts = document.getElementById("kids-accounts");
+const kidsCount = document.getElementById("kids-count");
+const kidList = document.getElementById("kid-list");
+const kidForm = document.getElementById("kid-form");
+const kidUsernameInput = document.getElementById("kid-username");
+const kidPasswordInput = document.getElementById("kid-password");
+const kidMakePasswordButton = document.getElementById("kid-make-password");
+const kidPasswordFeedback = document.getElementById("kid-password-feedback");
+const kidSubmit = document.getElementById("kid-submit");
+const kidMessageText = document.getElementById("kid-message");
+const ownerSwitch = document.getElementById("owner-switch");
 const liveCameraView = document.getElementById("live-camera");
 const cameraVideo = document.getElementById("camera-video");
 const cameraBox = document.getElementById("camera-box");
@@ -229,6 +240,16 @@ let accountMessage = null;        // { key, values, tone } shown under the accou
 let passwordsShown = false;       // the password boxes show their letters
 let stopWatchingCards = null;     // stops listening for the signed-in account's cards
 let stopWatchingLearned = null;   // stops listening for the signed-in account's learned cards
+let stopWatchingSettings = null;  // stops listening for the signed-in account's settings (its Claude key)
+let stopWatchingInfo = null;      // stops listening for what the account says about itself (a kid's?)
+let stopWatchingFamily = null;    // stops listening for the signed-in account's kids
+let familyKids = [];              // the usernames of the signed-in parent's kids (see watchFamily)
+let isKidAccount = false;         // the signed-in account is a kid's, made by a parent
+let kidBusy = false;              // making a kid's account
+let kidMessage = null;            // { key, values, tone } under the kids' accounts form, or null
+let moveTarget = null;            // where "Move to" on a saved card's page moves it: a username
+let moveBusy = false;             // moving a saved card there
+let moveMessage = null;           // what moving last said: { key, values, tone }, or null
 let savedPage = null;             // the saved card whose page My cards shows (see openSavedCard), or null
 let listScrolledTo = 0;           // how far down My cards' list was when that page opened
 let installOffer = null;          // Android's offer to install the app, once it has come (see renderInstall)
@@ -638,13 +659,16 @@ document.addEventListener("visibilitychange", () => {
 	if (document.hidden && !liveCameraView.hidden) closeLiveCamera();
 });
 
-kidsButton.addEventListener("click", () => {
-	kidsMode = !kidsMode;
+kidsButton.addEventListener("click", () => setKidsMode(!kidsMode));
+
+// Kids mode on or off, remembered on this phone. speakIt: say so out loud when it goes on.
+function setKidsMode(on, speakIt = true) {
+	kidsMode = on;
 	writeStorage(KIDS_MODE_STORAGE_KEY, kidsMode ? "on" : "off");
 	applyLanguage();
-	if (kidsMode) say(t("sayKidsModeOn"));
-	else stopSpeaking();
-});
+	if (kidsMode && speakIt) say(t("sayKidsModeOn"));
+	else if (!kidsMode) stopSpeaking();
+}
 cameraInput.addEventListener("change", () => takeFileFrom(cameraInput));
 libraryInput.addEventListener("change", () => takeFileFrom(libraryInput));
 
@@ -862,6 +886,98 @@ accountForm.addEventListener("submit", async (event) => {
 	renderAccount();
 });
 
+// ---------- Kids' accounts (a parent's) ----------
+
+// The password checker is big, so it is only fetched when a parent opens the kids' accounts.
+kidsAccounts.addEventListener("toggle", () => {
+	if (!kidsAccounts.open) return;
+	loadPasswordChecker().then(renderAccount, () => {
+		kidMessage = { key: "passwordCheckerFailed", values: {}, tone: "error" };
+		renderAccount();
+	});
+});
+kidUsernameInput.addEventListener("input", showKidPasswordFeedback);
+kidPasswordInput.addEventListener("input", showKidPasswordFeedback);
+
+kidMakePasswordButton.addEventListener("click", async () => {
+	try {
+		await loadPasswordChecker();
+	} catch (error) {
+		kidMessage = { key: "passwordCheckerFailed", values: {}, tone: "error" };
+		renderAccount();
+		return;
+	}
+	kidPasswordInput.value = easyPassword(t("passwordWords").split(" "), cleanUsername(kidUsernameInput.value));
+	showKidPasswordFeedback();
+});
+
+kidForm.addEventListener("submit", async (event) => {
+	event.preventDefault();   // stay on this page instead of reloading it
+	if (kidBusy || accountName === null) return;
+	const kid = cleanUsername(kidUsernameInput.value);
+	const password = kidPasswordInput.value;
+	// Catch what we can here, before asking Firebase.
+	let problem = null;
+	if (!isValidUsername(kid)) {
+		problem = { key: "usernameInvalid", values: {} };
+	} else if (kid === accountName) {
+		problem = { key: "kidSameName", values: {} };
+	} else if (familyKids.includes(kid)) {
+		problem = { key: "kidAlreadyListed", values: { name: kid } };
+	} else if (familyKids.length >= MOST_KIDS) {
+		problem = { key: "kidTooMany", values: { count: MOST_KIDS } };
+	} else {
+		const check = checkNewPassword(password, kid);
+		if (!check.ok) problem = { key: check.problem, values: check.values };
+	}
+	if (problem) {
+		kidMessage = { ...problem, tone: "error" };
+		renderAccount();
+		return;
+	}
+	kidBusy = true;
+	kidMessage = null;
+	renderAccount();
+	try {
+		await addKidAccount(accountName, kid, password);
+		// The password stays in the message: the parent needs it on the kid's phone.
+		kidMessage = { key: "kidCreated", values: { name: kid, password: password }, tone: "" };
+		kidUsernameInput.value = "";
+		kidPasswordInput.value = "";
+	} catch (error) {
+		console.error(error);
+		// Firebase's rules from before version 1.48.0 don't know kids' accounts; and new accounts may be
+		// switched off in Firebase (see SETUP-ACCOUNTS.md).
+		let why = accountProblem(error);
+		if (error.code === "permission-denied") why = { key: "kidRulesOld", values: {} };
+		if (why.key === "signUpClosed") why = { key: "kidSignUpClosed", values: {} };
+		kidMessage = { ...why, tone: "error" };
+	}
+	kidBusy = false;
+	renderAccount();
+});
+
+kidList.addEventListener("click", async (event) => {
+	const button = event.target.closest("[data-remove-kid]");
+	if (!button || accountName === null) return;
+	const kid = button.dataset.removeKid;
+	if (!confirm(t("kidRemoveConfirm", { name: kid }))) return;
+	try {
+		await removeKid(accountName, kid);
+		kidMessage = { key: "kidRemoved", values: { name: kid }, tone: "" };
+	} catch (error) {
+		console.error(error);
+		kidMessage = { ...accountProblem(error), tone: "error" };
+	}
+	renderAccount();
+});
+
+// Whose cards My cards shows: the parent's own, or a kid's.
+ownerSwitch.addEventListener("click", (event) => {
+	const button = event.target.closest("[data-owner]");
+	if (button) showCardsOf(button.dataset.owner);
+});
+
 signOutButton.addEventListener("click", async () => {
 	try {
 		await signOutOfAccount();
@@ -937,6 +1053,11 @@ savedCardPanel.addEventListener("click", (event) => {
 		sayCard(card, page.version);
 		return;
 	}
+	const moveButton = event.target.closest("[data-action='move']");
+	if (moveButton) {
+		moveShownCard(page, Number(moveButton.dataset.howMany));
+		return;
+	}
 	if (!event.target.closest("[data-action='add-to-collection']") || !collectionReady()) return;
 	saveFailed = !addToCollection(card, versionOf(card, page.version).key);
 	renderCollection();   // the list, and this page's "You have 3" line
@@ -944,6 +1065,10 @@ savedCardPanel.addEventListener("click", (event) => {
 	if (kidsMode && !saveFailed) say(t("saySaved"));
 });
 savedCardPanel.addEventListener("change", (event) => {
+	if (event.target.matches("[data-action='move-target']")) {
+		moveTarget = event.target.value;
+		return;
+	}
 	if (!event.target.matches("[data-action='fetch-psa']")) return;
 	setFetchPsaPrices(event.target.checked);
 	renderSavedCardPage();
@@ -1566,13 +1691,17 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 	const fromPhoto = onScanScreen && !chosenVersion && versionHint === "reverseHolofoil";
 
 	const owned = savedCount(card.id, version.key);
+	// A parent looking at a kid's cards saves to them, and is told how many the kid has.
+	const kid = showingKidsCards() ? escapeHtml(collectionOwner) : null;
 	let ownedNote = "";
 	if (owned > 0) {
-		ownedNote = `<p class="own-note">${t(versions.length > 1 ? "inCollectionVersion" : "inCollection", { count: owned })}</p>`;
+		const noteKey = kid ? (versions.length > 1 ? "kidListHasVersion" : "kidListHas") : (versions.length > 1 ? "inCollectionVersion" : "inCollection");
+		ownedNote = `<p class="own-note">${t(noteKey, { count: owned, name: kid })}</p>`;
 	}
 	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
-	let addText = owned > 0 ? "addAnother" : "addToCollection";
-	if (!collectionReady()) addText = "loadingAccountCards";
+	let addText = t(owned > 0 ? "addAnother" : "addToCollection");
+	if (kid) addText = t(owned > 0 ? "addAnotherToCardsOf" : "addToCardsOf", { name: kid });
+	if (!collectionReady()) addText = t("loadingAccountCards");
 	// For a stack of cards: save this one and go straight back to the camera for the next.
 	const saveAndNext = onScanScreen
 		? `<button type="button" class="button primary" data-action="save-and-next" ${collectionReady() ? "" : "disabled"}>
@@ -1583,12 +1712,13 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 		<div class="own">
 			<div class="own-buttons">
 				<button type="button" class="button secondary" data-action="add-to-collection" ${collectionReady() ? "" : "disabled"}>
-					${t(addText)}
+					${addText}
 				</button>
 				${saveAndNext}
 			</div>
 			${ownedNote}
 			${saveProblem}
+			${onScanScreen ? "" : moveHtml(owned)}
 		</div>`;
 
 	return `
@@ -2231,8 +2361,10 @@ function renderCollection() {
 	renderSavedCardPage();   // My cards may be showing a saved card's page instead of the list
 	const totals = collectionTotals();
 	collectionCount.textContent = totals.cards > 0 ? totals.cards : "";
+	renderOwnerSwitch();
 	let where = t("savedOnPhone");
-	if (accountName) where = t("savedInAccount", { name: accountName });
+	if (showingKidsCards()) where = t("savedInKidAccount", { name: collectionOwner });
+	else if (accountName) where = t("savedInAccount", { name: accountName });
 	else if (installedOnIphone()) where = t("savedOnPhoneInstalled");
 	collectionWhere.textContent = where;
 	if (!collectionReady()) {
@@ -2368,6 +2500,7 @@ function savedValue(entry) {
 function collectionSummaryHtml(totals) {
 	if (totals.cards === 0) {
 		// Just installed on an iPhone, the list is empty - the cards saved in Safari aren't here.
+		if (showingKidsCards()) return `<p class="note">${t("kidCollectionEmpty", { name: escapeHtml(collectionOwner) })}</p>`;
 		const empty = installedOnIphone() && !accountName ? "collectionEmptyInstalled" : "collectionEmpty";
 		return `<p class="note">${t(empty)}</p>`;
 	}
@@ -2426,6 +2559,60 @@ function savedCardHtml(entry) {
 		</li>`;
 }
 
+// "Move to" on a saved card's page, for a parent with kids' accounts: this card, from the cards shown,
+// to the parent's own or a kid's (see moveSavedCard in account.js). owned: how many are shown.
+function moveHtml(owned) {
+	const targets = moveTargets();
+	const message = moveMessage
+		? `<p class="${moveMessage.tone === "error" ? "status error" : "own-note"}">${t(moveMessage.key, moveMessage.values)}</p>`
+		: "";
+	if (owned === 0 || targets.length === 0) return message;
+	if (!targets.includes(moveTarget)) moveTarget = targets[0];
+	const options = targets.map((owner) => `
+		<option value="${escapeHtml(owner)}" ${owner === moveTarget ? "selected" : ""}>
+			${owner === accountName ? t("ownerMine") : escapeHtml(owner)}
+		</option>`).join("");
+	const disabled = moveBusy ? "disabled" : "";
+	const moveAll = owned > 1
+		? `<button type="button" class="button secondary" data-action="move" data-how-many="${owned}" ${disabled}>${t("moveAll", { count: owned })}</button>`
+		: "";
+	return `
+		<div class="move-row">
+			<label for="move-target">${t("moveTo")}</label>
+			<select id="move-target" class="sort-select" data-action="move-target">${options}</select>
+			<button type="button" class="button secondary" data-action="move" data-how-many="1" ${disabled}>${t(moveBusy ? "moving" : "moveOne")}</button>
+			${moveAll}
+		</div>
+		${message}`;
+}
+
+// Where a saved card shown in My cards can be moved: the parent's own cards and each kid's, but for
+// the ones shown. None for a kid's own account, or an account without kids.
+function moveTargets() {
+	if (accountName === null || isKidAccount || familyKids.length === 0) return [];
+	return [accountName, ...familyKids].filter((owner) => owner !== collectionOwner);
+}
+
+async function moveShownCard(page, howMany) {
+	const entry = findSaved(page.card.id, versionOf(page.card, page.version).key);
+	const target = moveTarget;
+	if (!entry || !target || moveBusy) return;
+	moveBusy = true;
+	moveMessage = null;
+	renderSavedCardPage();
+	try {
+		await moveSavedCard(collectionOwner, target, entry, howMany);
+		moveMessage = target === accountName
+			? { key: "movedToMine", values: {}, tone: "" }
+			: { key: "moved", values: { name: escapeHtml(target) }, tone: "" };
+	} catch (error) {
+		console.error(error);
+		moveMessage = { key: "moveFailed", values: {}, tone: "error" };
+	}
+	moveBusy = false;
+	renderCollection();   // the list, and the page with its new count
+}
+
 // ---------- A saved card's page ----------
 // Tapping a card in My cards opens its page there: the page the Scan screen shows for a card it
 // found, with the saved version picked. Whatever the Scan screen shows stays as it was.
@@ -2436,6 +2623,7 @@ async function openSavedCard(cardId, version) {
 	if (!entry) return;
 	listScrolledTo = window.scrollY;
 	savedPage = { entry: entry, card: null, version: version, problem: null };
+	moveMessage = null;
 	collectionPage.hidden = true;
 	savedCardView.hidden = false;
 	// A step in the browser's history, for the phone's own Back to take away again (see popstate).
@@ -2676,15 +2864,21 @@ function moveOldCardsToTcgdex() {
 // ---------- Accounts ----------
 
 function handleAccountChange(username) {
-	if (stopWatchingCards) {
-		stopWatchingCards();
-		stopWatchingCards = null;
+	// Whatever was listened to for the account before stops; the new one's things are listened to.
+	for (const stop of [stopWatchingCards, stopWatchingLearned, stopWatchingSettings, stopWatchingInfo, stopWatchingFamily]) {
+		if (stop) stop();
 	}
+	stopWatchingCards = null;
+	stopWatchingLearned = null;
+	stopWatchingSettings = null;
+	stopWatchingInfo = null;
+	stopWatchingFamily = null;
+	familyKids = [];
+	isKidAccount = false;
+	kidMessage = null;
+	moveMessage = null;
+	useKeyOnPhone();   // the Claude key: this phone's own, until the account's settings come
 	// The learned cards follow the account too (learned.js).
-	if (stopWatchingLearned) {
-		stopWatchingLearned();
-		stopWatchingLearned = null;
-	}
 	useLearnedAccount(username);
 	if (username) {
 		stopWatchingLearned = watchAccountLearned(
@@ -2700,21 +2894,54 @@ function handleAccountChange(username) {
 				renderLearned();
 			},
 		);
-	}
-	if (username) {
 		useAccountCollection(username);
-		stopWatchingCards = watchAccountCards(
+		watchShownCollection();
+		stopWatchingSettings = watchAccountSettings(
 			username,
-			(cards) => {
-				useAccountCards(cards);
-				renderCollection();
-				renderResults();
-				renderAccount();
-				moveOldCardsToTcgdex();
+			(settings, confirmed) => {
+				useAccountSettings(settings, confirmed);
+				renderClaudeSettings();
 			},
 			(error) => {
+				// Firebase's rules from before version 1.48.0: the key stays on this phone.
 				console.error(error);
-				setAccountMessage(accountProblem(error), "error");
+				useKeyOnPhone();
+				renderClaudeSettings();
+			},
+		);
+		stopWatchingInfo = watchAccountInfo(
+			username,
+			(info) => {
+				isKidAccount = Boolean(info.parent);
+				// A kid's account opens in kids mode, on whichever phone it signs in on.
+				if (isKidAccount && !kidsMode) setKidsMode(true, false);
+				renderAccount();
+				renderCollection();
+			},
+			(error) => {
+				// Firebase's rules from before version 1.48.0: a grown-up's account, as before.
+				console.error(error);
+				isKidAccount = false;
+				renderAccount();
+			},
+		);
+		stopWatchingFamily = watchFamily(
+			username,
+			(kids) => {
+				familyKids = kids;
+				// A kid taken off the list (maybe on another phone) while their cards were shown.
+				if (showingKidsCards() && !kids.includes(collectionOwner)) showCardsOf(accountName);
+				renderAccount();
+				renderCollection();
+				renderResults();
+			},
+			(error) => {
+				// Firebase's rules from before version 1.48.0 don't know kids' accounts: none are shown.
+				console.error(error);
+				familyKids = [];
+				if (showingKidsCards()) showCardsOf(accountName);
+				renderAccount();
+				renderCollection();
 			},
 		);
 	} else {
@@ -2732,6 +2959,81 @@ function handleAccountChange(username) {
 	moveOldCardsToTcgdex();   // the phone's cards were read again (an account's follow when they arrive)
 }
 
+// Listens for the cards My cards shows (collectionOwner): the account's own, or a kid's.
+function watchShownCollection() {
+	if (stopWatchingCards) stopWatchingCards();
+	const owner = collectionOwner;
+	stopWatchingCards = watchAccountCards(
+		owner,
+		(cards) => {
+			if (owner !== collectionOwner) return;   // another list was picked meanwhile
+			useAccountCards(cards);
+			renderCollection();
+			renderResults();
+			renderAccount();
+			moveOldCardsToTcgdex();
+		},
+		(error) => {
+			console.error(error);
+			setAccountMessage(accountProblem(error), "error");
+		},
+	);
+}
+
+// Shows the parent's own cards (owner: the account's username) or a kid's in My cards. Cards saved
+// from the Scan screen then go to that list too.
+function showCardsOf(owner) {
+	if (owner === collectionOwner) return;
+	closeSavedCard();
+	showCollectionOf(owner);
+	moveMessage = null;
+	moveTarget = null;
+	watchShownCollection();
+	renderCollection();
+	renderResults();   // the open card's "Add to ..." names whose cards
+	renderAccount();
+}
+
+// The buttons that pick whose cards My cards shows: the parent's own and each kid's. Only for a
+// parent with kids' accounts.
+function renderOwnerSwitch() {
+	const owners = accountName !== null && !isKidAccount && familyKids.length > 0 ? [accountName, ...familyKids] : [];
+	ownerSwitch.hidden = owners.length === 0;
+	ownerSwitch.innerHTML = owners.map((owner) => `
+		<button type="button" data-owner="${escapeHtml(owner)}" aria-pressed="${owner === collectionOwner}">
+			${owner === accountName ? t("ownerMine") : escapeHtml(owner)}
+		</button>`).join("");
+}
+
+// The kids' accounts in a parent's account box: each kid, and the form to make one.
+function renderKidsAccounts() {
+	kidsAccounts.hidden = accountName === null || isKidAccount;
+	if (kidsAccounts.hidden) return;
+	kidsCount.textContent = familyKids.length > 0 ? String(familyKids.length) : "";
+	kidList.innerHTML = familyKids.length === 0
+		? `<li class="note">${t("kidsNone")}</li>`
+		: familyKids.map((kid) => `
+			<li class="kid-row">
+				<span class="kid-name">${escapeHtml(kid)}</span>
+				<button type="button" class="button secondary" data-remove-kid="${escapeHtml(kid)}">${t("kidRemove")}</button>
+			</li>`).join("");
+	kidSubmit.textContent = t(kidBusy ? "kidCreating" : "kidCreate");
+	kidSubmit.disabled = kidBusy;
+	showKidPasswordFeedback();
+	kidMessageText.textContent = kidMessage ? t(kidMessage.key, kidMessage.values) : "";
+	kidMessageText.classList.toggle("error", kidMessage !== null && kidMessage.tone === "error");
+}
+
+function showKidPasswordFeedback() {
+	const password = kidPasswordInput.value;
+	if (password === "") {
+		kidPasswordFeedback.textContent = t("kidPasswordTip");
+		return;
+	}
+	const check = checkNewPassword(password, cleanUsername(kidUsernameInput.value));
+	kidPasswordFeedback.textContent = check.ok ? t("passwordStrong") : t(check.problem, check.values);
+}
+
 function renderAccount() {
 	accountPanel.hidden = !accountsAvailable();
 	if (accountPanel.hidden) return;
@@ -2741,10 +3043,11 @@ function renderAccount() {
 
 	if (signedIn) {
 		accountNameText.textContent = accountName;
-		// Cards saved on this phone before signing in can be moved into the account.
-		const onPhone = accountCardsLoaded ? phoneCardCount() : 0;
+		// Cards saved on this phone before signing in can be moved into the account (its own cards).
+		const onPhone = accountCardsLoaded && !showingKidsCards() ? phoneCardCount() : 0;
 		phoneCardsOffer.hidden = onPhone === 0;
 		phoneCardsText.textContent = onPhone === 1 ? t("phoneCardsOne") : t("phoneCards", { count: onPhone });
+		renderKidsAccounts();
 	} else {
 		const creating = accountMode === "create";
 		for (const button of accountModeButtons) {

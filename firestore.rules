@@ -3,15 +3,18 @@ rules_version = '2';
 // Who may read and change what in Kortpris's online storage (Firestore).
 // These rules run on Firebase's side, so they hold whatever an app sends.
 //
-// Each account's cards live in collections/<username>, and only that account may touch them.
+// Each account's cards live in collections/<username>, and only that account may touch them - and
+// the parent who made it, for a kid's account (see accounts and families below).
 // The cards are filed under the username rather than Firebase's internal account id, so if a
 // forgotten password means deleting and re-creating an account, the cards are still there.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     match /collections/{username} {
-      allow read, delete: if isOwner(username);
-      allow create, update: if isOwner(username) && isValidCollection(request.resource.data);
+      allow read: if isOwner(username) || isParentOf(username);
+      allow delete: if isOwner(username);
+      allow create, update: if (isOwner(username) || isParentOf(username))
+        && isValidCollection(request.resource.data);
     }
 
     // The cards the app has learned for each account (learned.js): only that account again.
@@ -20,11 +23,50 @@ service cloud.firestore {
       allow create, update: if isOwner(username) && isValidLearned(request.resource.data);
     }
 
-    // Signed in as the account whose made-up email is <username>@kortpris.example.com
-    // (see USERNAME_EMAIL_DOMAIN in account.js).
-    function isOwner(username) {
+    // Each account's settings: its Claude key (claude.js), so it works on every phone the account
+    // signs in on. Only that account.
+    match /settings/{username} {
+      allow read, delete: if isOwner(username);
+      allow create, update: if isOwner(username) && isValidSettings(request.resource.data);
+    }
+
+    // A kid's account names its parent: written once, by the kid's account itself, on the parent's
+    // phone as the parent makes it (see linkKidAccount in account.js). Nobody can change it
+    // afterwards, so nobody can make themselves another account's parent.
+    match /accounts/{username} {
+      allow read: if isOwner(username);
+      allow create: if isOwner(username) && isValidAccountInfo(request.resource.data);
+    }
+
+    // The kids' accounts a parent has made. Seeing a kid's cards takes both: the kid's account
+    // naming the parent, and the parent's list naming the kid - so taking a kid off the list ends it.
+    match /families/{username} {
+      allow read, delete: if isOwner(username);
+      allow create, update: if isOwner(username) && isValidFamily(request.resource.data);
+    }
+
+    // The username of whoever is signed in: the part of their made-up email before the @.
+    function signedInName() {
+      return request.auth.token.email.split('@')[0];
+    }
+
+    // Signed in with an account made by Kortpris: its made-up email is exactly
+    // <username>@kortpris.example.com (see USERNAME_EMAIL_DOMAIN in account.js).
+    function signedIn() {
       return request.auth != null
-        && request.auth.token.email == username + '@kortpris.example.com';
+        && request.auth.token.email == signedInName() + '@kortpris.example.com';
+    }
+
+    function isOwner(username) {
+      return signedIn() && signedInName() == username;
+    }
+
+    function isParentOf(kid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/accounts/$(kid))
+        && get(/databases/$(database)/documents/accounts/$(kid)).data.parent == signedInName()
+        && exists(/databases/$(database)/documents/families/$(signedInName()))
+        && kid in get(/databases/$(database)/documents/families/$(signedInName())).data.kids;
     }
 
     // Only the two fields the app writes, and a sensible number of cards.
@@ -40,6 +82,31 @@ service cloud.firestore {
       return data.keys().hasOnly(['photos', 'updatedAt'])
         && data.photos is list
         && data.photos.size() <= 300
+        && data.updatedAt == request.time;
+    }
+
+    // An Anthropic API key is about 110 characters.
+    function isValidSettings(data) {
+      return data.keys().hasOnly(['claudeKey', 'updatedAt'])
+        && data.claudeKey is string
+        && data.claudeKey.size() <= 300
+        && data.updatedAt == request.time;
+    }
+
+    // A parent's username (see USERNAME_PATTERN in account.js), which isn't the kid's own.
+    function isValidAccountInfo(data) {
+      return data.keys().hasOnly(['parent', 'createdAt'])
+        && data.parent is string
+        && data.parent.matches('[a-z0-9_-]{3,20}')
+        && data.parent != signedInName()
+        && data.createdAt == request.time;
+    }
+
+    // At most as many kids as account.js lets a parent make (MOST_KIDS).
+    function isValidFamily(data) {
+      return data.keys().hasOnly(['kids', 'updatedAt'])
+        && data.kids is list
+        && data.kids.size() <= 20
         && data.updatedAt == request.time;
     }
   }

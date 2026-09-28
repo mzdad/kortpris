@@ -63,19 +63,31 @@ or change them.
 **When `firestore.rules` changes, do this step again.** Version 1.25.0 added a rule for the
 cards the app has learned (kept in the account from then on); until it is published, the list
 of learned cards says the account couldn't be used, and they stay on the phone only.
+Version 1.48.0 added rules for the Claude key kept in the account and for kids' accounts; until
+they are published, the key stays on each phone as before, and making a kid's account says the
+rules must be updated first.
 
 ---
 
 ## Afterwards
 
-**Create the kids' accounts** in the app: **My cards → Create account**. Usernames can use
-a–z, numbers, `-` and `_` (no æ, ø, å). Better not to use full names.
+**Create the kids' accounts** in the app, from your own: sign in, then **My cards → Kids'
+accounts** → the kid's username and a password (**Make an easy one** gives three words and a
+number) → **Make the kid's account**. Usernames can use a–z, numbers, `-` and `_` (no æ, ø, å).
+Better not to use full names. Then sign in with the kid's username and password on the kid's
+phone: the app opens in kids mode there, with only the kid's cards. On your phone, **My cards**
+gets a button for each kid, and a saved card's page gets **Move to**.
+
+A kid who already has an account (made with **Create account** before version 1.48.0): type
+its username and password in **Kids' accounts** the same way, and it becomes one of your kids'.
 
 **Stop strangers from making accounts** (recommended once the family's accounts exist):
 Authentication → **Settings** → **User actions** → untick **Enable create (sign-up)** →
-**Save**. Signing in keeps working. Tick it again whenever you want to add an account.
+**Save**. Signing in keeps working. Tick it again whenever you want to add an account -
+a kid's too.
 
 **A child forgot their password:** Authentication → **Users** → find
-`theirname@kortpris.example.com` → **⋮** → **Delete account**. Then create the account again
-in the app, with the same username and a new password (tick "Enable create" first if you
-switched it off). Their cards are still there, because cards are saved under the username.
+`theirname@kortpris.example.com` → **⋮** → **Delete account**. Then make the account again
+in **Kids' accounts**, with the same username and a new password (tick "Enable create" first if
+you switched it off). Their cards are still there, and still yours to see, because both are saved
+under the username.

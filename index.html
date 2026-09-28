@@ -19,7 +19,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@500&display=swap" crossorigin>
-<link rel="stylesheet" href="style.css?v=1.47.0">
+<link rel="stylesheet" href="style.css?v=1.48.0">
 </head>
 <body>
 
@@ -229,9 +229,38 @@
 						<p id="phone-cards-text" class="note"></p>
 						<button type="button" id="move-cards" class="button secondary" data-text="moveCards"></button>
 					</div>
+					<!-- A parent's kids' accounts (see addKidAccount in account.js); not shown to a kid's own. -->
+					<details id="kids-accounts" class="kids-accounts settings" hidden>
+						<summary>
+							<span data-text="kidsTitle"></span>
+							<span id="kids-count" class="state"></span>
+						</summary>
+						<div class="settings-body">
+							<p class="note" data-text="kidsExplain"></p>
+							<ul id="kid-list" class="kid-list"></ul>
+							<form id="kid-form" class="fields" autocomplete="off">
+								<div class="field">
+									<label for="kid-username" data-text="kidUsernameLabel"></label>
+									<input id="kid-username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+									<p class="hint" data-text="usernameHint"></p>
+								</div>
+								<div class="field">
+									<label for="kid-password" data-text="kidPasswordLabel"></label>
+									<!-- Shown as typed, and the whole width: the parent writes it down for the kid. -->
+									<input id="kid-password" class="kid-password" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+									<p id="kid-password-feedback" class="hint" aria-live="polite"></p>
+									<button type="button" id="kid-make-password" class="button secondary kid-make-password" data-text="kidMakePassword"></button>
+								</div>
+								<button id="kid-submit" type="submit" class="button primary"></button>
+								<p id="kid-message" class="note" role="status"></p>
+							</form>
+						</div>
+					</details>
 				</div>
 				<p id="account-message" class="note" role="status"></p>
 			</section>
+			<!-- A parent picks whose cards to see: their own, or a kid's (see showCardsOf in app.js). -->
+			<div id="owner-switch" class="view-switch compact owner-switch" role="group" data-label="whoseCards" hidden></div>
 			<div id="collection-summary" class="panel collection-summary"></div>
 			<div id="collection-search-row" class="field collection-search" hidden>
 				<label for="collection-search" data-text="collectionSearchLabel"></label>
@@ -392,31 +421,31 @@
 	<button type="button" id="camera-phone" class="camera-phone" data-text="cameraUsePhone"></button>
 </div>
 
-<!-- Our own files (these, and style.css at the top) end in ?v=1.47.0. Change it on every
+<!-- Our own files (these, and style.css at the top) end in ?v=1.48.0. Change it on every
      release (see README), so phones never mix new and old files from their cache. -->
 <!-- Tesseract reads text out of pictures (OCR = optical character recognition). -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js" crossorigin="anonymous"></script>
-<script src="strings.js?v=1.47.0"></script>
-<script src="pokemon-names.js?v=1.47.0"></script>
-<script src="card-names.js?v=1.47.0"></script>
-<script src="set-codes.js?v=1.47.0"></script>
-<script src="storage.js?v=1.47.0"></script>
-<script src="currency.js?v=1.47.0"></script>
-<script src="firebase-config.js?v=1.47.0"></script>
-<script src="password.js?v=1.47.0"></script>
-<script src="account.js?v=1.47.0"></script>
-<script src="speech.js?v=1.47.0"></script>
-<script src="card-finder.js?v=1.47.0"></script>
-<script src="sparkle.js?v=1.47.0"></script>
-<script src="reader.js?v=1.47.0"></script>
-<script src="card-ids.js?v=1.47.0"></script>
-<script src="cards.js?v=1.47.0"></script>
-<script src="matcher.js?v=1.47.0"></script>
-<script src="learned.js?v=1.47.0"></script>
-<script src="camera.js?v=1.47.0"></script>
-<script src="collection.js?v=1.47.0"></script>
-<script src="graded.js?v=1.47.0"></script>
-<script src="claude.js?v=1.47.0"></script>
-<script src="app.js?v=1.47.0"></script>
+<script src="strings.js?v=1.48.0"></script>
+<script src="pokemon-names.js?v=1.48.0"></script>
+<script src="card-names.js?v=1.48.0"></script>
+<script src="set-codes.js?v=1.48.0"></script>
+<script src="storage.js?v=1.48.0"></script>
+<script src="currency.js?v=1.48.0"></script>
+<script src="firebase-config.js?v=1.48.0"></script>
+<script src="password.js?v=1.48.0"></script>
+<script src="account.js?v=1.48.0"></script>
+<script src="speech.js?v=1.48.0"></script>
+<script src="card-finder.js?v=1.48.0"></script>
+<script src="sparkle.js?v=1.48.0"></script>
+<script src="reader.js?v=1.48.0"></script>
+<script src="card-ids.js?v=1.48.0"></script>
+<script src="cards.js?v=1.48.0"></script>
+<script src="matcher.js?v=1.48.0"></script>
+<script src="learned.js?v=1.48.0"></script>
+<script src="camera.js?v=1.48.0"></script>
+<script src="collection.js?v=1.48.0"></script>
+<script src="graded.js?v=1.48.0"></script>
+<script src="claude.js?v=1.48.0"></script>
+<script src="app.js?v=1.48.0"></script>
 </body>
 </html>

@@ -26,7 +26,10 @@ const CARD_KINDS = ["Pokémon", "Trainer", "Energy"];
 let kindsAsked = false;
 // When someone is signed in, their cards live in their account instead of on this phone.
 let accountName = null;           // the signed-in username, or null
-let accountCardsLoaded = false;   // the account's cards have arrived from Firebase
+// Whose cards My cards shows and changes: the account's own, or one of its kids' (see
+// showCollectionOf). null without an account.
+let collectionOwner = null;
+let accountCardsLoaded = false;   // those cards have arrived from Firebase
 let accountSaveProblem = null;    // why the last save to the account failed: { key, values }, or null
 
 function loadCollection() {
@@ -45,7 +48,7 @@ function saveCollection() {
 	if (accountName) {
 		// The screen shows the change at once; Firebase saves it in the background,
 		// and keeps trying if the phone is briefly offline.
-		saveAccountCards(accountName, collection).then(
+		saveAccountCards(collectionOwner, collection).then(
 			() => {
 				accountSaveProblem = null;
 				renderCollection();
@@ -69,9 +72,20 @@ function collectionReady() {
 
 function useAccountCollection(username) {
 	accountName = username;
+	showCollectionOf(username);
+}
+
+// A parent's own cards, or a kid's (owner: a username), to be shown once they arrive.
+function showCollectionOf(owner) {
+	collectionOwner = owner;
 	accountCardsLoaded = false;
 	accountSaveProblem = null;
 	collection = [];
+}
+
+// My cards shows a kid's cards, not the account's own.
+function showingKidsCards() {
+	return accountName !== null && collectionOwner !== accountName;
 }
 
 function useAccountCards(cards) {
@@ -81,6 +95,7 @@ function useAccountCards(cards) {
 
 function usePhoneCollection() {
 	accountName = null;
+	collectionOwner = null;
 	accountCardsLoaded = false;
 	accountSaveProblem = null;
 	collection = loadCollection();

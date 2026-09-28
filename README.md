@@ -162,7 +162,7 @@ Forget button. Tested with `dev_learning_test.html`.
 yet: one big picture to tap for the camera, the card with 1 to 5 Poké Balls for how valuable
 it is (one Poké Ball, then two Premier, three Great, four Ultra and five Master Balls, from 20, 40, 250 and 520 kroner), one rounded price, versions as little pictures of where the card glitters, and a big
 Save button. Typing, settings, price tables and accounts are hidden (sign a child in first,
-in normal mode). The phone also says everything out loud in Danish or English ("Pikachu. It's
+in normal mode; a kid's account switches kids mode on by itself, see Kids' accounts). The phone also says everything out loud in Danish or English ("Pikachu. It's
 worth about 33 kroner."), with its own built-in voice (`speech.js`): free, and nothing is sent
 anywhere. The 🔊 buttons read aloud in normal mode too. iPhones only let a page speak after a
 tap, so the first words come from pressing the camera button.
@@ -172,15 +172,31 @@ online and shows up on every phone they sign in on. Passwords must be at least 1
 characters and pass the [zxcvbn](https://github.com/dropbox/zxcvbn) guessability check.
 Accounts run on a Firebase project the owner creates: see [SETUP-ACCOUNTS.md](SETUP-ACCOUNTS.md).
 Until `firebase-config.js` has that project's settings, the app hides accounts.
+Firebase keeps a copy of the account's cards on the phone (version 1.48.0, `phoneCopy` in
+`account.js`), so My cards shows them without internet too, and changes made meanwhile are sent
+when the phone is online again. (Changed offline on two phones at once, the last one to come online
+wins: the list is saved as a whole.)
+
+**Kids' accounts.** A parent makes an account for each kid from their own (My cards → Kids'
+accounts, version 1.48.0; `addKidAccount` in `account.js`), with an easy password of three words and
+a number if they like. Signed in on the kid's phone, it opens in kids mode, with only the kid's
+cards. The parent's My cards gets a button for each kid, shows and saves to that kid's cards when
+picked, and a saved card's page gets "Move to" (one, or all of them). The kid's account names its
+parent once, as it is made, and the parent's account lists its kids; `firestore.rules` lets a
+parent at a kid's cards only when both agree, and never at the kid's Claude key or learned cards.
+Firebase signs in whoever an account is made for, so a kid's account is made in a second, hidden
+copy of Firebase on the phone, and the parent stays signed in.
 
 **Optional: read cards with Claude.** Only for someone signed in to an account: then, under
 "Read cards with Claude" on the Scan screen, they can save their own Anthropic API key.
-Each account has its own key on each phone (`kortpris.claudeKey.<username>`), so someone else
-signing in on the same phone doesn't use it; signed out, the box is hidden. Photos are then read by Claude Opus 5
+Each account has its own key, kept in the account since version 1.48.0 (`settings/<username>`,
+readable only by that account), so it works on every phone the account signs in on and nobody
+else signing in gets it; signed out, the box is hidden. (Before the Firebase rules of 1.48.0 are
+published, the key stays on each phone, `kortpris.claudeKey.<username>`, and moves into the account
+once they are.) Photos are then read by Claude Opus 5
 (`claude.js`), which handles worn, foil and non-English cards far better, at roughly
 US$0.03 per photo on the key owner's account. If Claude fails, the built-in reader takes
-over and a notice says why. The key is kept in the phone's browser and sent only to
-Anthropic.
+over and a notice says why. The key is sent only to Anthropic.
 
 **On the home screen.** The app can be installed like an app. "Install app" at the top of the
 page opens a guide for each kind of device - iPhone and iPad, Android, Chromebook, computers,
@@ -198,7 +214,8 @@ start page is still asked for from the internet each
 time (within 3 seconds, or the copy kept is used), so an update arrives the first time the app
 opens, and the older version's files are thrown away. On an iPhone, the home screen app keeps its
 own saved things, apart from Safari's: My cards and the learned cards start empty there until
-someone signs in, which the app says. Signed-in accounts still need the internet for My cards.
+someone signs in, which the app says. Signed-in accounts show their cards without internet too,
+from Firebase's copy on the phone (see Accounts).
 While developing on this PC (localhost) the service worker is off, because files change there
 without a new version number; `?sw` in the address switches it on to test it, and opening the page
 without `?sw` takes it away again (but not the database's answers kept).
@@ -233,7 +250,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `account.js` | Accounts: sign up, sign in, and My cards kept online (Firebase) |
 | `password.js` | Decides whether a new password is strong enough |
 | `firebase-config.js` | Which Firebase project holds the accounts |
-| `firestore.rules` | Firebase-side privacy rules: each account sees only its own cards |
+| `firestore.rules` | Firebase-side privacy rules: each account sees only its own cards (and a parent their kids') |
 | `firebase.json` | Settings for Firebase's command-line tools and local test copy |
 | `SETUP-ACCOUNTS.md` | Click-steps for creating the Firebase project |
 | `app.js` | The screen: buttons, results, prices |

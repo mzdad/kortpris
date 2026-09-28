@@ -7,8 +7,12 @@
 // The official Anthropic SDK, fetched from a CDN the first time Claude is used.
 const CLAUDE_SDK_URL = "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.128.0/+esm";
 const CLAUDE_MODEL = "claude-opus-5";
-// Each account keeps its own key on this phone: "kortpris.claudeKey.<username>". Versions
-// before 1.21.0 kept one key for the whole phone under the name without the username.
+// Each account keeps its own key: in the account itself since version 1.48.0 (see
+// saveAccountClaudeKey in account.js), so it works on every phone the account signs in on. Before
+// that, on each phone: "kortpris.claudeKey.<username>" - still used until the account's settings
+// have come, or when Firebase won't keep them (its rules from before 1.48.0), and moved into the
+// account as soon as it can keep it. Versions before 1.21.0 kept one key for the whole phone under the
+// name without the username.
 const CLAUDE_KEY_STORAGE_KEY = "kortpris.claudeKey";
 // Claude Opus 5 sees up to 2576 pixels on a photo's long side. Sending that much keeps the
 // tiny collector number readable. It is also the priciest size: about 4800 tokens per photo.
@@ -50,21 +54,72 @@ const CARD_READING_PROMPT = [
 let sdkPromise = null;
 let client = null;
 let clientKey = null;
+// The signed-in account's key as its settings last said, once they have come: { key, confirmed }
+// ("" for none; confirmed once Firebase itself said, not just the phone's copy of the account). null
+// before that, and when the account can't keep a key.
+let accountKey = null;
 
 function claudeKey() {
-	// The signed-in account's key on this phone. Signed out, there is none.
+	// The signed-in account's key. Signed out, there is none.
 	if (accountName === null) return "";
+	// Until Firebase has said the account has none, a key kept on this phone still counts.
+	if (accountKey !== null && (accountKey.key !== "" || accountKey.confirmed)) return accountKey.key;
 	return readStorage(accountKeyName()) || "";
 }
 
 // Returns true when it was saved (only possible while signed in).
 function saveClaudeKey(key) {
 	if (accountName === null) return false;
-	return writeStorage(accountKeyName(), key);
+	if (accountKey === null) return writeStorage(accountKeyName(), key);
+	// Kept on this phone too, until the account has it (see keepKeyInAccount).
+	writeStorage(accountKeyName(), key);
+	accountKey = { key: key, confirmed: accountKey.confirmed };
+	keepKeyInAccount(key);
+	return true;
 }
 
 function forgetClaudeKey() {
-	if (accountName !== null) removeStorage(accountKeyName());
+	if (accountName === null) return;
+	removeStorage(accountKeyName());
+	if (accountKey === null) return;
+	accountKey = { key: "", confirmed: accountKey.confirmed };
+	keepKeyInAccount("");
+}
+
+// The account's settings have come (see watchAccountSettings in account.js). confirmed: from Firebase
+// itself, not the phone's copy of them.
+function useAccountSettings(settings, confirmed) {
+	const key = settings.claudeKey || "";
+	accountKey = { key: key, confirmed: confirmed };
+	// A key kept on this phone moves into the account - unless the account has one already. Only on
+	// Firebase's own word: the phone's copy of the account can be old.
+	const phoneKey = readStorage(accountKeyName());
+	if (!confirmed || !phoneKey) return;
+	if (key) removeStorage(accountKeyName());
+	else saveClaudeKey(phoneKey);
+}
+
+// The account can't keep a key (Firebase refused), or another account signed in: the phone's own key
+// is used, as before version 1.48.0.
+function useKeyOnPhone() {
+	accountKey = null;
+}
+
+function keepKeyInAccount(key) {
+	const username = accountName;
+	saveAccountClaudeKey(username, key).then(
+		() => {
+			// Kept in the account: the phone's own copy isn't needed any more.
+			if (username === accountName) removeStorage(accountKeyName());
+		},
+		(error) => {
+			// Refused: kept on this phone instead, where it works as it did before.
+			console.error(error);
+			if (username !== accountName) return;
+			accountKey = null;
+			if (key) writeStorage(accountKeyName(), key);
+		},
+	);
 }
 
 function accountKeyName() {

@@ -35,6 +35,29 @@ function loadPasswordChecker() {
 	return checkerPromise;
 }
 
+// A password a kid can remember and type: three everyday words and a number, like
+// "rocket-banana-cloud-47" - picked by chance from words (strings.js has a list per language) until
+// one passes checkNewPassword. Needs the password checker loaded. Returns "" if none passed.
+const EASY_PASSWORD_WORDS = 3;
+const EASY_PASSWORD_TRIES = 20;
+function easyPassword(words, username) {
+	for (let tries = 0; tries < EASY_PASSWORD_TRIES; tries++) {
+		const parts = [];
+		for (let i = 0; i < EASY_PASSWORD_WORDS; i++) parts.push(words[randomBelow(words.length)]);
+		parts.push(String(10 + randomBelow(90)));   // a number from 10 to 99
+		const password = parts.join("-");
+		if (checkNewPassword(password, username).ok) return password;
+	}
+	return "";
+}
+
+function randomBelow(limit) {
+	// The browser's own random numbers, made for passwords (Math.random is guessable).
+	const numbers = new Uint32Array(1);
+	crypto.getRandomValues(numbers);
+	return numbers[0] % limit;
+}
+
 // Returns { ok, problem, values, score }. problem is a text key from strings.js
 // (with values to fill in), or null when the password is fine. score is 0-4, or null.
 function checkNewPassword(password, username) {
