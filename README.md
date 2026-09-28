@@ -182,7 +182,9 @@ wins: the list is saved as a whole.)
 **Kids' accounts.** A parent makes an account for each kid from their own (My cards → Kids'
 accounts, version 1.48.0; `addKidAccount` in `account.js`), with an easy password of three words and
 a number if they like. Signed in on the kid's phone, it opens in kids mode, with only the kid's
-cards. The parent's My cards gets a button for each kid, shows and saves to that kid's cards when
+cards - each time the app opens, at once (the phone remembers the kid's account: `kortpris.kidAccount`),
+and each time the kid signs in. The kid can still turn kids mode off with 🧒 for the full app; it
+then stays off until the app is next opened, whatever Firebase sends meanwhile. The parent's My cards gets a button for each kid, shows and saves to that kid's cards when
 picked, and a saved card's page gets "Move to" (one, or all of them). The kid's account names its
 parent once, as it is made, and the parent's account lists its kids; `firestore.rules` lets a
 parent at a kid's cards only when both agree, and never at the kid's Claude key or learned cards.

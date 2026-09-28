@@ -5,6 +5,25 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.52.0
+
+- **Kids mode first on a kid's account, and a way out** (you asked: "the kids mode should always be
+  the main activated one. Also should be able to turn it off if they want, so they can use the full
+  version of the app"). A kid's account now opens in kids mode every time the app is opened, and
+  every time the kid signs in - from the first moment, as the phone remembers it is a kid's account,
+  where before the full app could show until Firebase answered. The kid can tap 🧒 to turn it off and
+  use the full app; it stays off until the app is next opened.
+  - Fixed on the way: kids mode was switched on again each time Firebase sent news of the account -
+    for example when the phone came back online - so a kid who had turned it off was put back in it
+    at any moment.
+  - Your own account works as before: kids mode stays as you leave it.
+  - Tried on the test copy with a made-up parent and kid: signed in as the kid, kids mode on; turned
+    off, then Firebase cut off and back, still off (the old way turned it back on - checked too);
+    the app reopened, kids mode on at once, before Firebase; signed out and in as the parent, not
+    forced, and the parent's own choice kept through a reopen; the kid signed in again, kids mode on.
+  - "Opened again" means really opened: a phone may keep the app running in the background for a
+    long time, and then it stays as the kid left it.
+
 ## Done in 1.51.0
 
 - **1.11 Numbers on sparkly foil** (you said: "do 1.11"). Your Dratini's number was clear to the eye,

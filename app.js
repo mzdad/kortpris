@@ -21,6 +21,9 @@ const LANGUAGE_STORAGE_KEY = "kortpris.language";
 const CLAUDE_FINISH_VERSIONS = { holo: "holofoil", reverse_holo: "reverseHolofoil", normal: "normal" };
 // Where the phone remembers whether kids mode is on.
 const KIDS_MODE_STORAGE_KEY = "kortpris.kidsMode";
+// Where the phone remembers the kid's account signed in on it, if any, so the app opens in kids mode
+// at once, before Firebase has said whose account it is (see handleAccountChange).
+const KID_ACCOUNT_STORAGE_KEY = "kortpris.kidAccount";
 // Where the phone remembers the order My cards is shown in (see sortedCollection).
 const SORT_STORAGE_KEY = "kortpris.collectionSort";
 const SORT_ORDERS = ["value", "name", "set", "newest"];
@@ -218,7 +221,12 @@ const cameraPhoneButton = document.getElementById("camera-phone");
 // Kept as plain data so everything can be redrawn when the language changes.
 
 let language = startLanguage();
-let kidsMode = readStorage(KIDS_MODE_STORAGE_KEY) === "on";   // big pictures, few words, read aloud
+// A kid's account starts in kids mode each time the app opens, and each time the kid signs in - but
+// only then, so the kid can still turn it off for the full app (asked for in version 1.52.0: kids
+// mode "always the main activated one", but "able to turn it off if they want"). This is the kid's
+// account it was switched on for since the app opened, or null.
+let kidsModeStartedFor = readStorage(KID_ACCOUNT_STORAGE_KEY);
+let kidsMode = kidsModeStartedFor !== null || readStorage(KIDS_MODE_STORAGE_KEY) === "on";   // big pictures, few words, read aloud
 let currency = startCurrency();   // the currency picked in the menu (currency.js)
 let money = makeMoneyFormats(language, shownCurrency());
 let statusMessage = { key: "statusIdle", values: {}, tone: "" };
@@ -2941,6 +2949,10 @@ function handleAccountChange(username) {
 	stopWatchingFamily = null;
 	familyKids = [];
 	isKidAccount = false;
+	// Another account, or none: this phone no longer opens in kids mode for the kid signed in before,
+	// and when the kid signs in again, kids mode starts again.
+	if (username !== kidsModeStartedFor) kidsModeStartedFor = null;
+	if (readStorage(KID_ACCOUNT_STORAGE_KEY) !== username) removeStorage(KID_ACCOUNT_STORAGE_KEY);
 	kidMessage = null;
 	moveMessage = null;
 	useKeyOnPhone();   // the Claude key: this phone's own, until the account's settings come
@@ -2979,8 +2991,15 @@ function handleAccountChange(username) {
 			username,
 			(info) => {
 				isKidAccount = Boolean(info.parent);
-				// A kid's account opens in kids mode, on whichever phone it signs in on.
-				if (isKidAccount && !kidsMode) setKidsMode(true, false);
+				if (isKidAccount) writeStorage(KID_ACCOUNT_STORAGE_KEY, username);
+				else removeStorage(KID_ACCOUNT_STORAGE_KEY);
+				// A kid's account opens in kids mode, on whichever phone it signs in on - once, not each
+				// time Firebase sends news of the account (as it does when the phone is back online):
+				// then a kid who turned kids mode off was put back in it at any moment.
+				if (isKidAccount && kidsModeStartedFor !== username) {
+					kidsModeStartedFor = username;
+					if (!kidsMode) setKidsMode(true, false);
+				}
 				renderAccount();
 				renderCollection();
 			},

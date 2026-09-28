@@ -78,7 +78,8 @@ nothing.
 accounts** → the kid's username and a password (**Make an easy one** gives three words and a
 number) → **Make the kid's account**. Usernames can use a–z, numbers, `-` and `_` (no æ, ø, å).
 Better not to use full names. Then sign in with the kid's username and password on the kid's
-phone: the app opens in kids mode there, with only the kid's cards. On your phone, **My cards**
+phone: the app opens in kids mode there, with only the kid's cards - every time it is opened. The
+kid can tap 🧒 to turn kids mode off for the full app, until the app is next opened. On your phone, **My cards**
 gets a button for each kid, and a saved card's page gets **Move to**.
 
 A kid who already has an account (made with **Create account** before version 1.48.0): type
