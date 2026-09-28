@@ -19,9 +19,11 @@ const PRICE_REQUESTS_AT_ONCE = 6;
 // Only what "My cards" shows is kept, so even a big collection fits in the browser's storage.
 // kind is the database's "supertype": "Pokémon", "Trainer" or "Energy" (see CARD_KINDS). Cards
 // saved before version 1.25.0 have none until fillMissingKinds has asked the database.
+// Magic cards (from version 1.55.0, see magic.js) are saved the same way, with an id starting
+// "mtg:", kind "Magic" and db "scryfall", and a version like "foil".
 let collection = loadCollection();
 // "My cards" is split into these, in this order.
-const CARD_KINDS = ["Pokémon", "Trainer", "Energy"];
+const CARD_KINDS = ["Pokémon", "Trainer", "Energy", "Magic"];
 // fillMissingKinds has run: once per visit is enough, even when the database didn't answer.
 let kindsAsked = false;
 // When someone is signed in, their cards live in their account instead of on this phone.
@@ -143,10 +145,11 @@ function addToCollection(card, version) {
 			name: card.name,
 			setName: card.set.name,
 			number: collectorNumber(card),
-			image: card.images ? card.images.small : null,
+			// A Magic card has a smaller picture for lists (see magicCard in magic.js).
+			image: card.images ? card.images.thumb || card.images.small : null,
 			count: 1,
 			kind: card.supertype,
-			db: CARD_DATABASE,
+			db: isMagicCard(card) ? MAGIC_DATABASE : CARD_DATABASE,
 			...pricesOf(card, version),
 		});
 	}
@@ -169,7 +172,7 @@ async function withPricesOf(cards, fresh = false) {
 let movingSavedCards = false;
 async function moveSavedCardsToTcgdex() {
 	if (movingSavedCards || !collectionReady()) return false;
-	const oldIds = [...new Set(collection.filter((entry) => entry.db !== CARD_DATABASE).map((entry) => entry.id))];
+	const oldIds = [...new Set(collection.filter(isOldEntry).map((entry) => entry.id))];
 	if (oldIds.length === 0) return false;
 	movingSavedCards = true;
 	try {
@@ -185,7 +188,7 @@ async function moveSavedCardsToTcgdex() {
 		if (!collectionReady()) return false;
 		let changed = false;
 		for (const entry of collection) {
-			if (entry.db === CARD_DATABASE) continue;
+			if (!isOldEntry(entry)) continue;
 			const card = cards.find((found) => found.id === current.get(entry.id));
 			if (!card) continue;
 			Object.assign(entry, {
@@ -208,6 +211,11 @@ async function moveSavedCardsToTcgdex() {
 	} finally {
 		movingSavedCards = false;
 	}
+}
+
+// A card saved with the old database's id: not TCGdex's, and not a Magic card's (Scryfall's).
+function isOldEntry(entry) {
+	return entry.db !== CARD_DATABASE && !isMagicId(entry.id);
 }
 
 // Saved cards whose picture was borrowed from the old database get Scrydex's (see currentPicture in
@@ -265,9 +273,11 @@ function pricesOf(card, version) {
 	// The saved version's prices: Cardmarket in euros, TCGplayer in dollars. A card saved before
 	// versions were kept gets its main version's, not the one last picked on the Scan screen.
 	const chosen = versionOf(card, version || null);
+	let updatedAt = card.cardmarket ? card.cardmarket.updatedAt : null;
+	if (isMagicCard(card)) updatedAt = card.magic.pricesDate;
 	return {
 		priceEur: chosen.eur,
-		updatedAt: card.cardmarket ? card.cardmarket.updatedAt : null,
+		updatedAt: updatedAt,
 		priceUsd: chosen.usd,
 	};
 }
@@ -280,24 +290,38 @@ async function refreshCollectionPrices() {
 	const account = accountName;
 	const sameList = () => collectionOwner === owner && accountName === account;
 	const ids = [...new Set(collection.map((saved) => saved.id))];   // each card once, even if saved in two versions
-	for (let start = 0; start < ids.length; start += REFRESH_BATCH_SIZE) {
-		const cards = await findCardsById(ids.slice(start, start + REFRESH_BATCH_SIZE));
+	const pokemonIds = ids.filter((id) => !isMagicId(id));
+	const magicIds = ids.filter(isMagicId);
+	for (let start = 0; start < pokemonIds.length; start += REFRESH_BATCH_SIZE) {
+		const cards = await findCardsById(pokemonIds.slice(start, start + REFRESH_BATCH_SIZE));
 		await withPricesOf(cards, true);
 		if (!sameList()) return false;
-		for (const card of cards) {
-			for (const entry of collection.filter((saved) => saved.id === card.id)) {
-				Object.assign(entry, pricesOf(card, entry.version));
-				entry.kind = card.supertype;
-			}
-		}
+		usePricesOf(cards);
+	}
+	// Magic cards come from Scryfall with their prices, many at a time (see findMagicCardsById).
+	for (let start = 0; start < magicIds.length; start += MAGIC_IDS_PER_QUESTION) {
+		const cards = await findMagicCardsById(magicIds.slice(start, start + MAGIC_IDS_PER_QUESTION), true);
+		if (!sameList()) return false;
+		usePricesOf(cards);
 	}
 	saveCollection();
 	return true;
 }
 
+// These cards' prices, and kinds, in their saved copies.
+function usePricesOf(cards) {
+	for (const card of cards) {
+		for (const entry of collection.filter((saved) => saved.id === card.id)) {
+			Object.assign(entry, pricesOf(card, entry.version));
+			entry.kind = card.supertype;
+		}
+	}
+}
+
 // Which part of "My cards" a saved card goes in: one of CARD_KINDS. Cards saved before kinds were
 // kept are guessed from their name until fillMissingKinds knows better.
 function cardKind(entry) {
+	if (isMagicId(entry.id)) return "Magic";
 	if (CARD_KINDS.includes(entry.kind)) return entry.kind;
 	const name = entry.name || "";
 	if (ENERGY_NAMES.includes(name)) return "Energy";
@@ -312,7 +336,8 @@ function cardKind(entry) {
 async function fillMissingKinds() {
 	if (kindsAsked || !collectionReady()) return false;
 	kindsAsked = true;
-	const ids = [...new Set(collection.filter((entry) => !entry.kind).map((entry) => entry.id))];
+	// A Magic card is always "Magic" (see cardKind): only Pokémon cards are asked about.
+	const ids = [...new Set(collection.filter((entry) => !entry.kind && !isMagicId(entry.id)).map((entry) => entry.id))];
 	if (ids.length === 0) return false;
 	let changed = false;
 	for (let start = 0; start < ids.length; start += REFRESH_BATCH_SIZE) {

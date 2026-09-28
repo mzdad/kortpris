@@ -24,6 +24,9 @@ const KIDS_MODE_STORAGE_KEY = "kortpris.kidsMode";
 // Where the phone remembers the kid's account signed in on it, if any, so the app opens in kids mode
 // at once, before Firebase has said whose account it is (see handleAccountChange).
 const KID_ACCOUNT_STORAGE_KEY = "kortpris.kidAccount";
+// Where the phone remembers which card game the Scan screen searches: "pokemon", or "magic" for
+// Magic: The Gathering (see magic.js).
+const GAME_STORAGE_KEY = "kortpris.game";
 // Where the phone remembers the order My cards is shown in (see sortedCollection).
 const SORT_STORAGE_KEY = "kortpris.collectionSort";
 const SORT_ORDERS = ["value", "name", "set", "newest"];
@@ -70,9 +73,12 @@ const KID_STATUS = {
 	readFailed: "kidNotFound",
 	unsureName: "kidNotFound",
 	needNameOrNumber: "kidNotFound",
+	magicStatusIdle: "kidIdle",
+	magicNeedName: "kidNotFound",
 	claudeNotACard: "kidNotFound",
 	apiDown: "kidTryLater",
 	apiTooMany: "kidTryLater",
+	magicTooMany: "kidTryLater",
 	exampleFailed: "kidTryLater",
 };
 // ...with a picture, so it can be understood without reading...
@@ -88,7 +94,7 @@ const KID_SPOKEN = {
 };
 
 // The text key for each kind of card, the group names in "My cards" (CARD_KINDS in collection.js).
-const KIND_TEXT_KEYS = { "Pokémon": "kindPokemon", "Trainer": "kindTrainer", "Energy": "kindEnergy" };
+const KIND_TEXT_KEYS = { "Pokémon": "kindPokemon", "Trainer": "kindTrainer", "Energy": "kindEnergy", "Magic": "kindMagic" };
 
 // TCGplayer splits prices by print version: [its name for the version, our text key].
 const TCGPLAYER_VARIANTS = [
@@ -119,6 +125,9 @@ const progressBar = document.getElementById("progress-bar");
 const searchForm = document.getElementById("search-form");
 const nameInput = document.getElementById("name-input");
 const numberInput = document.getElementById("number-input");
+const numberLabel = document.querySelector("label[for='number-input']");
+const gameButtons = document.querySelectorAll("[data-game]");
+const gameHint = document.getElementById("game-hint");
 const searchButton = document.getElementById("search-button");
 const detail = document.getElementById("detail");
 const results = document.getElementById("results");
@@ -227,9 +236,11 @@ let language = startLanguage();
 // account it was switched on for since the app opened, or null.
 let kidsModeStartedFor = readStorage(KID_ACCOUNT_STORAGE_KEY);
 let kidsMode = kidsModeStartedFor !== null || readStorage(KIDS_MODE_STORAGE_KEY) === "on";   // big pictures, few words, read aloud
+// The card game the Scan screen searches (see setGame). Kids mode scans Pokémon cards whatever it is.
+let game = readStorage(GAME_STORAGE_KEY) === "magic" ? "magic" : "pokemon";
 let currency = startCurrency();   // the currency picked in the menu (currency.js)
 let money = makeMoneyFormats(language, shownCurrency());
-let statusMessage = { key: "statusIdle", values: {}, tone: "" };
+let statusMessage = { key: idleStatusKey(), values: {}, tone: "" };
 let shownCards = [];              // the cards from the latest search
 let shownDescription = null;      // which kind of search found them: { key, values }
 let selectedCardId = null;        // the card whose prices are open
@@ -393,6 +404,8 @@ function applyLanguage() {
 	for (const element of document.querySelectorAll("[data-label]")) element.setAttribute("aria-label", t(element.dataset.label));
 	for (const element of document.querySelectorAll("[data-alt]")) element.alt = t(element.dataset.alt);
 	for (const button of languageButtons) button.setAttribute("aria-pressed", String(button.dataset.language === language));
+	// The search's words differ for Magic cards (after the fixed text above, which gives Pokémon's).
+	renderGame();
 
 	// Text the app wrote itself is drawn again from the data it came from.
 	showStatus();
@@ -452,11 +465,76 @@ for (const button of languageButtons) {
 	});
 }
 
+// ---------- Which card game ----------
+// The Scan screen searches Pokémon cards (TCGdex, cards.js) or Magic: The Gathering cards
+// (Scryfall, magic.js), picked by the switch above the search. Magic cards are found by typing: the
+// photo reading knows Pokémon cards only (ROADMAP.md, 7.2). My cards keeps both, in groups of their own.
+
+for (const button of gameButtons) {
+	button.addEventListener("click", () => setGame(button.dataset.game));
+}
+
+function setGame(chosen) {
+	if (chosen === game) return;
+	game = chosen;
+	writeStorage(GAME_STORAGE_KEY, game);
+	// Whatever the Scan screen showed was about the other game: a photo being read or searched stops,
+	// and its card, photo and texts go.
+	latestScanId++;
+	latestSearchId++;
+	lastPhoto = null;
+	versionHint = null;
+	scannedNumbers = { shown: "", guesses: [] };
+	nameInput.value = "";
+	numberInput.value = "";
+	numberInput.classList.remove("needs-attention");
+	searchButton.disabled = false;
+	hidePhoto();
+	hideProgress();
+	clearResults();
+	setNotice(null);
+	setStatus(idleStatusKey());
+	renderGame();
+}
+
+// What the status says before anything happens: how to start, for the game searched.
+function idleStatusKey() {
+	return game === "magic" && !kidsMode ? "magicStatusIdle" : "statusIdle";
+}
+
+// The switch, and the search's words for the game picked.
+function renderGame() {
+	const magic = game === "magic";
+	for (const button of gameButtons) button.setAttribute("aria-pressed", String(button.dataset.game === game));
+	nameInput.placeholder = t(magic ? "magicNamePlaceholder" : "namePlaceholder");
+	numberLabel.textContent = t(magic ? "magicNumberLabel" : "numberLabel");
+	numberInput.placeholder = t(magic ? "magicNumberPlaceholder" : "numberPlaceholder");
+	gameHint.hidden = !magic;
+	// The example is a Pokémon card's photo.
+	exampleButton.hidden = magic;
+	// Kids mode shows the Pokémon status, as it scans Pokémon cards whatever the game picked.
+	if (statusMessage.key === "statusIdle" || statusMessage.key === "magicStatusIdle") {
+		statusMessage.key = idleStatusKey();
+		showStatus();
+	}
+}
+
+// Magic cards can't be read from a photo yet: the photo buttons say so, and point to the search.
+// Returns true when they did. Kids mode scans Pokémon cards, so there it never stops them.
+function magicPhotoRefused() {
+	if (game !== "magic" || kidsMode) return false;
+	showView("scan");
+	setStatus("magicNoPhoto", {}, "error");
+	nameInput.focus();
+	return true;
+}
+
 // ---------- Buttons ----------
 
 cameraButton.addEventListener("click", () => openCamera());
 kidStartButton.addEventListener("click", () => openCamera());
 libraryButton.addEventListener("click", () => {
+	if (magicPhotoRefused()) return;
 	showView("scan");
 	if (kidsMode) say(t("sayChoosePhoto"));
 	libraryInput.click();
@@ -464,6 +542,7 @@ libraryButton.addEventListener("click", () => {
 
 // afterSave: opened by "Save and scan the next", so the camera says the last card was saved.
 function openCamera(afterSave = false) {
+	if (magicPhotoRefused()) return;
 	showView("scan");
 	// Said from the button press on purpose: iPhones only let a page start speaking from a tap,
 	// and after this first time it may also speak by itself when the card is found.
@@ -686,7 +765,8 @@ libraryInput.addEventListener("change", () => takeFileFrom(libraryInput));
 
 searchForm.addEventListener("submit", (event) => {
 	event.preventDefault();   // stay on this page instead of reloading it
-	searchForCard(true);
+	if (game === "magic") searchForMagicCard();
+	else searchForCard(true);
 });
 
 exampleButton.addEventListener("click", async () => {
@@ -722,8 +802,9 @@ resultsGrid.addEventListener("click", async (event) => {
 });
 
 // Adds the card's prices before it opens (see withPrices in cards.js). When the database doesn't
-// answer, the card opens without them, and says so.
+// answer, the card opens without them, and says so. A Magic card has its prices already.
 async function loadPrices(card) {
+	if (isMagicCard(card)) return card;
 	try {
 		await withPrices(card);
 	} catch (error) {
@@ -1485,6 +1566,14 @@ function showPhoto(imageFile) {
 	scanRow.classList.remove("no-photo");
 }
 
+function hidePhoto() {
+	if (photoUrl) URL.revokeObjectURL(photoUrl);
+	photoUrl = null;
+	photoThumb.removeAttribute("src");
+	photoThumb.hidden = true;
+	scanRow.classList.add("no-photo");
+}
+
 // ---------- Step 2: find the card in the price database ----------
 
 // byViewer: the viewer pressed Search, rather than the app searching on what it read.
@@ -1599,6 +1688,54 @@ async function searchForCard(byViewer = false) {
 		hideProgress();
 		// Asked too often today from this internet connection (see askOnce in cards.js).
 		setStatus(error.tooManyLookups ? "apiTooMany" : "apiDown", {}, "error");
+	} finally {
+		if (searchId === latestSearchId) searchButton.disabled = false;
+	}
+}
+
+// Magic: The Gathering cards are found by what was typed: their name, and the set code and number from
+// the card's bottom-left corner (see findMagicCards in magic.js). There is no photo, so nothing is
+// compared or learned.
+async function searchForMagicCard() {
+	const searchId = ++latestSearchId;
+	resultsForPhoto = false;
+	if (!canSearchMagic(nameInput.value, numberInput.value)) {
+		hideProgress();
+		setStatus("magicNeedName", {}, "error");
+		return;
+	}
+	clearResults();
+	setNotice(null);
+	numberInput.classList.remove("needs-attention");
+	setStatus("lookingUp");
+	showProgress(null);
+	searchButton.disabled = true;
+	try {
+		const found = await findMagicCards(nameInput.value, numberInput.value);
+		if (searchId !== latestSearchId) return;   // a newer search took over
+		hideProgress();
+		// A misspelt name is shown as the card's real one.
+		if (found.fixedName) nameInput.value = found.fixedName;
+		if (found.cards.length === 0) {
+			setStatus("noMatch", {}, "error");
+		} else if (found.cards.length === 1) {
+			setStatus("foundOne");
+			showResults(found.cards, found.description, found.cards[0].id, null);
+		} else {
+			setStatus("foundMany", { count: found.totalCount });
+			showResults(found.cards, found.description, null, null);
+			// More printings than fit on the page: the card's corner says which one it is.
+			if (found.totalCount > found.cards.length) {
+				setNotice("magicTypeSetCode", { name: nameInput.value.trim(), total: found.totalCount });
+				numberInput.classList.add("needs-attention");
+			}
+		}
+	} catch (error) {
+		console.error(error);
+		if (searchId !== latestSearchId) return;
+		hideProgress();
+		// Scryfall refuses for half a minute after too many questions (see askScryfallOnce).
+		setStatus(error.tooManyLookups ? "magicTooMany" : "apiDown", {}, "error");
 	} finally {
 		if (searchId === latestSearchId) searchButton.disabled = false;
 	}
@@ -1773,8 +1910,9 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 	let addText = t(owned > 0 ? "addAnother" : "addToCollection");
 	if (kid) addText = t(owned > 0 ? "addAnotherToCardsOf" : "addToCardsOf", { name: kid });
 	if (!collectionReady()) addText = t("loadingAccountCards");
-	// For a stack of cards: save this one and go straight back to the camera for the next.
-	const saveAndNext = onScanScreen
+	// For a stack of cards: save this one and go straight back to the camera for the next. Not for a
+	// Magic card, which the camera can't read yet.
+	const saveAndNext = onScanScreen && !isMagicCard(card)
 		? `<button type="button" class="button primary" data-action="save-and-next" ${collectionReady() ? "" : "disabled"}>
 				<span aria-hidden="true">📷</span> ${t("saveAndNext")}
 			</button>`
@@ -1803,17 +1941,25 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 				<p class="detail-meta">${meta.join(" · ")}</p>
 			</div>
 		</div>
-		${versionsHtml(versions, version.key, card.pricesFailed, fromPhoto)}
-		${versions.length === 0 ? `<p>${storeLinkHtml(priceChartingUrl(card, version, "Ungraded"), t("soldOnPriceCharting"))}</p>` : ""}
+		${versionsHtml(versions, version.key, card.pricesFailed, fromPhoto, versionHintKey(card, versions))}
+		${versions.length === 0 && !isMagicCard(card) ? `<p>${storeLinkHtml(priceChartingUrl(card, version, "Ungraded"), t("soldOnPriceCharting"))}</p>` : ""}
 		${own}
-		${cardmarketTableHtml(card)}
-		${tcgplayerTableHtml(card.tcgplayer)}
-		${gradedLinksHtml(card, version)}
+		${isMagicCard(card) ? magicShopsHtml(card) : cardmarketTableHtml(card) + tcgplayerTableHtml(card.tcgplayer)}
+		${isMagicCard(card) ? "" : gradedLinksHtml(card, version)}
 		<p class="fineprint">${t("ungraded")}</p>
 		${notYours}`;
 }
 
+// The text telling a card's versions apart: Pokémon cards' holos, or Magic cards' foils - with the
+// etched foil only for a card that has one.
+function versionHintKey(card, versions) {
+	if (!isMagicCard(card)) return "versionHint";
+	return versions.some((version) => version.key === "etchedFoil") ? "magicVersionHintEtched" : "magicVersionHint";
+}
+
 function collectorNumber(card) {
+	// A Magic card's corner names its set too: "M11 146" (see parseMagicNumber in magic.js).
+	if (isMagicCard(card)) return card.set.id.toUpperCase() + " " + card.number;
 	return card.set.printedTotal ? card.number + "/" + card.set.printedTotal : card.number;
 }
 
@@ -1828,8 +1974,10 @@ const CARDMARKET_REVERSE = ["reverseHoloAvg30", "reverseHoloTrend", "reverseHolo
 const REGULAR_VERSIONS = ["holofoil", "normal", "unlimitedHolofoil", "unlimited"];
 
 // Returns [{ key, eur, usd }]: key is the version's text key in strings.js, eur its Cardmarket
-// price in euros, usd TCGplayer's market price in dollars. Either price may be null.
+// price in euros, usd TCGplayer's market price in dollars. Either price may be null. A Magic card's
+// versions are its finishes: normal, foil and etched foil (see magicVersions in magic.js).
 function cardVersions(card) {
+	if (isMagicCard(card)) return magicVersions(card);
 	const tcgplayer = (card.tcgplayer && card.tcgplayer.prices) || {};
 	const cardmarket = (card.cardmarket && card.cardmarket.prices) || {};
 	const versions = [];
@@ -1886,7 +2034,8 @@ function versionOf(card, pickedKey = chosenVersion || versionHint) {
 
 // pricesFailed: the database didn't answer when the card's prices were asked for.
 // fromPhoto: the photo picked the reverse holo, not the viewer (see cardDetailHtml).
-function versionsHtml(versions, chosenKey, pricesFailed = false, fromPhoto = false) {
+// hintKey: the text under the versions, telling them apart (Magic's are foils, not holos).
+function versionsHtml(versions, chosenKey, pricesFailed = false, fromPhoto = false, hintKey = "versionHint") {
 	if (versions.length === 0) return `<p class="note">${t(pricesFailed ? "pricesFailed" : "noPrices")}</p>`;
 	const choosing = versions.length > 1;
 	const tiles = versions.map((version) => {
@@ -1916,7 +2065,7 @@ function versionsHtml(versions, chosenKey, pricesFailed = false, fromPhoto = fal
 	const question = choosing ? `<p class="versions-question">${t("whichVersion")}</p>` : "";
 	// Say so when the photo picked the reverse holo (see sparkle.js), so a wrong guess is noticed.
 	const byPhoto = choosing && fromPhoto && chosenKey === "reverseHolofoil";
-	const hint = choosing ? `<p class="hint">${t(byPhoto ? "versionFromPhoto" : "versionHint")}</p>` : "";
+	const hint = choosing ? `<p class="hint">${t(byPhoto ? "versionFromPhoto" : hintKey)}</p>` : "";
 	return `<div class="versions-block">${question}<div class="versions">${tiles.join("")}</div>${hint}</div>`;
 }
 
@@ -1992,6 +2141,19 @@ function tcgplayerTableHtml(tcgplayer) {
 				<tbody>${rows.join("")}</tbody>
 			</table>
 			${storeLinkHtml(tcgplayer.url, t("openTcgplayer"))}
+		</div>`;
+}
+
+// A Magic card's prices come from Scryfall, which gathers them from both shops once a day. The
+// version boxes above show them all, so this only says where they come from, with a link to each shop.
+function magicShopsHtml(card) {
+	return `
+		<div class="source">
+			<h3>${t("magicPricesTitle")}</h3>
+			${updatedHtml(card.magic.pricesDate)}
+			<p class="hint">${t("magicPricesFrom")}</p>
+			${storeLinkHtml(card.magic.cardmarketUrl, t("openCardmarket"))}
+			${storeLinkHtml(card.magic.tcgplayerUrl, t("openTcgplayer"))}
 		</div>`;
 }
 
@@ -2246,7 +2408,7 @@ function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint, onSca
 	const owned = savedCount(card.id, version.key);
 	const ownedNote = owned > 0 ? `<p class="own-note">${t("kidHave", { count: owned })}</p>` : "";
 	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
-	const saveAndNext = onScanScreen
+	const saveAndNext = onScanScreen && !isMagicCard(card)
 		? `<button type="button" class="button secondary kid-save" data-action="save-and-next" ${collectionReady() ? "" : "disabled"}>
 				<span aria-hidden="true">⭐📷</span> ${t("kidSaveAndNext")}
 			</button>`
@@ -2295,9 +2457,11 @@ function kidVersionsHtml(versions, chosenKey) {
 
 function versionPictureHtml(key) {
 	// A little card showing where this version glitters: on the picture (holo), everywhere but
-	// the picture (reverse holo), or nowhere. 1st edition cards also get their round stamp.
-	const shinyPicture = ["holofoil", "firstEditionHolofoil", "unlimitedHolofoil"].includes(key);
-	const shinyCard = key === "reverseHolofoil";
+	// the picture (reverse holo), everywhere (a Magic card's foils), or nowhere. 1st edition cards
+	// also get their round stamp.
+	const allOver = key === "foil" || key === "etchedFoil";
+	const shinyPicture = ["holofoil", "firstEditionHolofoil", "unlimitedHolofoil"].includes(key) || allOver;
+	const shinyCard = key === "reverseHolofoil" || allOver;
 	let sparkles = "";
 	if (shinyPicture) sparkles = sparkleHtml(10, 10) + sparkleHtml(20, 16);
 	if (shinyCard) sparkles = sparkleHtml(7, 25) + sparkleHtml(23, 27) + sparkleHtml(21, 36);
@@ -2764,9 +2928,10 @@ async function fetchSavedCard(page) {
 	page.problem = null;
 	renderSavedCardPage();
 	try {
-		const [card] = await findCardsById([page.entry.id]);
+		// A Magic card comes from Scryfall, with its prices (see magic.js).
+		const [card] = isMagicId(page.entry.id) ? await findMagicCardsById([page.entry.id]) : await findCardsById([page.entry.id]);
 		if (card) {
-			await withPrices(card);
+			if (!isMagicCard(card)) await withPrices(card);
 			page.card = card;
 		} else {
 			// A card saved before 1.32.0 that TCGdex doesn't have (see moveSavedCardsToTcgdex).
@@ -2775,7 +2940,9 @@ async function fetchSavedCard(page) {
 	} catch (error) {
 		console.error(error);
 		// Asked too often today from this internet connection (see askOnce in cards.js).
-		page.problem = error.tooManyLookups ? "apiTooMany" : "savedCardFailed";
+		let tooMany = "apiTooMany";
+		if (isMagicId(page.entry.id)) tooMany = "magicTooMany";   // Scryfall's refusal lasts half a minute
+		page.problem = error.tooManyLookups ? tooMany : "savedCardFailed";
 	}
 	if (page !== savedPage) return;   // closed meanwhile, or another card's page opened
 	if (page.card && page.version === null) page.version = nameSavedVersion(page.card);

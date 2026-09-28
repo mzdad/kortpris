@@ -1,6 +1,7 @@
 # Kortpris
 
-Photograph a Pokémon card on your phone and see what it sells for.
+Photograph a Pokémon card on your phone and see what it sells for. Magic: The Gathering cards can
+be looked up by name too (see **Magic: The Gathering cards** below).
 
 **Live at <https://mzdad.github.io/kortpris/>.** Every push to `main` updates it.
 
@@ -110,6 +111,22 @@ A web page with nothing to install. What happens to a photo:
    there - the page the Scan screen shows for a card it found, with the saved version picked -
    and "Back to My cards" or the phone's own Back (a swipe on an iPhone) returns to the list.
    Without an account it is kept in the phone's browser only.
+
+**Magic: The Gathering cards** (version 1.55.0, `magic.js`). A switch above the search picks the
+game, remembered on the phone (`setGame` in `app.js`); kids mode hides it and scans Pokémon cards.
+Magic cards come from [Scryfall](https://scryfall.com), free and without a key, and are found by
+typing: the name - misspelt ones are corrected by Scryfall's own guess, and words that fit no name
+exactly list every card with them in its name - and, if typed, the set code and number from the
+card's bottom-left corner ("M11 149", `parseMagicNumber`), which pin down one printing. Every
+printing is listed, newest first, with its picture; cards not out yet, and those only played
+online, are left out. A card's versions are its finishes - normal, foil and etched foil - each with
+its Cardmarket (euros) and TCGplayer (dollars) price, which come with the card from Scryfall
+(`magicVersions`). Saved Magic cards have ids starting `mtg:`, sit in a "Magic cards" group of their
+own in My cards, and "Update prices" asks Scryfall for them 75 at a time. Scryfall's conditions: its
+questions are asked one at a time, half a second apart (`askScryfallNow`), its answers are kept
+for a day like TCGdex's, and card pictures are shown as they are. The page's foot says where the
+cards come from, with the notice Wizards of the Coast's Fan Content Policy asks for. The photo
+reading, kids mode, PSA prices and learned cards are still Pokémon only (roadmap part 7).
 
 **The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed
 2x and with the phone's light on, because the phone's own camera screen can't be told to do either.
@@ -251,6 +268,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `reader.js` | Photo → name and number |
 | `cards.js` | Searches the card database (TCGdex), asks for the prices of the cards shown, and keeps its answers for a day |
 | `card-ids.js` | The old database's set ids and TCGdex's, and the 30th Celebration reprints' numbers |
+| `magic.js` | Magic: The Gathering cards and their prices from Scryfall, found by name, set code and number |
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |

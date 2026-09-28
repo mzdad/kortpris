@@ -19,7 +19,8 @@ const FILES = "kortpris-files";
 const PICTURES = "kortpris-pictures";
 // Kept by the app itself, not by this file - but in the same Cache Storage, so it must be spared.
 const ANSWERS = "kortpris-answers";
-// Card pictures are about 20 KB each, so this is about 30 MB at most.
+// Pokémon card pictures are about 20 KB each and Magic cards' about 80 KB, so this is 30 to 120 MB
+// at most.
 const MOST_PICTURES = 1500;
 // The oldest pictures are thrown away after this many new ones, not after every one.
 const PICTURES_BETWEEN_TIDYING = 50;
@@ -32,8 +33,8 @@ const FIXED_FILE_PLACES = [
 	["fonts.googleapis.com", "/"],
 	["fonts.gstatic.com", "/"],
 ];
-// Where the card pictures come from (see picturesOf in cards.js).
-const PICTURE_HOSTS = ["assets.tcgdex.net", "images.pokemontcg.io", "images.scrydex.com"];
+// Where the card pictures come from (see picturesOf in cards.js, and magicCard in magic.js).
+const PICTURE_HOSTS = ["assets.tcgdex.net", "images.pokemontcg.io", "images.scrydex.com", "cards.scryfall.io"];
 
 self.addEventListener("install", () => {
 	// A new version of this file starts working at once, not only when every open app has closed.

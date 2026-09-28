@@ -5,6 +5,32 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.55.0
+
+- **7.1 Magic: The Gathering cards: search and prices** (you asked: "Is it possible to add Magic the
+  gathering cards aswell? So we make this app multiuse?", then "YEs start with 1").
+  - A **Pokémon | Magic** switch above the search, remembered on the phone. For Magic, type the
+    card's name - a misspelt one is corrected ("Lightnig Bolt") - and if you like the set code and
+    number from the card's bottom-left corner ("M11 149"), which find the one printing at once.
+  - Every printing is listed with its picture, newest first (Lightning Bolt has 61 you can hold).
+    Cards not out yet, and those only played online, are left out. When there are more than 24, a
+    note says to add the set code and number.
+  - A card's page shows its versions - normal, foil and etched foil - each with Cardmarket's price
+    in euros and TCGplayer's in dollars, in kroner too, and links to both shops.
+  - Saved Magic cards have a "Magic cards" group in My cards, count in the total, are kept in your
+    accounts like any card, and "Update prices" updates them from Scryfall.
+  - Not yet (7.2 and 7.3): reading Magic cards from a photo - the photo buttons say so - kids mode's
+    own look for Magic, PSA prices and sales links, and learned Magic cards. Kids mode hides the
+    switch and scans Pokémon cards; a saved Magic card shows in a kid's list with Poké Balls.
+  - The page's foot says the Magic cards come from Scryfall, with the notice Wizards of the Coast
+    asks fan apps for.
+  - Tested: 36 checks of the Magic search with a pretend Scryfall (misspelt names, set codes like
+    "10E", cards not out yet, refusals, saved cards 75 at a time), 17 checks of My cards with both
+    games, and in the test browser against the real Scryfall - the search, the card page, saving, My
+    cards, opening a saved card and "Update prices" - in English and Danish, at phone width and in
+    kids mode. Scryfall was asked one question at a time, about 0.7 seconds apart. Your 46 real
+    photos read exactly as before: 46 first, 45 opened by themselves, 0 wrong, 25 by the number alone.
+
 ## Done in 1.54.0
 
 - **PSA sales without an eBay account** (you asked: "Is there a way we can in a free get around the
@@ -695,6 +721,22 @@ handle:
 - The PSA relay finds a card's TCGplayer number through pokemontcg.io, which is going too; TCGdex
   gives that number itself. The Cardmarket link must be checked in a browser (Cardmarket refused a
   test from the command line).
+
+## 7. Magic: The Gathering
+
+You asked (28 September 2026): "Is it possible to add Magic the gathering cards aswell? So we make
+this app multiuse?", then "YEs start with 1". Magic cards come from **Scryfall** (scryfall.com): free,
+no key, it answers web pages directly, pictures included, and it has every printing of all 35,000
+Magic cards, with Cardmarket (euros) and TCGplayer (dollars) prices for normal and foil copies,
+updated daily. Its conditions: the app stays free, doesn't claim Scryfall made it, shows card
+pictures untouched, searches at most twice a second, and keeps answers for a day. Wizards of the
+Coast asks fan apps to say they are unofficial, which the page's foot now does.
+
+| | What | Why | Size |
+|---|---|---|---|
+| 7.2 | **Magic cards from a photo**: the name at the top left, and on cards from 2014 on the set code and number in the bottom-left corner ("146/249 C", "M11 • EN"), which pin down the printing; then the picture comparison picks among the rest. Needs 10–20 photos of your own Magic cards to test with. | Typing is slow, and many cards have been printed many times (Lightning Bolt 70 times): only the corner or the picture tells them apart. Older cards print no set code, so there the picture decides. | L |
+| 7.3 | **Kids mode, sales and learning for Magic**: another value symbol than Poké Balls, the sales links on PriceCharting (it has Magic cards), and learned Magic cards. | Kids mode now scans and searches Pokémon only; saved Magic cards show there with Poké Balls. | M |
+| 7.4 | **Other card games** with a free database, the same way (Yu-Gi-Oh!, Lorcana). | With a game switch in place, each game is its database, its reading and its texts. | M each |
 
 ## Not planned
 

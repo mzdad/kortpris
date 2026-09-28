@@ -452,11 +452,13 @@ const TCGDEX_PICTURES = "https://assets.tcgdex.net/";
 // fetched that way. A copy cached from a plain fetch of the same address would be refused,
 // so the added ending (which the image server ignores) keeps the two kinds apart. TCGdex's
 // picture server always allows reading - but given such an ending, it says so twice, and browsers
-// then refuse the picture (September 2026) - so its addresses stay as they are.
+// then refuse the picture (September 2026) - so its addresses stay as they are. Scryfall's Magic
+// pictures have a "?" part of their own already ("…jpg?1783903008"), so theirs is added with "&".
 // A card without any picture (url null) gets NO_PICTURE.
 function readablePictureUrl(url) {
 	if (!url) return NO_PICTURE;
-	return url.startsWith(TCGDEX_PICTURES) ? url : url + "?readable";
+	if (url.startsWith(TCGDEX_PICTURES)) return url;
+	return url + (url.includes("?") ? "&readable" : "?readable");
 }
 
 async function loadPicture(url) {
