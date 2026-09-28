@@ -86,18 +86,25 @@ const NUMBER_PLACES = [
 // Tesseract misreads tiny print differently each way, so together they read far more numbers
 // than any one way alone: on 12 real photos 11, against at most 7 (version 1.10.0).
 // cardWidth: how wide the whole card would be at that enlargement, in pixels.
-// ink: "soft" or "hard" for a black-ink-only copy (see inkAgainstBackground), "white" for a copy of
-// only the near-white print (see whiteInkOnly), "" for the photo itself.
-// The last way is for numbers printed white on full-art cards and dark cards, italic and edged in
-// black. A copy judged against the colours around it, like the black-ink ones, breaks those up (as
-// tried in version 1.28.0, when it read none of them); judged against the window's own whitest
-// print, they come out whole.
+// ink: "soft", "strict" or "hard" for a black-ink-only copy (see inkAgainstBackground), "white" for a
+// copy of only the near-white print (see whiteInkOnly), "" for the photo itself.
+// The last two ways are for special print. The white one is for numbers printed white on full-art
+// cards and dark cards, italic and edged in black. A copy judged against the colours around it, like
+// the black-ink ones, breaks those up (as tried in version 1.28.0, when it read none of them); judged
+// against the window's own whitest print, they come out whole.
+// The strict one is for black numbers on sparkly foil, like a reverse holo's: its copy keeps only the
+// blackest ink, so the glitter around the number drops out, and digits that the foil's light glues
+// together come apart. On 50 real photos it read 3 more numbers sure (among them the Dratini of
+// IMG_2022, which no way read before), and none wrong. It comes last because it thins ordinary print:
+// second in line, it read the Devolution Spray of IMG_2029 as "T2102", whose "2/102" made its number
+// fit Blastoise too, and the card no longer opened by its number alone.
 const NUMBER_READS = [
 	{ cardWidth: 3750, ink: "soft", mode: "numberScattered" },
 	{ cardWidth: 3000, ink: "", mode: "numberBlock" },
 	{ cardWidth: 3750, ink: "soft", mode: "numberBlock" },
 	{ cardWidth: 2400, ink: "hard", mode: "numberScattered" },
 	{ cardWidth: 2000, ink: "white", mode: "numberBlock" },
+	{ cardWidth: 2400, ink: "strict", mode: "numberBlock" },
 ];
 // When the reads of the card's own cut don't agree, the number places are read again from other
 // cuts of the card, in turn, until two reads agree: its box a tenth bigger around its middle, then
@@ -132,10 +139,14 @@ const SET_CODE_READS = [
 // What tiny capitals in a code are misread as ("0BF" is OBF, "S5P" is SSP).
 const CODE_LETTER_LOOKALIKES = { 0: "O", 1: "I", 5: "S", 6: "G", 8: "B" };
 // Black-ink-only copies: a pixel this dark compared to the background around it (or darker)
-// turns black, and this light turns white; "hard" copies cut at one point instead.
+// turns black, and this light turns white; "hard" copies cut at one point instead, and "strict" ones
+// at a darker point, keeping only the blackest ink (for numbers on foil, see NUMBER_READS). On the
+// Dratini's foil, 0.5 and 0.55 both read its number; 0.5 read fewer numbers on other cards, 0.58
+// read wrong ones.
 const INK_BLACK_AT = 0.45;
 const INK_WHITE_AT = 0.95;
 const INK_HARD_CUTOFF = 0.72;
+const INK_STRICT_CUTOFF = 0.55;
 // The background around a pixel is a smooth blur of this size (share of the window's width):
 // much wider than a letter, so the letters hardly darken it.
 const INK_BACKGROUND_BLUR = 1 / 25;
@@ -995,7 +1006,8 @@ function recutBox(box, recut) {
 // background - red, purple, green, yellow, even foil glitter - is bright in at least one. So
 // each pixel is judged by its brightest colour, compared with the average around it, which
 // also evens out shadows and glare. style "soft" keeps shades of grey at the edges of the
-// letters; "hard" is pure black and white. lightInk finds white letters instead (printed on the
+// letters; "hard" is pure black and white, and "strict" too, with only the blackest ink kept black
+// (see INK_STRICT_CUTOFF). lightInk finds white letters instead (printed on the
 // artwork of many full-art cards): they are light in all three colours, so each pixel is judged
 // by its darkest colour, turned around - and they come out black, as Tesseract likes them.
 function inkAgainstBackground(picture, style, lightInk = false) {
@@ -1022,6 +1034,8 @@ function inkAgainstBackground(picture, style, lightInk = false) {
 		let value;
 		if (style === "hard") {
 			value = darkness < INK_HARD_CUTOFF ? 0 : 255;
+		} else if (style === "strict") {
+			value = darkness < INK_STRICT_CUTOFF ? 0 : 255;
 		} else {
 			const share = (darkness - INK_BLACK_AT) / (INK_WHITE_AT - INK_BLACK_AT);
 			value = Math.round(Math.max(0, Math.min(1, share)) * 255);

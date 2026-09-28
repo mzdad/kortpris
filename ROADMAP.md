@@ -5,6 +5,29 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.51.0
+
+- **1.11 Numbers on sparkly foil** (you said: "do 1.11"). Your Dratini's number was clear to the eye,
+  yet no way of reading it worked: the foil's glitter left grey blotches all round it, and its light
+  glued the "/" to the "2" and the "10" together. Dropping the specks, as guessed, cleaned the copy
+  but still read "7210". What worked: a copy that keeps only the blackest ink, which drops the glitter
+  and pulls the digits apart - "72/110".
+  - It is one more way of reading the number corners, tried last, only when the usual ways don't
+    agree. Tried second in line, it made the Devolution Spray's number fit Blastoise's too, and that
+    card stopped opening by its number alone; last, cards that read fine read exactly as before.
+  - A lab (`dev-local/foil-number-lab.js`) read your 53 photos 19 ways and replayed the orders: 3
+    more numbers sure, none wrong. How black counts as "blackest" was tried at 5 levels: looser read
+    wrong numbers, stricter read fewer.
+  - Your Dratini: its number now reads, so it opens by its number before the name is read - in 4.4
+    seconds instead of 9.5 (on this PC).
+  - Your 46 real photos: numbers read 37 (36), opened by the number alone 25 (24), right card first
+    46, opened by themselves 45, 0 wrong, 2.8 seconds per photo as before. The cut photos as before (5
+    of 7 first and opened, 0 wrong). Full-art: 27 first and opened, 20 by the number alone (18), a
+    little quicker. Special numbers: 19 read (18), 24 first, 22 opened, 0 wrong. Made-up photos: 7
+    numbers read (6), 13 first, 12 opened, 0 wrong. Learning: as before (45 of 46 recognised, 0
+    wrong; the harder second photos 29 recognised, 7 suggested, 10 neither). The cost: a card whose
+    number can't be read at all tries 6 more reads, about a tenth of a second.
+
 ## Done in 1.50.0
 
 - **Delete a kid's account, not just remove it** (you asked: "I need a way to also delete accounts
@@ -83,7 +106,7 @@ rules, so nothing breaks in between.
     reprint, as the box lets its "30" stamp be checked.
   - Your Dratini itself: its box is found and checked by the name, and it opens right as before -
     but in 8 seconds instead of 3, as the number corners are now read, and the foil around its number
-    hides it (see 1.8). None of the 56 photos without a card gets such a box.
+    hides it (see 1.11, done in 1.51.0). None of the 56 photos without a card gets such a box.
   - Your 46 real photos: 46 first, 45 opened by themselves, 0 wrong (as before). Full-art: 27 first,
     27 opened. Special numbers: 18 read, 24 first, 22 opened, 0 wrong. Made-up photos: 13 first, 12
     opened, 0 wrong. Learning: 0 wrong; the harder second photos 29 recognised, 7 suggested, 10
@@ -547,7 +570,6 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black: the rest. | 6 of 27 full-art numbers still aren't read in 1.40.0 (8 in 1.28.0). The made-up photos are made from the database's small pictures, so a real photo may read better: worth checking with a few real full-art photos first. The name and the look find these cards anyway. | S |
 | 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: the rest. Full-art cards on a grey table. | The name strip, the number corners and the set code (1.7) need them. On the 2 made-up full-art photos on a grey table, the best box found covers only the card's top-left part (81% of it): the silver border is the table's colour, so the card's own bottom and right edges hardly show. Checking the box can't help there - the name strip is in that part too, and reads the right name - so it takes a better way to see a silver border on grey. They are found by name and picture anyway, and the app's own camera doesn't need this: its frame gives the edges (1.1). | M |
-| 1.11 | **Numbers on sparkly foil**: the black number of a reverse holo, in the glitter all round it. | Found in 1.47.0: with its box found, your Dratini's number corners are read 30 ways and cuts, and none reads "72/110" - the ink-only copy is clear to the eye, but the specks of foil around the number throw the reader off. That costs 5 seconds (8 instead of 3) for a card that opens anyway. Dropping specks smaller than a digit's stroke before reading may do it. | S |
 
 ## 2. Quicker
 

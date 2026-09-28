@@ -32,8 +32,10 @@ A web page with nothing to install. What happens to a photo:
    black ink kept, which hides coloured backgrounds and glitter), until two reads agree. When
    they don't, the corners are cut out again from the card's box made a tenth bigger, and then
    moved up a little: the box is never found exactly, and tiny print cut out a little
-   differently often reads differently (`NUMBER_RECUTS`). The last way keeps only the near-white
-   print, for the white italic numbers of full-art and dark cards (`whiteInkOnly`). Cards since
+   differently often reads differently (`NUMBER_RECUTS`). The last two ways are for special
+   print: one keeps only the near-white print, for the white italic numbers of full-art and dark
+   cards (`whiteInkOnly`), and one only the blackest ink, for black numbers on sparkly foil, where
+   the glitter blots the usual black-ink copy and glues the digits together. Cards since
    2023 also print their set's code by the number ("PAF EN 057/091"), white in a little box: it
    is read with only capitals allowed, and kept when that set's size is the one after the "/"
    (`readSetCode`, `set-codes.js`). It then picks among cards that look alike - Black Bolt,
