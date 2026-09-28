@@ -45,6 +45,15 @@ service cloud.firestore {
       allow create, update: if isOwner(username) && isValidFamily(request.resource.data);
     }
 
+    // The passwords of the kids' accounts a parent made, kept for the parent to look up when a kid
+    // forgets (Firebase keeps the passwords themselves scrambled, so they can't be read back from
+    // there). Only the parent: a kid's password only opens that kid's account, whose cards the
+    // parent sees anyway.
+    match /kidPasswords/{username} {
+      allow read, delete: if isOwner(username);
+      allow create, update: if isOwner(username) && isValidKidPasswords(request.resource.data);
+    }
+
     // The username of whoever is signed in: the part of their made-up email before the @.
     function signedInName() {
       return request.auth.token.email.split('@')[0];
@@ -100,6 +109,14 @@ service cloud.firestore {
         && data.parent.matches('[a-z0-9_-]{3,20}')
         && data.parent != signedInName()
         && data.createdAt == request.time;
+    }
+
+    // A password for each kid, for at most as many kids as a parent can have.
+    function isValidKidPasswords(data) {
+      return data.keys().hasOnly(['passwords', 'updatedAt'])
+        && data.passwords is map
+        && data.passwords.size() <= 20
+        && data.updatedAt == request.time;
     }
 
     // At most as many kids as account.js lets a parent make (MOST_KIDS).

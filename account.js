@@ -21,6 +21,8 @@ const LEARNED_FOLDER = "learned";
 const SETTINGS_FOLDER = "settings";
 const ACCOUNT_INFO_FOLDER = "accounts";
 const FAMILIES_FOLDER = "families";
+// The kids' passwords a parent saved, to look up (kidPasswords/<username>, only the parent).
+const KID_PASSWORDS_FOLDER = "kidPasswords";
 // A parent can make this many kids' accounts (firestore.rules says the same).
 const MOST_KIDS = 20;
 // Lowercase letters a-z, digits, - and _. Letters like æ, ø and å can't be in an email address.
@@ -177,6 +179,11 @@ function watchFamily(parent, onKids, onProblem) {
 	return watchDocument(FAMILIES_FOLDER, parent, (data) => onKids(data.kids || []), onProblem);
 }
 
+// Calls onPasswords({ kid: password }) now and every time the parent's saved kids' passwords change.
+function watchKidPasswords(parent, onPasswords, onProblem) {
+	return watchDocument(KID_PASSWORDS_FOLDER, parent, (data) => onPasswords(data.passwords || {}), onProblem);
+}
+
 // Makes a kid's account under the signed-in parent's, naming its parent (see firestore.rules), and
 // adds it to the parent's kids. Firebase signs in whoever an account is made for, so it is made in a
 // second, hidden copy of Firebase on this phone, and the parent stays signed in here. When the
@@ -213,11 +220,24 @@ async function addKidAccount(parent, kid, password) {
 	await setDoc(doc(firebase.db, FAMILIES_FOLDER, parent), { kids: arrayUnion(kid), updatedAt: serverTimestamp() }, { merge: true });
 }
 
-// Takes a kid off the parent's list: the parent no longer sees the kid's cards. The kid's account and
-// cards stay, and the kid can still sign in; addKidAccount with its password brings it back.
+// Keeps a kid's password in the parent's account, to look up later (see firestore.rules).
+async function saveKidPassword(parent, kid, password) {
+	const { doc, setDoc, serverTimestamp } = firebase.firestoreModule;
+	await setDoc(doc(firebase.db, KID_PASSWORDS_FOLDER, parent), { passwords: { [kid]: password }, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+async function forgetKidPassword(parent, kid) {
+	const { doc, setDoc, deleteField, serverTimestamp } = firebase.firestoreModule;
+	await setDoc(doc(firebase.db, KID_PASSWORDS_FOLDER, parent), { passwords: { [kid]: deleteField() }, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+// Takes a kid off the parent's list: the parent no longer sees the kid's cards, nor its saved
+// password. The kid's account and cards stay, and the kid can still sign in; addKidAccount with its
+// password brings it back.
 async function removeKid(parent, kid) {
 	const { doc, setDoc, arrayRemove, serverTimestamp } = firebase.firestoreModule;
 	await setDoc(doc(firebase.db, FAMILIES_FOLDER, parent), { kids: arrayRemove(kid), updatedAt: serverTimestamp() }, { merge: true });
+	await forgetKidPassword(parent, kid).catch((error) => console.error(error));   // rules before 1.49.0: none was saved
 }
 
 // Moves howMany of a saved card (entry) from one account's cards (from) to another's (to). Both lists

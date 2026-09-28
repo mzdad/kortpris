@@ -5,6 +5,22 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.49.0
+
+- **Look up a kid's password** (you asked: "I need a way i can check the kids password"). Firebase
+  keeps passwords scrambled, so they can't be read back from it. Instead, the password you give a
+  kid's account is kept in your account, which only you can read, and **Kids' accounts** gets
+  **Show password** for each kid. For a kid made in 1.48.0, type its username and password in the
+  form once: it is checked, then kept. **Remove** forgets it too.
+  - **Needs you once more: publish the new `firestore.rules`** (SETUP-ACCOUNTS.md, step 6). Until
+    then, making a kid still works, and the app says to write the password down.
+  - The trade-off: someone who gets into your account could see the kids' passwords - but could
+    see and move their cards anyway, and a kid's password only opens that kid's Kortpris account.
+  - Tried on the test copy: made, shown, hidden, a wrong password refused ("That isn't …'s
+    password"), removed; the rules again one by one, now 14 of 14 (a kid, a stranger or a look-alike
+    email can't read or change your kept passwords). Also with the rules you have now, and with the
+    new ones published while the app was open: the password then shows at once.
+
 ## Done in 1.48.0
 
 You asked for 4.1 to 4.3. All three were tried on Firebase's local test copy with made-up accounts

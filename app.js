@@ -200,6 +200,7 @@ const kidMakePasswordButton = document.getElementById("kid-make-password");
 const kidPasswordFeedback = document.getElementById("kid-password-feedback");
 const kidSubmit = document.getElementById("kid-submit");
 const kidMessageText = document.getElementById("kid-message");
+const kidPasswordMissing = document.getElementById("kid-password-missing");
 const ownerSwitch = document.getElementById("owner-switch");
 const liveCameraView = document.getElementById("live-camera");
 const cameraVideo = document.getElementById("camera-video");
@@ -244,6 +245,9 @@ let stopWatchingSettings = null;  // stops listening for the signed-in account's
 let stopWatchingInfo = null;      // stops listening for what the account says about itself (a kid's?)
 let stopWatchingFamily = null;    // stops listening for the signed-in account's kids
 let familyKids = [];              // the usernames of the signed-in parent's kids (see watchFamily)
+let stopWatchingKidPasswords = null;   // stops listening for the kids' passwords the parent saved
+let kidPasswords = {};            // those passwords: { kid: password }
+let shownKidPasswords = new Set();   // the kids whose saved password is shown right now
 let isKidAccount = false;         // the signed-in account is a kid's, made by a parent
 let kidBusy = false;              // making a kid's account
 let kidMessage = null;            // { key, values, tone } under the kids' accounts form, or null
@@ -922,9 +926,7 @@ kidForm.addEventListener("submit", async (event) => {
 		problem = { key: "usernameInvalid", values: {} };
 	} else if (kid === accountName) {
 		problem = { key: "kidSameName", values: {} };
-	} else if (familyKids.includes(kid)) {
-		problem = { key: "kidAlreadyListed", values: { name: kid } };
-	} else if (familyKids.length >= MOST_KIDS) {
+	} else if (!familyKids.includes(kid) && familyKids.length >= MOST_KIDS) {
 		problem = { key: "kidTooMany", values: { count: MOST_KIDS } };
 	} else {
 		const check = checkNewPassword(password, kid);
@@ -935,13 +937,29 @@ kidForm.addEventListener("submit", async (event) => {
 		renderAccount();
 		return;
 	}
+	// A kid on the list already: its password is checked, and saved to look up (a kid made before
+	// version 1.49.0 has none saved).
+	const listed = familyKids.includes(kid);
 	kidBusy = true;
 	kidMessage = null;
 	renderAccount();
 	try {
 		await addKidAccount(accountName, kid, password);
+		// Listened to afresh, in case Firebase refused to before the rules allowing it were published.
+		watchFamilyOf(accountName);
+		let saved = true;
+		try {
+			await saveKidPassword(accountName, kid, password);
+			// Listened to afresh, in case Firebase refused to before the rules allowing it were published.
+			watchKidPasswordsOf(accountName);
+		} catch (error) {
+			console.error(error);   // Firebase's rules from before version 1.49.0
+			saved = false;
+		}
 		// The password stays in the message: the parent needs it on the kid's phone.
-		kidMessage = { key: "kidCreated", values: { name: kid, password: password }, tone: "" };
+		let done = listed ? "kidPasswordSaved" : "kidCreated";
+		if (!saved) done = listed ? "kidPasswordRulesOld" : "kidCreatedNotSaved";
+		kidMessage = { key: done, values: { name: kid, password: password }, tone: saved ? "" : "error" };
 		kidUsernameInput.value = "";
 		kidPasswordInput.value = "";
 	} catch (error) {
@@ -951,6 +969,7 @@ kidForm.addEventListener("submit", async (event) => {
 		let why = accountProblem(error);
 		if (error.code === "permission-denied") why = { key: "kidRulesOld", values: {} };
 		if (why.key === "signUpClosed") why = { key: "kidSignUpClosed", values: {} };
+		if (listed && why.key === "usernameTaken") why = { key: "kidWrongPassword", values: { name: kid } };
 		kidMessage = { ...why, tone: "error" };
 	}
 	kidBusy = false;
@@ -958,6 +977,15 @@ kidForm.addEventListener("submit", async (event) => {
 });
 
 kidList.addEventListener("click", async (event) => {
+	// A saved password shown, or hidden again.
+	const showButton = event.target.closest("[data-show-kid-password]");
+	if (showButton) {
+		const kid = showButton.dataset.showKidPassword;
+		if (shownKidPasswords.has(kid)) shownKidPasswords.delete(kid);
+		else shownKidPasswords.add(kid);
+		renderAccount();
+		return;
+	}
 	const button = event.target.closest("[data-remove-kid]");
 	if (!button || accountName === null) return;
 	const kid = button.dataset.removeKid;
@@ -2865,9 +2893,12 @@ function moveOldCardsToTcgdex() {
 
 function handleAccountChange(username) {
 	// Whatever was listened to for the account before stops; the new one's things are listened to.
-	for (const stop of [stopWatchingCards, stopWatchingLearned, stopWatchingSettings, stopWatchingInfo, stopWatchingFamily]) {
+	for (const stop of [stopWatchingCards, stopWatchingLearned, stopWatchingSettings, stopWatchingInfo, stopWatchingFamily, stopWatchingKidPasswords]) {
 		if (stop) stop();
 	}
+	stopWatchingKidPasswords = null;
+	kidPasswords = {};
+	shownKidPasswords = new Set();
 	stopWatchingCards = null;
 	stopWatchingLearned = null;
 	stopWatchingSettings = null;
@@ -2925,25 +2956,8 @@ function handleAccountChange(username) {
 				renderAccount();
 			},
 		);
-		stopWatchingFamily = watchFamily(
-			username,
-			(kids) => {
-				familyKids = kids;
-				// A kid taken off the list (maybe on another phone) while their cards were shown.
-				if (showingKidsCards() && !kids.includes(collectionOwner)) showCardsOf(accountName);
-				renderAccount();
-				renderCollection();
-				renderResults();
-			},
-			(error) => {
-				// Firebase's rules from before version 1.48.0 don't know kids' accounts: none are shown.
-				console.error(error);
-				familyKids = [];
-				if (showingKidsCards()) showCardsOf(accountName);
-				renderAccount();
-				renderCollection();
-			},
-		);
+		watchFamilyOf(username);
+		watchKidPasswordsOf(username);
 	} else {
 		usePhoneCollection();
 	}
@@ -2957,6 +2971,52 @@ function handleAccountChange(username) {
 	renderResults();
 	renderClaudeSettings();   // shown only while signed in, with that account's key
 	moveOldCardsToTcgdex();   // the phone's cards were read again (an account's follow when they arrive)
+}
+
+// Listens for the signed-in parent's kids (see watchFamily in account.js).
+function watchFamilyOf(username) {
+	if (stopWatchingFamily) stopWatchingFamily();
+	stopWatchingFamily = watchFamily(
+		username,
+		(kids) => {
+			if (username !== accountName) return;
+			familyKids = kids;
+			// A kid taken off the list (maybe on another phone) while their cards were shown.
+			if (showingKidsCards() && !kids.includes(collectionOwner)) showCardsOf(accountName);
+			renderAccount();
+			renderCollection();
+			renderResults();
+		},
+		(error) => {
+			// Firebase's rules from before version 1.48.0 don't know kids' accounts: none are shown.
+			// (Firebase stops listening then; a kid added later starts it again, see the kids' form.)
+			console.error(error);
+			familyKids = [];
+			if (showingKidsCards()) showCardsOf(accountName);
+			renderAccount();
+			renderCollection();
+		},
+	);
+}
+
+// Listens for the kids' passwords a parent kept (see saveKidPassword in account.js).
+function watchKidPasswordsOf(username) {
+	if (stopWatchingKidPasswords) stopWatchingKidPasswords();
+	stopWatchingKidPasswords = watchKidPasswords(
+		username,
+		(passwords) => {
+			if (username !== accountName) return;
+			kidPasswords = passwords;
+			renderAccount();
+		},
+		(error) => {
+			// Firebase's rules from before version 1.49.0: no passwords are kept. (Firebase stops
+			// listening then; a password kept later starts it again, see the kids' form.)
+			console.error(error);
+			kidPasswords = {};
+			renderAccount();
+		},
+	);
 }
 
 // Listens for the cards My cards shows (collectionOwner): the account's own, or a kid's.
@@ -3012,16 +3072,32 @@ function renderKidsAccounts() {
 	kidsCount.textContent = familyKids.length > 0 ? String(familyKids.length) : "";
 	kidList.innerHTML = familyKids.length === 0
 		? `<li class="note">${t("kidsNone")}</li>`
-		: familyKids.map((kid) => `
-			<li class="kid-row">
-				<span class="kid-name">${escapeHtml(kid)}</span>
-				<button type="button" class="button secondary" data-remove-kid="${escapeHtml(kid)}">${t("kidRemove")}</button>
-			</li>`).join("");
+		: familyKids.map(kidRowHtml).join("");
+	// Kids made before their passwords were kept (version 1.49.0): how to keep theirs too.
+	kidPasswordMissing.hidden = familyKids.every((kid) => typeof kidPasswords[kid] === "string");
 	kidSubmit.textContent = t(kidBusy ? "kidCreating" : "kidCreate");
 	kidSubmit.disabled = kidBusy;
 	showKidPasswordFeedback();
 	kidMessageText.textContent = kidMessage ? t(kidMessage.key, kidMessage.values) : "";
 	kidMessageText.classList.toggle("error", kidMessage !== null && kidMessage.tone === "error");
+}
+
+// A kid in the parent's list: the name, the saved password when asked for, and the buttons.
+function kidRowHtml(kid) {
+	const name = escapeHtml(kid);
+	const password = kidPasswords[kid];
+	const saved = typeof password === "string";
+	const shown = saved && shownKidPasswords.has(kid);
+	const showButton = saved
+		? `<button type="button" class="button secondary" data-show-kid-password="${name}" aria-pressed="${shown}">${t(shown ? "kidHidePassword" : "kidShowPassword")}</button>`
+		: "";
+	return `
+		<li class="kid-row">
+			<span class="kid-name">${name}</span>
+			${showButton}
+			<button type="button" class="button secondary" data-remove-kid="${name}">${t("kidRemove")}</button>
+			${shown ? `<span class="kid-password-shown">${escapeHtml(password)}</span>` : ""}
+		</li>`;
 }
 
 function showKidPasswordFeedback() {

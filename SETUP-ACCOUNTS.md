@@ -65,7 +65,8 @@ cards the app has learned (kept in the account from then on); until it is publis
 of learned cards says the account couldn't be used, and they stay on the phone only.
 Version 1.48.0 added rules for the Claude key kept in the account and for kids' accounts; until
 they are published, the key stays on each phone as before, and making a kid's account says the
-rules must be updated first.
+rules must be updated first. Version 1.49.0 added one for the kids' passwords kept in your account;
+until it is published, a kid's password can't be kept there to look up (the app says so).
 
 ---
 
@@ -86,7 +87,10 @@ Authentication → **Settings** → **User actions** → untick **Enable create 
 **Save**. Signing in keeps working. Tick it again whenever you want to add an account -
 a kid's too.
 
-**A child forgot their password:** Authentication → **Users** → find
+**A child forgot their password:** look it up in **My cards → Kids' accounts → Show password**.
+It is kept there for every kid's account made from version 1.49.0 on; for one made before, type
+the kid's username and password in **Kids' accounts** once to keep it. Only your account can see
+them. If it isn't kept there and nobody remembers it: Authentication → **Users** → find
 `theirname@kortpris.example.com` → **⋮** → **Delete account**. Then make the account again
 in **Kids' accounts**, with the same username and a new password (tick "Enable create" first if
 you switched it off). Their cards are still there, and still yours to see, because both are saved

@@ -185,7 +185,10 @@ picked, and a saved card's page gets "Move to" (one, or all of them). The kid's 
 parent once, as it is made, and the parent's account lists its kids; `firestore.rules` lets a
 parent at a kid's cards only when both agree, and never at the kid's Claude key or learned cards.
 Firebase signs in whoever an account is made for, so a kid's account is made in a second, hidden
-copy of Firebase on the phone, and the parent stays signed in.
+copy of Firebase on the phone, and the parent stays signed in. The kids' passwords are kept in the
+parent's account (version 1.49.0, `kidPasswords/<username>`, only the parent can read it), so
+"Show password" looks one up when a kid forgets: Firebase keeps the passwords themselves scrambled,
+where nobody can read them back.
 
 **Optional: read cards with Claude.** Only for someone signed in to an account: then, under
 "Read cards with Claude" on the Scan screen, they can save their own Anthropic API key.

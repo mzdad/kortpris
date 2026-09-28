@@ -732,7 +732,15 @@ body.kids .kid-start:focus-visible { outline: 3px solid var(--link); outline-off
 .kids-accounts { border-top: 1px solid var(--line); padding-top: 14px; }
 .kid-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .kid-list:empty { display: none; }
-.kid-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.kid-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px 10px; align-items: center; }
+/* A kid's saved password, under the name when "Show password" is pressed. */
+.kid-password-shown {
+	grid-column: 1 / -1;
+	font-family: var(--font-mono); font-size: 1.05rem;
+	padding: 8px 10px; border-radius: 8px;
+	background: var(--surface-2); border: 1px solid var(--line);
+	overflow-wrap: anywhere;
+}
 .kid-name { font-weight: 700; }
 #kid-password-feedback:empty, #kid-message:empty { display: none; }
 /* The kid's password in a type that tells 1 from l and 0 from O, when it is written down. */
