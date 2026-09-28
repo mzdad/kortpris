@@ -5,6 +5,41 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.56.0
+
+- **7.3 Kids mode and sales links for Magic** (you asked: "Please do 7.3 and what could be a good
+  idea insted of pokeballs? i dont play magic, but is there something like pokeball but in magic ?").
+  - Kids mode has two big buttons at the top: **Pokémon**, with a Poké Ball, and **Magic**, with a
+    gem. The phone remembers the choice. For Magic, a big name box and Search button take the big
+    camera picture's place, and the phone says "Write the card's name. It's at the top of the card."
+    The photo buttons say, out loud too, that Magic cards can't be read from a photo yet.
+  - A Magic card's value is **1 to 5 gems** instead of Poké Balls, at the same prices (20, 40, 250
+    and 520 kroner). They climb like the colour of the rarity symbol on a Magic card: one black gem
+    (common), two silver (uncommon), three gold (rare), four orange (mythic rare), then five
+    rainbow gems, like a shiny foil card. My cards shows gems for Magic cards and balls for Pokémon
+    cards. Magic's own famous symbols - the five mana symbols and the planeswalker symbol - can't be
+    used: Wizards of the Coast's Fan Content Policy lists them among what fan apps may not use. The
+    gems are the app's own drawing.
+  - A Magic card's page has the **"Graded cards (PSA)"** links to its sales on PriceCharting, like a
+    Pokémon card's, and a card without prices links to its ungraded sales. The search is the card's
+    name, "Magic" and its set as PriceCharting names it (29 sets have other names there, like "M11"
+    for Magic 2011), with "Foil" for a foil copy. For a normal copy, PriceCharting's special editions
+    are left out. The PSA price table stays Pokémon only: its price service knows Pokémon cards only.
+  - Learned Magic cards moved to 7.2: the app learns a card from a photo it read wrong, so it needs
+    Magic cards read from photos first.
+  - Tested: PriceCharting's search with 51 Magic cards, old and new, in five ways, 2 seconds apart.
+    The best way, now in the app, opened a normal copy's own page straight away for 41 and put it
+    in the first three for 8 more. The other 2 were further down: Wrath of God from 5th and 10th
+    Edition, which PriceCharting doesn't seem to have. Foil copies: 15 of 31 opened straight away,
+    and 10 more were in the first three. Five promo and special-set searches: 3 opened straight
+    away, and 2 were promos PriceCharting doesn't have. Also 116 checks of the links (Pokémon links unchanged),
+    170 checks of kids mode's texts and gems in both languages, and the 36 Magic search and 17 My
+    cards checks from 1.55.0 still pass. In the test browser: kids mode's buttons; typing Lightning
+    Bolt M11 149 (a black gem, and two silver ones for the foil); saving it; My cards with gems and
+    balls side by side; the photo button's message; a name that doesn't exist; switching back to
+    Pokémon; reopening the app on Magic; and the grown-up card page's links for Lightning Bolt and
+    Black Lotus. All in English and Danish, light and dark, at phone width.
+
 ## Done in 1.55.0
 
 - **7.1 Magic: The Gathering cards: search and prices** (you asked: "Is it possible to add Magic the
@@ -19,7 +54,7 @@ L = several sessions).
     in euros and TCGplayer's in dollars, in kroner too, and links to both shops.
   - Saved Magic cards have a "Magic cards" group in My cards, count in the total, are kept in your
     accounts like any card, and "Update prices" updates them from Scryfall.
-  - Not yet (7.2 and 7.3): reading Magic cards from a photo - the photo buttons say so - kids mode's
+  - Not yet (7.2 and 7.3; 7.3 came in 1.56.0, above): reading Magic cards from a photo - the photo buttons say so - kids mode's
     own look for Magic, PSA prices and sales links, and learned Magic cards. Kids mode hides the
     switch and scans Pokémon cards; a saved Magic card shows in a kid's list with Poké Balls.
   - The page's foot says the Magic cards come from Scryfall, with the notice Wizards of the Coast
@@ -734,8 +769,7 @@ Coast asks fan apps to say they are unofficial, which the page's foot now does.
 
 | | What | Why | Size |
 |---|---|---|---|
-| 7.2 | **Magic cards from a photo**: the name at the top left, and on cards from 2014 on the set code and number in the bottom-left corner ("146/249 C", "M11 • EN"), which pin down the printing; then the picture comparison picks among the rest. Needs 10–20 photos of your own Magic cards to test with. | Typing is slow, and many cards have been printed many times (Lightning Bolt 70 times): only the corner or the picture tells them apart. Older cards print no set code, so there the picture decides. | L |
-| 7.3 | **Kids mode, sales and learning for Magic**: another value symbol than Poké Balls, the sales links on PriceCharting (it has Magic cards), and learned Magic cards. | Kids mode now scans and searches Pokémon only; saved Magic cards show there with Poké Balls. | M |
+| 7.2 | **Magic cards from a photo**: the name at the top left, and on cards from 2014 on the set code and number in the bottom-left corner ("146/249 C", "M11 • EN"), which pin down the printing; then the picture comparison picks among the rest. With it, **learned Magic cards** (moved here from 7.3 in 1.56.0): a Magic card the app read wrong is remembered, like a Pokémon card. Needs 10–20 photos of your own Magic cards to test with. | Typing is slow, and many cards have been printed many times (Lightning Bolt 70 times): only the corner or the picture tells them apart. Older cards print no set code, so there the picture decides. The app learns from photos it read wrong, so learning needs the photo reading first. | L |
 | 7.4 | **Other card games** with a free database, the same way (Yu-Gi-Oh!, Lorcana). | With a game switch in place, each game is its database, its reading and its texts. | M each |
 
 ## Not planned

@@ -113,7 +113,7 @@ A web page with nothing to install. What happens to a photo:
    Without an account it is kept in the phone's browser only.
 
 **Magic: The Gathering cards** (version 1.55.0, `magic.js`). A switch above the search picks the
-game, remembered on the phone (`setGame` in `app.js`); kids mode hides it and scans Pokémon cards.
+game, remembered on the phone (`setGame` in `app.js`); in kids mode two big buttons pick it (see Kids mode).
 Magic cards come from [Scryfall](https://scryfall.com), free and without a key, and are found by
 typing: the name - misspelt ones are corrected by Scryfall's own guess, and words that fit no name
 exactly list every card with them in its name - and, if typed, the set code and number from the
@@ -125,8 +125,13 @@ its Cardmarket (euros) and TCGplayer (dollars) price, which come with the card f
 own in My cards, and "Update prices" asks Scryfall for them 75 at a time. Scryfall's conditions: its
 questions are asked one at a time, half a second apart (`askScryfallNow`), its answers are kept
 for a day like TCGdex's, and card pictures are shown as they are. The page's foot says where the
-cards come from, with the notice Wizards of the Coast's Fan Content Policy asks for. The photo
-reading, kids mode, PSA prices and learned cards are still Pokémon only (roadmap part 7).
+cards come from, with the notice Wizards of the Coast's Fan Content Policy asks for. Since 1.56.0 a
+card's page links to its sales on PriceCharting like a Pokémon card's, graded and ungraded: the search
+is its name, "Magic" and its set as PriceCharting names it ("M11" for Magic 2011,
+`priceChartingMagicSearch`), with "Foil" for a foil copy, and for a normal copy PriceCharting's special
+editions ([Foil], [Borderless]...) are left out, which mostly leaves the one card, so its page opens
+straight away. The photo reading, the PSA price table (its price service knows Pokémon cards only)
+and learned cards are still Pokémon only (roadmap 7.2).
 
 **The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed
 2x and with the phone's light on, because the phone's own camera screen can't be told to do either.
@@ -183,7 +188,14 @@ Forget button. Tested with `dev_learning_test.html`.
 **Kids mode.** The 🧒 button at the top switches on a mode for children who can't read well
 yet: one big picture to tap for the camera, the card with 1 to 5 Poké Balls for how valuable
 it is (one Poké Ball, then two Premier, three Great, four Ultra and five Master Balls, from 20, 40, 250 and 520 kroner), one rounded price, versions as little pictures of where the card glitters, and a big
-Save button. Typing, settings, price tables and accounts are hidden (sign a child in first,
+Save button. Two big buttons at the top pick the game, a Poké Ball for Pokémon and a gem for Magic
+(1.56.0). Magic cards are found by typing, so for them a big name box and Search button take the
+camera picture's place. A Magic card shows 1 to 5 gems instead of balls, at the same prices: they
+climb like the colours of a Magic card's rarity symbol, one black (common), two silver (uncommon),
+three gold (rare), four orange (mythic rare), and five rainbow gems like a shiny foil card
+(`gemsHtml`). Magic's own mana and planeswalker symbols are left alone: Wizards of the Coast's Fan
+Content Policy doesn't allow them in fan apps. Other typing, settings, price tables and accounts are
+hidden (sign a child in first,
 in normal mode; a kid's account switches kids mode on by itself, see Kids' accounts). The phone also says everything out loud in Danish or English ("Pikachu. It's
 worth about 33 kroner."), with its own built-in voice (`speech.js`): free, and nothing is sent
 anywhere. The 🔊 buttons read aloud in normal mode too. iPhones only let a page speak after a

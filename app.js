@@ -32,13 +32,18 @@ const SORT_STORAGE_KEY = "kortpris.collectionSort";
 const SORT_ORDERS = ["value", "name", "set", "newest"];
 // A version's big price from this amount up (six digits) gets a smaller size, so it fits its box.
 const LONG_PRICE_FROM = 100000;
-// Kids mode shows a card's value as 1 to 5 Poké Balls: one more ball from each of these prices, in
-// kroner (whichever currency the prices are shown in). Five balls also gets a "Wow!".
-const BALL_STEPS_DKK = [20, 40, 250, 520];
-const MOST_BALLS = 5;
+// Kids mode shows a card's value as 1 to 5 Poké Balls - or gems, for a Magic card: one more from each
+// of these prices, in kroner (whichever currency the prices are shown in). Five also gets a "Wow!".
+const WORTH_STEPS_DKK = [20, 40, 250, 520];
+const WORTH_LEVELS = 5;
 // ...and the more balls, the better the ball: one Poké Ball, two Premier Balls, three Great Balls,
 // four Ultra Balls, five Master Balls.
 const BALL_KINDS = ["poke", "premier", "great", "ultra", "master"];
+// A Magic card's gems climb the way a Magic card shows its rarity, by the colour of the little symbol
+// on its right side: black (common), silver (uncommon), gold (rare), orange (mythic rare) - and then
+// rainbow, like a shiny foil card. Magic's own mana and planeswalker symbols can't be used: Wizards of
+// the Coast doesn't allow them in fan apps (its Fan Content Policy lists them).
+const GEM_KINDS = ["common", "uncommon", "rare", "mythic", "foil"];
 // Each ball's markings on its top half, drawn over the ball's colour (see ballPictureHtml).
 const BALL_MARKINGS = {
 	poke: "",
@@ -51,6 +56,19 @@ const BALL_MARKINGS = {
 		<circle class="ball-marking" cx="23.5" cy="9.5" r="3"/>
 		<path class="ball-letter" d="M12.6 12.4V6.8l3.4 3.6 3.4-3.6v5.6"/>`,
 };
+// A gem's eight sides: five on its top, three below. Each is lit a little differently (see style.css):
+// the light comes from the top left. A rainbow gem has a colour for each side instead (see gemPictureHtml).
+const GEM_SIDES = [
+	["10,5 3,12.5 11.5,12.5", "gem-mid"],
+	["10,5 11.5,12.5 16,5", "gem-light"],
+	["16,5 11.5,12.5 20.5,12.5", "gem-light"],
+	["16,5 20.5,12.5 22,5", "gem-mid"],
+	["22,5 20.5,12.5 29,12.5", "gem-dark"],
+	["3,12.5 11.5,12.5 16,29", "gem-mid"],
+	["11.5,12.5 20.5,12.5 16,29", "gem-mid"],
+	["20.5,12.5 29,12.5 16,29", "gem-dark"],
+];
+const GEM_OUTLINE = "M10 5H22L29 12.5L16 29L3 12.5Z";
 // In kids mode every status message is swapped for a short one...
 const KID_STATUS = {
 	statusIdle: "kidIdle",
@@ -73,8 +91,10 @@ const KID_STATUS = {
 	readFailed: "kidNotFound",
 	unsureName: "kidNotFound",
 	needNameOrNumber: "kidNotFound",
-	magicStatusIdle: "kidIdle",
-	magicNeedName: "kidNotFound",
+	magicStatusIdle: "kidMagicIdle",
+	magicNeedName: "kidMagicIdle",
+	magicNoPhoto: "kidMagicNoPhoto",
+	magicNoMatch: "kidMagicNotFound",
 	claudeNotACard: "kidNotFound",
 	apiDown: "kidTryLater",
 	apiTooMany: "kidTryLater",
@@ -84,6 +104,7 @@ const KID_STATUS = {
 // ...with a picture, so it can be understood without reading...
 const KID_STATUS_ICONS = {
 	kidIdle: "📷", kidBusy: "🔎", kidFound: "🎉", kidPickOne: "👇", kidNotFound: "🤔", kidTryLater: "⏳",
+	kidMagicIdle: "✏️", kidMagicNoPhoto: "✏️", kidMagicNotFound: "🤔",
 };
 // ...and these are also said out loud. (A found card is said with its name and value instead.)
 const KID_SPOKEN = {
@@ -91,6 +112,9 @@ const KID_SPOKEN = {
 	kidPickOne: "sayPickOne",
 	kidNotFound: "sayNotFound",
 	kidTryLater: "sayTryLater",
+	kidMagicIdle: "sayMagicIdle",
+	kidMagicNoPhoto: "sayMagicNoPhoto",
+	kidMagicNotFound: "sayMagicNotFound",
 };
 
 // The text key for each kind of card, the group names in "My cards" (CARD_KINDS in collection.js).
@@ -126,7 +150,8 @@ const searchForm = document.getElementById("search-form");
 const nameInput = document.getElementById("name-input");
 const numberInput = document.getElementById("number-input");
 const numberLabel = document.querySelector("label[for='number-input']");
-const gameButtons = document.querySelectorAll("[data-game]");
+const gameButtons = document.querySelectorAll("[data-game]");   // the switch, and kids mode's big buttons
+const kidGamePictures = document.querySelectorAll(".kid-game-picture");
 const gameHint = document.getElementById("game-hint");
 const searchButton = document.getElementById("search-button");
 const detail = document.getElementById("detail");
@@ -236,7 +261,7 @@ let language = startLanguage();
 // account it was switched on for since the app opened, or null.
 let kidsModeStartedFor = readStorage(KID_ACCOUNT_STORAGE_KEY);
 let kidsMode = kidsModeStartedFor !== null || readStorage(KIDS_MODE_STORAGE_KEY) === "on";   // big pictures, few words, read aloud
-// The card game the Scan screen searches (see setGame). Kids mode scans Pokémon cards whatever it is.
+// The card game the Scan screen searches (see setGame), in kids mode too.
 let game = readStorage(GAME_STORAGE_KEY) === "magic" ? "magic" : "pokemon";
 let currency = startCurrency();   // the currency picked in the menu (currency.js)
 let money = makeMoneyFormats(language, shownCurrency());
@@ -304,6 +329,10 @@ let scannedNumbers = { shown: "", guesses: [] };
 
 // The order My cards was last shown in on this phone (see sortedCollection).
 collectionSort.value = SORT_ORDERS.includes(readStorage(SORT_STORAGE_KEY)) ? readStorage(SORT_STORAGE_KEY) : "value";
+// Kids mode's game buttons show a Poké Ball and a gold gem, drawn like the ones that show a card's worth.
+for (const picture of kidGamePictures) {
+	picture.innerHTML = picture.dataset.picture === "gem" ? gemPictureHtml("rare") : ballPictureHtml("poke");
+}
 applyLanguage();
 // A newer version is loaded first, if there is one; then cards saved before 1.32.0 are translated.
 reloadIfNewerVersion().then((reloading) => {
@@ -467,8 +496,9 @@ for (const button of languageButtons) {
 
 // ---------- Which card game ----------
 // The Scan screen searches Pokémon cards (TCGdex, cards.js) or Magic: The Gathering cards
-// (Scryfall, magic.js), picked by the switch above the search. Magic cards are found by typing: the
-// photo reading knows Pokémon cards only (ROADMAP.md, 7.2). My cards keeps both, in groups of their own.
+// (Scryfall, magic.js), picked by the switch above the search - in kids mode, by two big buttons at
+// the top, a Poké Ball and a gem. Magic cards are found by typing: the photo reading knows Pokémon
+// cards only (ROADMAP.md, 7.2). My cards keeps both, in groups of their own.
 
 for (const button of gameButtons) {
 	button.addEventListener("click", () => setGame(button.dataset.game));
@@ -479,7 +509,8 @@ function setGame(chosen) {
 	game = chosen;
 	writeStorage(GAME_STORAGE_KEY, game);
 	// Whatever the Scan screen showed was about the other game: a photo being read or searched stops,
-	// and its card, photo and texts go.
+	// and its card, photo and texts go. The start (the steps, or kids mode's big photo button) comes
+	// back, for Pokémon cards (see renderGame).
 	latestScanId++;
 	latestSearchId++;
 	lastPhoto = null;
@@ -489,40 +520,46 @@ function setGame(chosen) {
 	numberInput.value = "";
 	numberInput.classList.remove("needs-attention");
 	searchButton.disabled = false;
+	intro.hidden = false;
 	hidePhoto();
 	hideProgress();
 	clearResults();
 	setNotice(null);
-	setStatus(idleStatusKey());
+	setStatus(idleStatusKey());   // in kids mode, Magic's is also said out loud (see KID_SPOKEN)
 	renderGame();
+	// Magic cards start with typing the name. (Focusing from the tap also brings up a phone's keyboard.)
+	if (game === "magic") nameInput.focus();
+	else if (kidsMode) say(t("sayGamePokemon"));
 }
 
 // What the status says before anything happens: how to start, for the game searched.
 function idleStatusKey() {
-	return game === "magic" && !kidsMode ? "magicStatusIdle" : "statusIdle";
+	return game === "magic" ? "magicStatusIdle" : "statusIdle";
 }
 
-// The switch, and the search's words for the game picked.
+// The switches, and the search's words for the game picked.
 function renderGame() {
 	const magic = game === "magic";
 	for (const button of gameButtons) button.setAttribute("aria-pressed", String(button.dataset.game === game));
+	// style.css hides what is about photos for Magic cards (the steps, kids mode's big photo button),
+	// and shows kids mode the search box instead.
+	document.body.classList.toggle("game-magic", magic);
 	nameInput.placeholder = t(magic ? "magicNamePlaceholder" : "namePlaceholder");
 	numberLabel.textContent = t(magic ? "magicNumberLabel" : "numberLabel");
 	numberInput.placeholder = t(magic ? "magicNumberPlaceholder" : "numberPlaceholder");
 	gameHint.hidden = !magic;
 	// The example is a Pokémon card's photo.
 	exampleButton.hidden = magic;
-	// Kids mode shows the Pokémon status, as it scans Pokémon cards whatever the game picked.
 	if (statusMessage.key === "statusIdle" || statusMessage.key === "magicStatusIdle") {
 		statusMessage.key = idleStatusKey();
 		showStatus();
 	}
 }
 
-// Magic cards can't be read from a photo yet: the photo buttons say so, and point to the search.
-// Returns true when they did. Kids mode scans Pokémon cards, so there it never stops them.
+// Magic cards can't be read from a photo yet: the photo buttons say so (in kids mode out loud too),
+// and point to the search. Returns true when they did.
 function magicPhotoRefused() {
-	if (game !== "magic" || kidsMode) return false;
+	if (game !== "magic") return false;
 	showView("scan");
 	setStatus("magicNoPhoto", {}, "error");
 	nameInput.focus();
@@ -757,7 +794,7 @@ function setKidsMode(on, speakIt = true) {
 	kidsMode = on;
 	writeStorage(KIDS_MODE_STORAGE_KEY, kidsMode ? "on" : "off");
 	applyLanguage();
-	if (kidsMode && speakIt) say(t("sayKidsModeOn"));
+	if (kidsMode && speakIt) say(t(game === "magic" ? "sayKidsModeOnMagic" : "sayKidsModeOn"));
 	else if (!kidsMode) stopSpeaking();
 }
 cameraInput.addEventListener("change", () => takeFileFrom(cameraInput));
@@ -1702,6 +1739,7 @@ async function searchForMagicCard() {
 	if (!canSearchMagic(nameInput.value, numberInput.value)) {
 		hideProgress();
 		setStatus("magicNeedName", {}, "error");
+		nameInput.focus();
 		return;
 	}
 	clearResults();
@@ -1717,7 +1755,7 @@ async function searchForMagicCard() {
 		// A misspelt name is shown as the card's real one.
 		if (found.fixedName) nameInput.value = found.fixedName;
 		if (found.cards.length === 0) {
-			setStatus("noMatch", {}, "error");
+			setStatus("magicNoMatch", {}, "error");
 		} else if (found.cards.length === 1) {
 			setStatus("foundOne");
 			showResults(found.cards, found.description, found.cards[0].id, null);
@@ -1942,10 +1980,10 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 			</div>
 		</div>
 		${versionsHtml(versions, version.key, card.pricesFailed, fromPhoto, versionHintKey(card, versions))}
-		${versions.length === 0 && !isMagicCard(card) ? `<p>${storeLinkHtml(priceChartingUrl(card, version, "Ungraded"), t("soldOnPriceCharting"))}</p>` : ""}
+		${versions.length === 0 ? `<p>${storeLinkHtml(priceChartingUrl(card, version, "Ungraded"), t("soldOnPriceCharting"))}</p>` : ""}
 		${own}
 		${isMagicCard(card) ? magicShopsHtml(card) : cardmarketTableHtml(card) + tcgplayerTableHtml(card.tcgplayer)}
-		${isMagicCard(card) ? "" : gradedLinksHtml(card, version)}
+		${gradedLinksHtml(card, version)}
 		<p class="fineprint">${t("ungraded")}</p>
 		${notYours}`;
 }
@@ -2158,9 +2196,9 @@ function magicShopsHtml(card) {
 }
 
 // Graded cards: their prices come through the Kortpris relay (graded.js), and these links
-// search the real sales as well.
+// search the real sales as well. The relay knows Pokémon cards only: a Magic card has the links.
 function gradedLinksHtml(card, version) {
-	const known = gradedPricesAvailable() ? gradedPricesOf(card, renderCardPages) : null;
+	const known = gradedPricesAvailable() && !isMagicCard(card) ? gradedPricesOf(card, renderCardPages) : null;
 	// The links are always in a menu, closed at first. With prices shown it is the one under them
 	// (gradedMoreHtml), where every grade links to its own sales on PriceCharting; without them, this
 	// one links to the most sold grades' sales. Either way the page shows one line to tap.
@@ -2228,14 +2266,21 @@ function priceChartingUrl(card, version = null, grade = "") {
 	// card's page and keeps the part after "#", so the page opens on the grade's sales. When it finds
 	// several - the card's other versions, or cards with the same name and number in other sets - it
 	// lists them, with pictures, to pick from.
-	const words = [card.name, priceChartingSetName(card.set.name), priceChartingNumber(card)];
+	let words = [card.name, priceChartingSetName(card.set.name), priceChartingNumber(card)];
 	if (version && version.key === "reverseHolofoil") words.push("reverse holo");
 	if (version && version.key.startsWith("firstEdition")) words.push("1st edition");
+	// A Magic card is searched for in its own way, and may leave PriceCharting's special editions out.
+	let only = "";
+	if (isMagicCard(card)) {
+		const magic = priceChartingMagicSearch(card, version);
+		words = magic.words;
+		if (magic.plain) only = "&exclude-variants=true";
+	}
 	const number = grade.split(" ").pop();
 	const list = PRICECHARTING_SALES_LISTS[grade] || PRICECHARTING_SALES_LISTS[number]
 		|| PRICECHARTING_SALES_LISTS[String(Math.floor(Number(number)))];
 	return "https://www.pricecharting.com/search-products?type=prices&q=" + encodeURIComponent(words.join(" "))
-		+ (list ? "#completed-auctions-" + list : "");
+		+ only + (list ? "#completed-auctions-" + list : "");
 }
 
 // Sets PriceCharting names differently from the card database.
@@ -2260,6 +2305,63 @@ function priceChartingNumber(card) {
 	if (/^H0\d$/.test(card.number)) return "H" + card.number.slice(2);
 	if (card.set.id === "bwp" && /^BW0[45]$/.test(card.number)) return "BW00" + card.number.slice(3);
 	return card.number;
+}
+
+// Magic sets PriceCharting names differently from Scryfall. PriceCharting's names all start with
+// "Magic", which the search gets as a word of its own (see priceChartingMagicSearch).
+const PRICECHARTING_MAGIC_SETS = {
+	"Limited Edition Alpha": "Alpha",
+	"Limited Edition Beta": "Beta",
+	"Unlimited Edition": "Unlimited",
+	"Revised Edition": "Revised",
+	"Fourth Edition": "4th Edition",
+	"Fifth Edition": "5th Edition",
+	"Classic Sixth Edition": "6th Edition",
+	"Seventh Edition": "7th Edition",
+	"Eighth Edition": "8th Edition",
+	"Ninth Edition": "9th Edition",
+	"Tenth Edition": "10th Edition",
+	"Magic 2010": "M10",
+	"Magic 2011": "M11",
+	"Magic 2012": "Core Set 2012",
+	"Magic 2013": "Core Set 2013",
+	"Magic 2014": "M14",
+	"Magic 2015": "M15",
+	"Commander 2011": "Commander",
+	"Collectors' Edition": "Collector's Edition",
+	"Intl. Collectors' Edition": "International Edition",
+	"Summer Magic / Edgar": "Summer Edition",
+	"30th Anniversary Edition": "30th Anniversary",
+	"Ravnica: City of Guilds": "Ravnica",
+	"The List": "The List Reprints",
+	"The Lord of the Rings: Tales of Middle-earth": "Lord of the Rings",
+	"Tales of Middle-earth Commander": "Lord of the Rings Commander",
+	"Marvel's Spider-Man": "Marvel Spider-Man",
+	"Warhammer 40,000 Commander": "Warhammer 40,000",
+	"Jurassic World Collection": "Jurassic World",
+};
+
+// A Magic card's search on PriceCharting (see priceChartingUrl): { words, plain }. The words are its
+// name and set, as PriceCharting names them, and "Foil" for a foil copy. plain: PriceCharting should
+// leave its special editions out ([Foil], [Borderless], [Extended Art]...), which for a normal copy
+// mostly leaves the one card, so its page opens straight away. The number is left out: PriceCharting's
+// older Magic cards have none, and then the number found other cards first. Tested on 51 cards
+// (September 2026): a normal copy's page opened straight away for 41, and 8 more were among the first
+// three in the list.
+function priceChartingMagicSearch(card, version) {
+	// A card with two faces is named after its front ("Fable of the Mirror-Breaker // Reflection of Kiki-Jiki").
+	const words = [card.name.split(" // ")[0], "Magic"];
+	let set = PRICECHARTING_MAGIC_SETS[card.set.name] || card.set.name;
+	// PriceCharting keeps a set's promos with the set itself, as special editions: [Promo], [Prerelease]...
+	const promo = / Promos$/.test(set);
+	set = set.replace(/ Promos$/, "").replace(/^Duel Decks: /, "").replace(" vs. ", " vs ")
+		.replace(/^(Judge Gift|Friday Night|Arena League) .*$/, "$1").replace(/^Magic (Player Rewards) .*$/, "$1");
+	words.push(set);
+	if (promo) words.push("Promo");
+	const key = version ? version.key : "normal";
+	if (key === "foil") words.push("Foil");
+	if (key === "etchedFoil") words.push("Etched Foil");
+	return { words: words, plain: key === "normal" && !promo };
 }
 
 // known: the card's graded prices as far as they are known (gradedPricesOf in graded.js).
@@ -2397,8 +2499,8 @@ function storeLinkHtml(url, text) {
 }
 
 // ---------- Kids mode and reading aloud ----------
-// For children who can't read well yet: the card's picture and name, a row of Poké Balls for how
-// valuable it is, one rounded price and big buttons - and the phone says it out loud.
+// For children who can't read well yet: the card's picture and name, a row of Poké Balls (gems for a
+// Magic card) for how valuable it is, one rounded price and big buttons - and the phone says it out loud.
 
 // pickedKey: the version picked on the page (see versionOf). onScanScreen: false for a saved card's
 // page in My cards, which has no "save and the next one".
@@ -2420,7 +2522,7 @@ function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint, onSca
 				<h2 class="detail-name">${escapeHtml(card.name)}</h2>
 				${readAloudButtonHtml()}
 			</div>
-			${kidWorthHtml(version)}
+			${kidWorthHtml(card, version)}
 			${versions.length > 1 ? kidVersionsHtml(versions, version.key) : ""}
 			<button type="button" class="button primary kid-save" data-action="add-to-collection" ${collectionReady() ? "" : "disabled"}>
 				<span aria-hidden="true">⭐</span> ${t(owned > 0 ? "kidSaveAnother" : "kidSave")}
@@ -2431,12 +2533,12 @@ function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint, onSca
 		</div>`;
 }
 
-function kidWorthHtml(version) {
+function kidWorthHtml(card, version) {
 	const local = localPrice(version.eur, version.usd);
 	if (local === null) return `<p class="kid-price">${t("noPrice")}</p>`;
 	return `
 		<div class="kid-worth">
-			${ballsHtml(ballCount(version.eur, version.usd))}
+			${worthHtml(isMagicCard(card), worthLevel(version.eur, version.usd))}
 			<p class="kid-price">${kidPriceText(local)}</p>
 		</div>`;
 }
@@ -2483,16 +2585,44 @@ function sparkleHtml(x, y) {
 	return `<path class="sparkle" d="M${x} ${y - 2.4}L${x + 0.7} ${y - 0.7}L${x + 2.4} ${y}L${x + 0.7} ${y + 0.7}L${x} ${y + 2.4}L${x - 0.7} ${y + 0.7}L${x - 2.4} ${y}L${x - 0.7} ${y - 0.7}Z"/>`;
 }
 
+// A card's worth in kids mode: level (1 to 5, see worthLevel) Poké Balls - or gems, for a Magic card.
+function worthHtml(magic, level) {
+	return magic ? gemsHtml(level) : ballsHtml(level);
+}
+
 function ballsHtml(count) {
 	// count balls of the kind for that count, then empty places up to 5, so a child sees how far up it is.
 	const kind = BALL_KINDS[count - 1];
 	const balls = [];
-	for (let place = 1; place <= MOST_BALLS; place++) {
+	for (let place = 1; place <= WORTH_LEVELS; place++) {
 		balls.push(place <= count ? ballPictureHtml(kind) : `<span class="ball empty"></span>`);
 	}
 	const label = t("balls", { count: count, ball: t("ball_" + kind) });
 	// A span, not a div: in My cards the balls are inside a button (see savedCardHtml).
 	return `<span class="balls" role="img" aria-label="${label}">${balls.join("")}</span>`;
+}
+
+function gemsHtml(count) {
+	// The same for a Magic card: count gems of the colour for that count (GEM_KINDS), then empty places.
+	const kind = GEM_KINDS[count - 1];
+	const gems = [];
+	for (let place = 1; place <= WORTH_LEVELS; place++) gems.push(gemPictureHtml(place <= count ? kind : "empty"));
+	const label = t("gems", { count: count, gem: t("gem_" + kind) });
+	return `<span class="gems" role="img" aria-label="${label}">${gems.join("")}</span>`;
+}
+
+function gemPictureHtml(kind) {
+	// kind: one of GEM_KINDS, or "empty" for a dashed place still to fill. The rainbow gem also sparkles.
+	if (kind === "empty") {
+		return `<svg class="gem empty" viewBox="0 0 32 32" aria-hidden="true"><path class="gem-place" d="${GEM_OUTLINE}"/></svg>`;
+	}
+	const sides = GEM_SIDES.map(([points, light]) => `<polygon class="gem-side ${light}" points="${points}"/>`);
+	return `
+		<svg class="gem ${kind}" viewBox="0 0 32 32" aria-hidden="true">
+			${sides.join("")}
+			<path class="gem-outline" d="${GEM_OUTLINE}"/>
+			${kind === "foil" ? sparkleHtml(24.5, 6) : ""}
+		</svg>`;
 }
 
 function ballPictureHtml(kind) {
@@ -2509,13 +2639,13 @@ function ballPictureHtml(kind) {
 		</svg>`;
 }
 
-function ballCount(eur, usd) {
-	// 1 to 5 balls (see BALL_STEPS_DKK), or 0 when the price isn't known.
+function worthLevel(eur, usd) {
+	// 1 to 5 balls or gems (see WORTH_STEPS_DKK), or 0 when the price isn't known.
 	let kroner = null;
 	if (eur > 0) kroner = fromEuros(eur, "DKK");
 	else if (usd > 0) kroner = fromDollars(usd, "DKK");
 	if (kroner === null) return 0;
-	return 1 + BALL_STEPS_DKK.filter((step) => kroner >= step).length;
+	return 1 + WORTH_STEPS_DKK.filter((step) => kroner >= step).length;
 }
 
 function friendlyAmount(value) {
@@ -2610,7 +2740,7 @@ function cardSentence(card, pickedKey) {
 	if (local === null) return t("sayNoPrice", { name: card.name });
 	const values = { name: card.name, version: t(version.key), price: spokenMoney(local) };
 	const sentence = cardVersions(card).length > 1 ? t("sayWorthVersion", values) : t("sayWorth", values);
-	return ballCount(version.eur, version.usd) === MOST_BALLS ? t("sayWow", { sentence: sentence }) : sentence;
+	return worthLevel(version.eur, version.usd) === WORTH_LEVELS ? t("sayWow", { sentence: sentence }) : sentence;
 }
 
 function spokenMoney(amount) {
@@ -2826,8 +2956,8 @@ function savedCardHtml(entry) {
 	const id = escapeHtml(entry.id);
 	const version = entry.version ? escapeHtml(entry.version) : "";
 	const versionName = entry.version ? " · " + t(entry.version) : "";
-	const balls = ballCount(entry.priceEur, entry.priceUsd);
-	const kidBalls = kidsMode && balls > 0 ? ballsHtml(balls) : "";
+	const level = worthLevel(entry.priceEur, entry.priceUsd);
+	const kidWorth = kidsMode && level > 0 ? worthHtml(isMagicId(entry.id), level) : "";
 	// The picture, name and price are one button, which opens the card's page (see openSavedCard).
 	return `
 		<li class="saved-card opens">
@@ -2835,7 +2965,7 @@ function savedCardHtml(entry) {
 				<img class="card-image" src="${escapeHtml(readablePictureUrl(entry.image))}" alt="" loading="lazy" crossorigin="anonymous" width="245" height="342">
 				<span class="saved-info">
 					<span class="saved-name">${escapeHtml(entry.name)}</span>
-					${kidBalls}
+					${kidWorth}
 					<span class="saved-meta">${escapeHtml(entry.setName)} · <span class="mono">${escapeHtml(entry.number)}</span>${versionName}</span>
 					<span class="saved-price">${t("each", { price: each })}${lineTotal}</span>
 				</span>
