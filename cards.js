@@ -74,6 +74,14 @@ const CARD_DATABASE = "tcgdex";
 const IDS_PER_QUESTION = 100;
 
 let setsPromise = null;          // every set: asked once per visit, and kept on the phone for a day
+// Which card language the search is for: "en", or "ja" for Japanese cards (see japanese.js). The app
+// says so when the viewer picks the game (setGame in app.js); everything that finds cards by name and
+// number then asks the Japanese database instead.
+let cardSearchLanguage = "en";
+
+function setCardSearchLanguage(language) {
+	cardSearchLanguage = language;
+}
 let reprintsPromise = null;      // the anniversary reprints, asked once
 const pricesAsked = new Map();   // card id -> its prices (a promise), asked once per visit
 
@@ -90,6 +98,7 @@ const pricesAsked = new Map();   // card id -> its prices (a promise), asked onc
 // the numbers tried ("102" of 8/102), and numbersRead all those numbers, for pickBestMatch in
 // matcher.js.
 async function findCards(name, numberText, withPhoto = false, numberGuesses = []) {
+	if (cardSearchLanguage === "ja") return findJapaneseCards(name, numberText);
 	const nameWord = longestWord(name);
 	const parsedNumber = parseCollectorNumber(numberText);
 	const guesses = allNumberGuesses(numberText, withPhoto ? numberGuesses : []);
@@ -181,6 +190,7 @@ async function findExactCards(name, guesses) {
 // matcher.js). Never a wider search: a misread number should find nothing, not a pile of cards.
 // Returns { cards, setSizes }: setSizes as for findCards.
 async function findCardsByNumber(numberGuesses) {
+	if (cardSearchLanguage === "ja") return { cards: [], setSizes: [] };   // (Japanese cards aren't read from photos yet)
 	const guesses = allNumberGuesses("", numberGuesses).filter((guess) => {
 		const parsed = parseCollectorNumber(guess);
 		return parsed.number && (parsed.total || isPromoCode(parsed));
@@ -275,11 +285,14 @@ async function cardsOfSet(setId) {
 
 // The cards with these ids ("lc-72"), fresh from the database, in the same order. An id the
 // database doesn't have is left out. Magic cards' ids ("mtg:...") are asked of Scryfall (see
-// findMagicCardsById in magic.js).
+// findMagicCardsById in magic.js), Japanese cards' ("ja:SV2a-151") of TCGdex's Japanese database (see
+// findJapaneseCardsById in japanese.js).
 async function findCardsById(ids) {
-	const pokemonIds = ids.filter((id) => !isMagicId(id));
 	const magicIds = ids.filter(isMagicId);
+	const japaneseIds = ids.filter(isJapaneseId);
+	const pokemonIds = ids.filter((id) => !isMagicId(id) && !isJapaneseId(id));
 	const cards = magicIds.length > 0 ? await findMagicCardsById(magicIds) : [];
+	if (japaneseIds.length > 0) cards.push(...await findJapaneseCardsById(japaneseIds));
 	for (let start = 0; start < pokemonIds.length; start += IDS_PER_QUESTION) {
 		const some = pokemonIds.slice(start, start + IDS_PER_QUESTION);
 		// Two ids at least (see cardsNumbered).
@@ -294,6 +307,18 @@ const MAGIC_ID_START = "mtg:";
 
 function isMagicId(id) {
 	return String(id).startsWith(MAGIC_ID_START);
+}
+
+// The same for Japanese cards' ids ("ja:SV2a-151", see japanese.js): TCGdex's Japanese and English
+// databases can use the same id for two cards.
+const JAPANESE_ID_START = "ja:";
+
+function isJapaneseId(id) {
+	return String(id).startsWith(JAPANESE_ID_START);
+}
+
+function isJapaneseCard(card) {
+	return isJapaneseId(card.id);
 }
 
 // The ids TCGdex knows these cards by, for ids from the old database, pokemontcg.io ("base6-86"
@@ -412,6 +437,7 @@ async function loadSets() {
 // fresh = true asks TCGdex again even so: "Update prices" in My cards. Throws when TCGdex doesn't
 // answer; the card then stays without prices, and they are asked for again the next time.
 async function withPrices(card, fresh = false) {
+	if (isJapaneseCard(card)) return withJapanesePrices(card, fresh);
 	if (card.pricesLoaded && !fresh) return card;
 	if (!pricesAsked.has(card.id) || fresh) {
 		const asking = askTcgdex(TCGDEX_API + "/cards/" + encodeURIComponent(card.id), null, fresh).then((full) => pricesFrom(full.pricing));

@@ -20,10 +20,12 @@ const PRICE_REQUESTS_AT_ONCE = 6;
 // kind is the database's "supertype": "Pokémon", "Trainer" or "Energy" (see CARD_KINDS). Cards
 // saved before version 1.25.0 have none until fillMissingKinds has asked the database.
 // Magic cards (from version 1.55.0, see magic.js) are saved the same way, with an id starting
-// "mtg:", kind "Magic" and db "scryfall", and a version like "foil".
+// "mtg:", kind "Magic" and db "scryfall", and a version like "foil". Japanese cards (from version 1.63.0,
+// see japanese.js) have an id starting "ja:", and are kept in a group of their own (see cardKind); their
+// kind is Pokémon, Trainer or Energy, as any card's.
 let collection = loadCollection();
 // "My cards" is split into these, in this order.
-const CARD_KINDS = ["Pokémon", "Trainer", "Energy", "Magic"];
+const CARD_KINDS = ["Pokémon", "Trainer", "Energy", "Magic", "Japanese"];
 // fillMissingKinds has run: once per visit is enough, even when the database didn't answer.
 let kindsAsked = false;
 // When someone is signed in, their cards live in their account instead of on this phone.
@@ -322,6 +324,7 @@ function usePricesOf(cards) {
 // kept are guessed from their name until fillMissingKinds knows better.
 function cardKind(entry) {
 	if (isMagicId(entry.id)) return "Magic";
+	if (isJapaneseId(entry.id)) return "Japanese";
 	if (CARD_KINDS.includes(entry.kind)) return entry.kind;
 	const name = entry.name || "";
 	if (ENERGY_NAMES.includes(name)) return "Energy";

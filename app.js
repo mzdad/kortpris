@@ -120,7 +120,7 @@ const KID_SPOKEN = {
 };
 
 // The text key for each kind of card, the group names in "My cards" (CARD_KINDS in collection.js).
-const KIND_TEXT_KEYS = { "Pokémon": "kindPokemon", "Trainer": "kindTrainer", "Energy": "kindEnergy", "Magic": "kindMagic" };
+const KIND_TEXT_KEYS = { "Pokémon": "kindPokemon", "Trainer": "kindTrainer", "Energy": "kindEnergy", "Magic": "kindMagic", "Japanese": "kindJapanese" };
 
 // TCGplayer splits prices by print version: [its name for the version, our text key].
 const TCGPLAYER_VARIANTS = [
@@ -263,7 +263,10 @@ let language = startLanguage();
 let kidsModeStartedFor = readStorage(KID_ACCOUNT_STORAGE_KEY);
 let kidsMode = kidsModeStartedFor !== null || readStorage(KIDS_MODE_STORAGE_KEY) === "on";   // big pictures, few words, read aloud
 // The card game the Scan screen searches (see setGame), in kids mode too.
-let game = readStorage(GAME_STORAGE_KEY) === "magic" ? "magic" : "pokemon";
+// Pokémon, Magic, or Japanese Pokémon cards (not in kids mode: a child can't type them).
+let game = ["magic", "japanese"].includes(readStorage(GAME_STORAGE_KEY)) ? readStorage(GAME_STORAGE_KEY) : "pokemon";
+if (kidsMode && game === "japanese") game = "pokemon";
+setCardSearchLanguage(game === "japanese" ? "ja" : "en");
 let currency = startCurrency();   // the currency picked in the menu (currency.js)
 let money = makeMoneyFormats(language, shownCurrency());
 let statusMessage = { key: idleStatusKey(), values: {}, tone: "" };
@@ -523,6 +526,7 @@ function setGame(chosen) {
 	if (chosen === game) return;
 	game = chosen;
 	writeStorage(GAME_STORAGE_KEY, game);
+	setCardSearchLanguage(game === "japanese" ? "ja" : "en");   // what the searches ask for (see cards.js)
 	// Whatever the Scan screen showed was about the other game: a photo being read or searched stops,
 	// and its card, photo and texts go. The start (the steps, or kids mode's big photo button) comes back.
 	latestScanId++;
@@ -546,22 +550,27 @@ function setGame(chosen) {
 
 // What the status says before anything happens: how to start, for the game searched.
 function idleStatusKey() {
+	if (game === "japanese") return "japaneseStatusIdle";
 	return game === "magic" ? "magicStatusIdle" : "statusIdle";
 }
 
 // The switches, and the search's words for the game picked.
 function renderGame() {
 	const magic = game === "magic";
+	const japanese = game === "japanese";
 	for (const button of gameButtons) button.setAttribute("aria-pressed", String(button.dataset.game === game));
 	// Kids mode shows the search box for Magic cards (see style.css): an old card's fancy letters can
 	// be too much for the reader, and a child can type its name instead.
 	document.body.classList.toggle("game-magic", magic);
-	nameInput.placeholder = t(magic ? "magicNamePlaceholder" : "namePlaceholder");
-	numberLabel.textContent = t(magic ? "magicNumberLabel" : "numberLabel");
-	numberInput.placeholder = t(magic ? "magicNumberPlaceholder" : "numberPlaceholder");
+	// The words above the boxes, for the game picked: keys "namePlaceholder", "magicNamePlaceholder", ...
+	const prefix = magic ? "magic" : japanese ? "japanese" : "";
+	const key = (base) => prefix ? prefix + base[0].toUpperCase() + base.slice(1) : base;
+	nameInput.placeholder = t(key("namePlaceholder"));
+	numberLabel.textContent = t(key("numberLabel"));
+	numberInput.placeholder = t(key("numberPlaceholder"));
 	// The example is a Pokémon card's photo.
-	exampleButton.hidden = magic;
-	if (statusMessage.key === "statusIdle" || statusMessage.key === "magicStatusIdle") {
+	exampleButton.hidden = magic || japanese;
+	if (["statusIdle", "magicStatusIdle", "japaneseStatusIdle"].includes(statusMessage.key)) {
 		statusMessage.key = idleStatusKey();
 		showStatus();
 	}
@@ -792,6 +801,7 @@ kidsButton.addEventListener("click", () => setKidsMode(!kidsMode));
 // Kids mode on or off, remembered on this phone. speakIt: say so out loud when it goes on.
 function setKidsMode(on, speakIt = true) {
 	kidsMode = on;
+	if (on && game === "japanese") setGame("pokemon");   // kids mode has no Japanese cards (see game above)
 	writeStorage(KIDS_MODE_STORAGE_KEY, kidsMode ? "on" : "off");
 	applyLanguage();
 	if (kidsMode && speakIt) say(t("sayKidsModeOn"));
@@ -1329,6 +1339,12 @@ async function scanPhoto(imageFile, frame = null) {
 		await scanMagicPhoto(imageFile, frame, scanId);
 		return;
 	}
+	// A Japanese card can't be read from a photo yet: the reader knows English only.
+	if (game === "japanese") {
+		searchButton.disabled = false;
+		setStatus("japanesePhotoSoon", {}, "error");
+		return;
+	}
 
 	// With a saved API key, and signed in to an account, Claude reads the card. If that fails
 	// for any reason, the built-in reader takes over, and a notice says why.
@@ -1705,10 +1721,13 @@ async function searchForCard(byViewer = false) {
 	resultsForPhoto = lastPhoto !== null && (!byViewer || answersPhoto);
 	// Magic cards are searched for in their own way (see findMagicCardsForSearch).
 	const magic = game === "magic";
-	const searchable = magic ? canSearchMagic(nameInput.value, numberInput.value) : canSearch(nameInput.value, numberInput.value);
+	const japanese = game === "japanese";
+	const searchable = magic ? canSearchMagic(nameInput.value, numberInput.value)
+		: japanese ? canSearchJapanese(nameInput.value, numberInput.value)
+		: canSearch(nameInput.value, numberInput.value);
 	if (!learnedCard && suggestions.length === 0 && !searchable) {
 		hideProgress();
-		setStatus(magic ? "magicNeedName" : "needNameOrNumber", {}, "error");
+		setStatus(magic ? "magicNeedName" : japanese ? "japaneseNeedName" : "needNameOrNumber", {}, "error");
 		return;
 	}
 
@@ -1746,10 +1765,10 @@ async function searchForCard(byViewer = false) {
 			numberInput.value = found.matchedNumber;
 			scannedNumbers.shown = found.matchedNumber;
 		}
-		if (!magic) showNumberHint(found);
+		if (!magic && !japanese) showNumberHint(found);
 		if (found.cards.length === 0) {
 			hideProgress();
-			setStatus(magic ? "magicNoMatch" : "noMatch", {}, "error");
+			setStatus(magic ? "magicNoMatch" : japanese ? "japaneseNoMatch" : "noMatch", {}, "error");
 		} else if (found.suggestedOnly) {
 			// Only learned cards the photo looks somewhat like: shown to pick from, but never opened
 			// by themselves, as the text read gave nothing to back them up.
@@ -1762,7 +1781,7 @@ async function searchForCard(byViewer = false) {
 			hideProgress();
 			setStatus(found.learned ? "learnedOpened" : "foundOne");
 			if (magic && !byViewer) showMagicCardRead(found.cards[0]);
-			else if (!found.exactFound && !magic) fixMisreadName(found.cards[0], guesses);
+			else if (!found.exactFound && !magic && !japanese) fixMisreadName(found.cards[0], guesses);
 			showResults(found.cards, found.description, found.cards[0].id, null);
 			if (answersPhoto) rememberCard(found.cards[0]);
 			else if (!byViewer) takeFor(found.cards[0], Boolean(found.learned));
@@ -1800,7 +1819,7 @@ async function searchForCard(byViewer = false) {
 				if (searchId !== latestSearchId) return;
 				setStatus("bestMatchOpened");
 				if (magic) showMagicCardRead(cards[0]);
-				else fixMisreadName(cards[0], guesses);
+				else if (!japanese) fixMisreadName(cards[0], guesses);
 				showResults(cards, found.description, best, best, suggested);
 				if (answersPhoto) rememberCard(cards[0]);
 				else if (!byViewer) takeFor(cards[0], false);
@@ -2059,7 +2078,7 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 	if (!collectionReady()) addText = t("loadingAccountCards");
 	// For a stack of cards: save this one and go straight back to the camera for the next. Not for a
 	// Magic card, which the camera can't read yet.
-	const saveAndNext = onScanScreen && !isMagicCard(card)
+	const saveAndNext = onScanScreen && !isMagicCard(card) && !isJapaneseCard(card)
 		? `<button type="button" class="button primary" data-action="save-and-next" ${collectionReady() ? "" : "disabled"}>
 				<span aria-hidden="true">📷</span> ${t("saveAndNext")}
 			</button>`
@@ -2089,7 +2108,7 @@ function cardDetailHtml(card, pickedKey = chosenVersion || versionHint, onScanSc
 			</div>
 		</div>
 		${versionsHtml(versions, version.key, card.pricesFailed, fromPhoto, versionHintKey(card, versions))}
-		${versions.length === 0 ? `<p>${storeLinkHtml(priceChartingUrl(card, version, "Ungraded"), t("soldOnPriceCharting"))}</p>` : ""}
+		${versions.length === 0 && !isJapaneseCard(card) ? `<p>${storeLinkHtml(priceChartingUrl(card, version, "Ungraded"), t("soldOnPriceCharting"))}</p>` : ""}
 		${own}
 		${isMagicCard(card) ? magicShopsHtml(card) : cardmarketTableHtml(card) + tcgplayerTableHtml(card.tcgplayer)}
 		${gradedLinksHtml(card, version)}
@@ -2139,7 +2158,10 @@ function cardVersions(card) {
 		findOrAddVersion(versions, ["reverseHolofoil"], "reverseHolofoil").eur = reverse;
 	}
 	const regular = firstPrice(cardmarket, CARDMARKET_REGULAR);
-	if (regular !== null) findOrAddVersion(versions, REGULAR_VERSIONS, "normal").eur = regular;
+	// A Japanese card has Cardmarket's price alone, and is named for the one print it comes in: a card
+	// that only comes as a holo is not "normal".
+	const holoOnly = isJapaneseCard(card) && card.variants && card.variants.holo && !card.variants.normal;
+	if (regular !== null) findOrAddVersion(versions, REGULAR_VERSIONS, holoOnly ? "holofoil" : "normal").eur = regular;
 	return versions;
 }
 
@@ -2307,6 +2329,9 @@ function magicShopsHtml(card) {
 // Graded cards: their prices come through the Kortpris relay (graded.js), and these links
 // search the real sales as well. The relay knows Pokémon cards only: a Magic card has the links.
 function gradedLinksHtml(card, version) {
+	// The relay's prices and PriceCharting's sales are for English cards: PriceCharting keeps Japanese
+	// cards under other set names, which the card database doesn't have.
+	if (isJapaneseCard(card)) return "";
 	const known = gradedPricesAvailable() && !isMagicCard(card) ? gradedPricesOf(card, renderCardPages) : null;
 	// The links are always in a menu, closed at first. With prices shown it is the one under them
 	// (gradedMoreHtml), where every grade links to its own sales on PriceCharting; without them, this
@@ -2619,7 +2644,7 @@ function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint, onSca
 	const owned = savedCount(card.id, version.key);
 	const ownedNote = owned > 0 ? `<p class="own-note">${t("kidHave", { count: owned })}</p>` : "";
 	const saveProblem = saveFailed ? `<p class="status error">${t("storageBlocked")}</p>` : "";
-	const saveAndNext = onScanScreen && !isMagicCard(card)
+	const saveAndNext = onScanScreen && !isMagicCard(card) && !isJapaneseCard(card)
 		? `<button type="button" class="button secondary kid-save" data-action="save-and-next" ${collectionReady() ? "" : "disabled"}>
 				<span aria-hidden="true">⭐📷</span> ${t("kidSaveAndNext")}
 			</button>`

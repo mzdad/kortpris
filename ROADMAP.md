@@ -5,6 +5,39 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.63.0
+
+- **6.1 Japanese cards, first part: typing, prices and My cards** (you said: "ALright can we add the japanese
+  cards"). Reading them from a photo is the next part; this one is everything after the card is named.
+  - A third choice in the switch above the search, **Japanese**, remembered on the phone (not in kids mode:
+    it is hidden there). You type the Pokémon's name - in English ("Pikachu": its Pokédex number finds the
+    Japanese cards, and gives each its English name, "Pikachu ピカチュウ") or in Japanese - and/or the number
+    from the card's bottom-left corner: "151/165", or with the set's code, "SV2a 151/165" (the cards print
+    it in small letters); a promo prints its code after the number, "001/SV-P". A Trainer or Energy card is
+    named in Japanese only, so it is found by number.
+  - Listed newest set first, with pictures. A card's page has its **Cardmarket price** in euros and kroner
+    (TCGdex has no TCGplayer prices for Japanese cards, and the PSA prices and the sales links are for English
+    cards, so they are left out), its rarity, and "Holo" for a card that only comes as one. Saved Japanese cards
+    go in **a group of their own in My cards**, "Update prices" updates them, and they open their page.
+  - How: TCGdex has 13,006 Japanese cards in 118 sets, from 1996 to September 2026, in the same shape as the
+    English ones - but its fast search (GraphQL) knows English cards only, so a new module, `japanese.js`,
+    asks its plain list search (`?dexId=eq:25`, `?localId=eq:151|0151`, `?id=eq:...`, `?name=...`) and makes
+    the same kind of card of each. An id starts with "ja:", like Magic's "mtg:", as TCGdex's Japanese and English
+    ids can be the same. English search, Magic and the rest are as they were.
+  - **Pictures** are the weak spot: TCGdex has 30% of the Japanese cards' (3,882 of 13,006: nearly all of
+    2022-2024, 14% of 2025, none before 2022 or in 2026). Scrydex, which the app already uses for some English
+    cards, has the rest of 90 sets under "sv2a_ja-25" (a set's code in small letters, "_ja", the number without
+    zeros): `japanese-sets.js` lists which. Checked against TCGdex's own pictures in the 22 sets that have both:
+    up to a set's printed size they are the same card, but above it (the secret rares) Scrydex numbers its cards
+    differently, so those get none from Scrydex. Also: a name I guessed for the oldest set gave another set's
+    cards ("pcg1" is not "PMCG1"), so no name is guessed. 28 sets have no picture at all: the 1996-1999 sets,
+    the e-Card sets and Sword & Shield's 2021 sets. Those cards show a grey "?".
+  - Tested: the search by name, number, code, promo code and Japanese name (9 kinds, against the real database);
+    a card's prices, rarity and kind; saving, My cards, opening a saved card and "Update prices"; English and
+    Danish; kids mode; the Japanese choice kept through a reload. English and Magic as before: the number checks
+    (MEP and SVP), an English search, and the text and collection checks. A photo in Japanese mode says so
+    for now: "Japanese cards can't be read from a photo yet."
+
 ## Done in 1.62.0
 
 - **Auto mode on an Android phone, a way to find out why it is forgotten** (you said: "Also seemed like Auto
@@ -882,7 +915,7 @@ number in plain letters ("SV2P 006/071"), which with the picture comparison shou
 
 | | What | Why | Size |
 |---|---|---|---|
-| 6.1 | **Japanese cards**: a card-language choice (remembered), finding the card by set code and number (1.7) and its picture, Japanese prices from Cardmarket, and My cards keeping which language each card is. | The one Asian language with its own prices. Cards before about 2001 print no number, so they could only be found by their picture. | L |
+| 6.1 | **Japanese cards**, the rest: **reading them from a photo** (1.63.0 does the typing, prices and My cards), and kids mode. | The reader knows English only, but a modern Japanese card prints its number and set code in plain letters ("151/165", "sv2a"): read those, find the cards with that number in a set of that size, and let the picture pick - as for English cards. Only 30% of the cards have a TCGdex picture (and 28 sets no picture at all: see 1.63.0), so cards without one can only be found by the number. Cards before about 2001 print no number. PSA prices and sales links for Japanese cards would need PriceCharting's Japanese sets. | L |
 | 6.2 | **Chinese and Indonesian cards**, the same way, with the price clearly marked as the Japanese version's. | TCGdex has the cards, but only the Japanese card's price, which these printings usually sell for less than. | M |
 | 6.3 | **Korean cards**, if TCGdex (or another free database) gets them. | 239 cards and no pictures in September 2026: not enough to find cards by. | - |
 

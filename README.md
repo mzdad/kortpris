@@ -112,6 +112,22 @@ A web page with nothing to install. What happens to a photo:
    and "Back to My cards" or the phone's own Back (a swipe on an iPhone) returns to the list.
    Without an account it is kept in the phone's browser only.
 
+**Japanese cards** (version 1.63.0, `japanese.js`, roadmap 6.1). A third choice in the switch, "Japanese",
+searches TCGdex's Japanese database - 13,000 cards in 118 sets since 1996, each with its Cardmarket price
+in euros (there are no TCGplayer prices, and no PSA prices or sales links for them). You type the
+Pokémon's name in English ("Pikachu": its Pokédex number finds the Japanese cards, and gives them their
+English name) or in Japanese, and/or the number from the card's bottom-left corner: "151/165", or with the
+set's code, "SV2a 151/165"; a promo prints its code after the number, "001/SV-P". A Trainer or Energy card
+has a Japanese name only, so it is found by its number. TCGdex's fast search (GraphQL) has English cards only, so
+Japanese ones are found with its plain list search (`?dexId=eq:25`, `?localId=eq:151|0151`, `?id=eq:...`,
+`?name=...`), which gives only { id, localId, name, image }: the set comes from the id, and the rest (rarity,
+kind, prices) from the card's own page when it is opened (`withJapanesePrices`). A Japanese card's id starts
+with "ja:", like Magic's "mtg:", as TCGdex's Japanese and English ids can be the same; saved ones have a
+group of their own in My cards. Pictures: TCGdex has 30% of them (2022-2024 sets, mostly), and Scrydex has
+those of 90 sets, under "sv2a_ja-25" (a set's code in small letters, "_ja", and the number without zeros),
+listed in `japanese-sets.js`: only a set with a picture found under that name is used, as a guessed name
+(PMCG1 as "pcg1") gave another set's pictures. Not yet: reading a Japanese card from a photo (the reader knows English only), kids mode.
+
 **Magic: The Gathering cards** (version 1.55.0, `magic.js`). A switch above the search picks the
 game, remembered on the phone (`setGame` in `app.js`); in kids mode two big buttons pick it (see Kids mode).
 Magic cards come from [Scryfall](https://scryfall.com), free and without a key, and are found from a
@@ -316,6 +332,8 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `magic.js` | Magic: The Gathering cards and their prices from Scryfall, found by name, set code and number |
 | `magic-reader.js` | Photo → a Magic card: its name, and the set code and number in its corner |
 | `magic-sets.js` | Every Magic set's code and size, to tell a set code read from a misread one |
+| `japanese.js` | Japanese Pokémon cards and their prices from TCGdex's Japanese database, found by name and number |
+| `japanese-sets.js` | The Japanese sets: when each came out, and where Scrydex keeps its pictures |
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |

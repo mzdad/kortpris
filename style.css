@@ -419,6 +419,8 @@ button.version { cursor: pointer; }
 .account-part { display: grid; gap: 14px; }
 .account-part p, .account > p { margin: 0; }
 .view-switch.compact button { min-height: 38px; font-size: 0.95rem; }
+/* Pokémon, Magic and Japanese cards: three, side by side (the others have two). */
+.game-switch { grid-template-columns: repeat(3, 1fr); }
 .password-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .password-row .button { min-height: 44px; padding: 0 14px; }
 .strength { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
