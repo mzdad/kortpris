@@ -98,7 +98,7 @@ const pricesAsked = new Map();   // card id -> its prices (a promise), asked onc
 // the numbers tried ("102" of 8/102), and numbersRead all those numbers, for pickBestMatch in
 // matcher.js.
 async function findCards(name, numberText, withPhoto = false, numberGuesses = []) {
-	if (cardSearchLanguage === "ja") return findJapaneseCards(name, numberText);
+	if (cardSearchLanguage === "ja") return findJapaneseCards(name, numberText, withPhoto, numberGuesses);
 	const nameWord = longestWord(name);
 	const parsedNumber = parseCollectorNumber(numberText);
 	const guesses = allNumberGuesses(numberText, withPhoto ? numberGuesses : []);

@@ -6,7 +6,7 @@
 
 const STRINGS = {
 	en: {
-		tagline: "Photograph a Pokémon or Magic card. See what it sells for.",
+		tagline: "Photograph a Pokémon (English or Japanese) or Magic card. See what it sells for.",
 		languageSwitch: "Language",
 		howItWorks: "How it works",
 		step1Verb: "Snap",
@@ -193,13 +193,13 @@ const STRINGS = {
 		gameSwitch: "Card game",
 		// Japanese Pokémon cards (see japanese.js and setGame in app.js).
 		gameJapanese: "Japanese",
-		japaneseStatusIdle: "Type the Pokémon's name in English (or Japanese), and the number from the card's bottom-left corner - like 151/165, or with the set's code: SV2a 151/165. Japanese cards can't be read from a photo yet.",
+		japaneseStatusIdle: "Take a photo of a Japanese Pokémon card, or type the Pokémon's name in English (or Japanese) and the number from the card's bottom-left corner - like 151/165, or with the set's code: SV2a 151/165.",
 		japaneseNamePlaceholder: "e.g. Pikachu or ピカチュウ",
 		japaneseNumberLabel: "Number (bottom left), and set code",
 		japaneseNumberPlaceholder: "e.g. SV2a 151/165",
 		japaneseNeedName: "Type the Pokémon's name, or the number from the card's corner, to search.",
 		japaneseNoMatch: "No Japanese card matched. Trainer and Energy cards are named in Japanese only, so look for them by number - like SV2a 152 - or by their Japanese name.",
-		japanesePhotoSoon: "Japanese cards can't be read from a photo yet. Type the Pokémon's name, and the number from the card's bottom-left corner, instead.",
+		japaneseReadFailed: "Couldn't read the card's number. Type it from the bottom-left corner - like SV2a 151/165 - and the Pokémon's name in English, then press Search. Or try a sharper photo, straight on, in better light.",
 		magicStatusIdle: "Take a photo of a Magic card, or type its name - and if you like the set code and number from its bottom-left corner.",
 		magicNamePlaceholder: "e.g. Lightning Bolt",
 		magicNumberLabel: "Set code and number (bottom left)",
@@ -490,7 +490,7 @@ const STRINGS = {
 	},
 
 	da: {
-		tagline: "Fotografér et Pokémon- eller Magic-kort. Se hvad det sælges for.",
+		tagline: "Fotografér et Pokémon-kort (engelsk eller japansk) eller et Magic-kort. Se hvad det sælges for.",
 		languageSwitch: "Sprog",
 		howItWorks: "Sådan virker det",
 		step1Verb: "Fotografér",
@@ -676,13 +676,13 @@ const STRINGS = {
 		// Magic: The Gathering (se magic.js og setGame i app.js).
 		gameSwitch: "Kortspil",
 		gameJapanese: "Japansk",
-		japaneseStatusIdle: "Skriv Pokémonens navn på engelsk (eller japansk) og nummeret fra kortets nederste venstre hjørne - fx 151/165, eller med sættets kode: SV2a 151/165. Japanske kort kan endnu ikke læses fra et billede.",
+		japaneseStatusIdle: "Tag et billede af et japansk Pokémon-kort, eller skriv Pokémonens navn på engelsk (eller japansk) og nummeret fra kortets nederste venstre hjørne - fx 151/165, eller med sættets kode: SV2a 151/165.",
 		japaneseNamePlaceholder: "f.eks. Pikachu eller ピカチュウ",
 		japaneseNumberLabel: "Nummer (nederst til venstre) og sætkode",
 		japaneseNumberPlaceholder: "f.eks. SV2a 151/165",
 		japaneseNeedName: "Skriv Pokémonens navn eller nummeret fra kortets hjørne for at søge.",
 		japaneseNoMatch: "Intet japansk kort passede. Trainer- og Energy-kort har kun japanske navne, så find dem på nummer - fx SV2a 152 - eller på deres japanske navn.",
-		japanesePhotoSoon: "Japanske kort kan endnu ikke læses fra et billede. Skriv i stedet Pokémonens navn og nummeret fra kortets nederste venstre hjørne.",
+		japaneseReadFailed: "Kunne ikke læse kortets nummer. Skriv det fra nederste venstre hjørne - fx SV2a 151/165 - og Pokémonens navn på engelsk, og tryk på Søg. Eller prøv et skarpere billede, lige på, i bedre lys.",
 		magicStatusIdle: "Tag et billede af et Magic-kort, eller skriv dets navn - og gerne sætkoden og nummeret fra kortets nederste venstre hjørne.",
 		magicNamePlaceholder: "f.eks. Lightning Bolt",
 		magicNumberLabel: "Sætkode og nummer (nederst til venstre)",

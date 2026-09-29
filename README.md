@@ -126,7 +126,23 @@ with "ja:", like Magic's "mtg:", as TCGdex's Japanese and English ids can be the
 group of their own in My cards. Pictures: TCGdex has 30% of them (2022-2024 sets, mostly), and Scrydex has
 those of 90 sets, under "sv2a_ja-25" (a set's code in small letters, "_ja", and the number without zeros),
 listed in `japanese-sets.js`: only a set with a picture found under that name is used, as a guessed name
-(PMCG1 as "pcg1") gave another set's pictures. Not yet: reading a Japanese card from a photo (the reader knows English only), kids mode.
+(PMCG1 as "pcg1") gave another set's pictures.
+
+**Japanese cards from a photo** (version 1.64.0, `japanese-reader.js`). The text reader knows English only, so
+the name (in Japanese) is not read at all. A modern Japanese card prints its number, and its set's code, in plain
+letters in the bottom-left corner - "G [sv2a] 151/165 RR", a regulation mark, the code in a little box, the
+number and the size of the set, the rarity - and those are read: the number by the Pokémon reader's own
+number reading (`readNumberPlacesOfCard`), the code in four more ways (`JAPANESE_CODE_READS`: the tiny code is read by
+different ways for different cards) and matched against the sets of that size (`japaneseSetCodeIn`). The cards
+with that number in a set of that size are searched for (`findJapaneseCards`) and their pictures compared with the
+photo, as for English cards. The code does not name a card when it comes from a photo, as it can be misread and
+sets of the same size print the same numbers (SV6a and SV7a): it only puts that set's cards first, and helps
+pick among cards that look alike. A card opens by itself when its picture is at most 1.0 from the photo's
+(`pickJapaneseCard`); a card with no picture is listed, not opened. A photo with no number asks for it to be
+typed. Learned cards (tap the right one) work for Japanese cards too, kept apart from the other games'
+(`learnedOfGame`). Tested with `dev_japanese_test.html`, which makes fake phone photos of 80 Japanese cards from 40
+sets since 2016 from their pictures, and with real photos in `dev-local/japanese-photos.json` when there
+are some. Not yet: kids mode.
 
 **Magic: The Gathering cards** (version 1.55.0, `magic.js`). A switch above the search picks the
 game, remembered on the phone (`setGame` in `app.js`); in kids mode two big buttons pick it (see Kids mode).
@@ -334,6 +350,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `magic-sets.js` | Every Magic set's code and size, to tell a set code read from a misread one |
 | `japanese.js` | Japanese Pokémon cards and their prices from TCGdex's Japanese database, found by name and number |
 | `japanese-sets.js` | The Japanese sets: when each came out, and where Scrydex keeps its pictures |
+| `japanese-reader.js` | Photo → a Japanese card: its number, and the set's code in its corner |
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
@@ -361,6 +378,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `dev_special_numbers_test.html` | Development tool: promos, gallery and other lettered numbers (see below) |
 | `dev_fullart_test.html` | Development tool: full-art, gold and illustration-rare cards (see below) |
 | `dev_magic_photos_test.html` | Development tool: runs real photos of Magic cards from the private `dev-local/` folder |
+| `dev_japanese_test.html` | Development tool: fake photos of 80 Japanese cards made from their pictures, and real ones from `dev-local/` |
 
 ## Publishing a change
 

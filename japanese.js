@@ -23,6 +23,11 @@ const JAPANESE_LETTERS = /[぀-ヿ㐀-鿿＀-￯]/;
 // At most this many cards are asked for by their ids in one question.
 const JAPANESE_IDS_PER_QUESTION = 100;
 
+// Sets whose printed size TCGdex has wrong. The cards of Black Bolt print "/086", as White Flare's do (and
+// its own picture of card 7 says "007/086"), but TCGdex gives 174 as its size, which is all its cards with the
+// secret rares. Found by dev_japanese_test.html (version 1.64.0).
+const JAPANESE_PRINTED_SIZE_FIXES = { SV11B: 86 };
+
 let japaneseSetsPromise = null;                // every set (names and sizes), asked once per visit, kept a day
 const japanesePricesAsked = new Map();         // card id -> its page (a promise), asked once per visit
 
@@ -41,8 +46,8 @@ function japaneseSets() {
 				const set = {
 					id: raw.id,
 					name: raw.name,
-					printedTotal: (raw.cardCount && raw.cardCount.official) || null,
-					releaseDate: (JAPANESE_SETS[raw.id] || [])[0] || "",
+					printedTotal: JAPANESE_PRINTED_SIZE_FIXES[raw.id] || (raw.cardCount && raw.cardCount.official) || null,
+										releaseDate: (JAPANESE_SETS[raw.id] || [])[0] || "",
 				};
 				byId.set(set.id, set);
 				byCode.set(set.id.toUpperCase(), set);
@@ -58,13 +63,20 @@ function japaneseSets() {
 // ---------- Finding cards ----------
 
 // Searches for Japanese cards by name and the number in the bottom corner, as findCards in cards.js does
-// for English ones, and returns the same: { cards, description, totalCount, exactFound }. The name may be
-// a Pokémon's English name ("Pikachu") or its Japanese one; the number "151/165", "SV2a 151/165" or just
-// "151" - a promo prints its set's code after the number, "001/SV-P". Tries the most exact search first:
-// the first that finds anything wins. Throws when the database doesn't answer.
-async function findJapaneseCards(name, numberText) {
+// for English ones, and returns the same: { cards, description, totalCount, exactFound, setSizes,
+// numbersRead }. The name may be a Pokémon's English name ("Pikachu") or its Japanese one; the number
+// "151/165", "SV2a 151/165" or just "151" - a promo prints its set's code after the number, "001/SV-P".
+// Tries the most exact search first: the first that finds anything wins. exactFound: the set's code and the
+// whole number fit a card, or the name and number. With a photo (withPhoto), the other numbers the reader
+// thought possible (numberGuesses) are tried in turn when the number in the box finds nothing; the one that
+// did comes back as matchedNumber. Also with a photo, the set's code doesn't name a card - the reader
+// can misread it, and sets of the same size (SV6a and SV7a) print the same numbers - it only puts that set's
+// cards first, and the pictures decide (pickJapaneseCard). Throws when the database doesn't answer.
+async function findJapaneseCards(name, numberText, withPhoto = false, numberGuesses = []) {
 	const sets = await japaneseSets();
-	const parsed = parseJapaneseNumber(numberText, sets);
+	const typed = parseJapaneseNumber(numberText, sets);
+	// The code the reader read from a photo (see above) is set aside: the cards are searched for without it.
+	const parsed = withPhoto ? { ...typed, setId: "" } : typed;
 	const who = whoIsJapaneseName(name);
 	// Everything needed is asked at once: the cards with the name, and the ones with the number.
 	const [byName, byNumber] = await Promise.all([
@@ -72,7 +84,7 @@ async function findJapaneseCards(name, numberText) {
 			: who.japanese ? japaneseCardsWhere("name=" + encodeURIComponent(who.japanese), sets, "") : [],
 		parsed.number ? japaneseCardsNumbered(parsed, sets) : [],
 	]);
-	const shown = shownJapaneseNumber(parsed);
+	const shown = shownJapaneseNumber(typed);
 	const nameShown = who.typed;
 	const attempts = [];
 	if (nameShown && parsed.number && parsed.total) {
@@ -85,6 +97,8 @@ async function findJapaneseCards(name, numberText) {
 		attempts.push({
 			cards: withJapaneseNumber(byNumber, parsed, true),
 			description: nameShown ? { key: "matchNumberNameMissed", values: { name: nameShown, number: shown } } : { key: "matchNumberOnly", values: { number: shown } },
+			// The set's code and the whole number name one card (when typed: see above).
+			exact: Boolean(parsed.setId && parsed.total),
 		});
 	}
 	if (nameShown) {
@@ -93,19 +107,41 @@ async function findJapaneseCards(name, numberText) {
 	if (parsed.number) {
 		attempts.push({ cards: withJapaneseNumber(byNumber, parsed, false), description: { key: "matchNumberNoTotal", values: { number: shown } } });
 	}
+	const guesses = allNumberGuesses(numberText, withPhoto ? numberGuesses : []);
+	const setSizes = parsed.total ? [parsed.total] : [];
+	const answer = (cards, description, exact, more = {}) => ({
+		// With a photo, the cards of the set the code read names come first (see above).
+		cards: cardsOfSetFirst(cards, withPhoto ? typed.setId : "").slice(0, RESULTS_PAGE_SIZE),
+		description: description,
+		totalCount: cards.length,
+		exactFound: exact,
+		setSizes: setSizes,
+		numbersRead: guesses,
+		...more,
+	});
 	for (const attempt of attempts) {
-		if (attempt.cards.length > 0) {
-			return {
-				cards: attempt.cards.slice(0, RESULTS_PAGE_SIZE),
-				description: attempt.description,
-				totalCount: attempt.cards.length,
-				exactFound: Boolean(attempt.exact),
-				setSizes: [],
-				numbersRead: [],
-			};
+		if (attempt.cards.length > 0) return answer(attempt.cards, attempt.description, Boolean(attempt.exact));
+	}
+	// With a photo, another number the reader thought possible may be the right one: each is tried, when it is
+	// a whole number with its set's size.
+	if (withPhoto) {
+		for (const guess of guesses) {
+			const other = { ...parseJapaneseNumber(guess, sets), setId: "" };
+			if (!other.number || !other.total || (other.number === parsed.number && other.total === parsed.total)) continue;
+			const cards = withJapaneseNumber(await japaneseCardsNumbered(other, sets), other, true);
+			if (cards.length > 0) {
+				return answer(cards, { key: "matchNumberOnly", values: { number: shownJapaneseNumber(other) } }, false, { matchedNumber: guess, setSizes: [other.total] });
+			}
 		}
 	}
-	return { cards: [], description: null, totalCount: 0, exactFound: false, setSizes: [], numbersRead: [] };
+	return answer([], null, false);
+}
+
+// These cards, the ones of the set with this id first (their order kept otherwise); as they were when the
+// id is "" or no card is of that set.
+function cardsOfSetFirst(cards, setId) {
+	if (!setId) return cards;
+	return [...cards.filter((card) => card.set.id === setId), ...cards.filter((card) => card.set.id !== setId)];
 }
 
 // The cards with these ids ("ja:SV2a-151"), fresh from the database, in the same order. An id the

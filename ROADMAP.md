@@ -5,6 +5,40 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.64.0
+
+- **6.1 Japanese cards, second part: reading them from a photo** (you said: "ALright can we add the japanese
+  cards"; the first part, 1.63.0, was typing, prices and My cards). With Japanese picked, "Take photo" and
+  "Choose photo" read the card: its **number and set code**, printed in plain letters in the bottom-left corner
+  ("G [sv2a] 151/165 RR"). The name is Japanese, which the reader can't read, so it isn't read at all.
+  - How: the Pokémon reader's own number reading finds "151/165" (`readNumberPlacesOfCard`), then the set's code is
+    read in four ways (`JAPANESE_CODE_READS`) and matched against the sets of that size. The Japanese cards with
+    that number in a set of that size are found, and their pictures compared with the photo, as for English cards;
+    a card opens by itself when its picture is within 1.0 of the photo's (the limit English cards use for a card
+    found by its number alone); a card with no picture is listed, not opened. A photo with no number asks you to
+    type it. "Recognised: you've shown me this card before" works for Japanese cards too, kept apart from the
+    other games' learned cards.
+  - **The set's code only helps, and never names a card**, when it comes from a photo. My first version let it:
+    a made-up photo of SV6a's card 7 had its code misread as SV7a - two sets of 64 cards - and opened SV7a's card
+    7 without a look at the picture. Now the code puts its set's cards first and helps pick among cards that look
+    alike; typed, it is trusted as before.
+  - Tested on made-up photos, since there are no real Japanese photos yet: `dev_japanese_test.html` makes a fake
+    phone photo from the picture of each of 80 cards from 40 sets since 2016 (2 from every second set). Number read
+    67 of 80, the right card first 67, opened by itself 67 right and **none wrong**, 2.3 seconds a photo. The
+    2022-2026 sets: about 9 in 10 (29 of 32); the Sun & Moon sets of 2016-2019: 27 of 36 - their small print is
+    often not read from the low-detail pictures the fake photos are made from. The set's code was read in 19 of 80 (the
+    code is tiny: the best single way of 16 tried found it in 13 of 80, and the four used together in 30 of 80 - the
+    made-up photos are less sharp than real ones). In the app, on the test copy: a made-up photo of a Japanese
+    Pikachu opened "SV2a 025/165" with its prices; a photo with no card asked for the number; an English card
+    photographed in Japanese mode listed candidates without opening any; a card learned by tapping it was
+    recognised on the next photo in 1.5 seconds. English and Magic as before: 6 real Pokémon photos, the MEP/SVP number
+    checks, the text and collection checks.
+  - Found on the way: TCGdex gives **Black Bolt (SV11B) a printed size of 174**; its cards print /086, as White
+    Flare's do. A small table corrects it (`JAPANESE_PRINTED_SIZE_FIXES`). There may be more of these slips. The
+    Start Deck 100 set ("MC") is left out of the test: its cards are reprints with their own sets' numbers.
+  - Not done: kids mode; PSA prices and sales links for Japanese cards; cards that fit no set of the size read
+    (a wider search by number alone, when no picture matches); and **real Japanese photos** - none yet.
+
 ## Done in 1.63.0
 
 - **6.1 Japanese cards, first part: typing, prices and My cards** (you said: "ALright can we add the japanese
@@ -35,8 +69,8 @@ L = several sessions).
   - Tested: the search by name, number, code, promo code and Japanese name (9 kinds, against the real database);
     a card's prices, rarity and kind; saving, My cards, opening a saved card and "Update prices"; English and
     Danish; kids mode; the Japanese choice kept through a reload. English and Magic as before: the number checks
-    (MEP and SVP), an English search, and the text and collection checks. A photo in Japanese mode says so
-    for now: "Japanese cards can't be read from a photo yet."
+    (MEP and SVP), an English search, and the text and collection checks. A photo in Japanese mode said so
+    for the moment: "Japanese cards can't be read from a photo yet" (see 1.64.0).
 
 ## Done in 1.62.0
 
@@ -915,7 +949,7 @@ number in plain letters ("SV2P 006/071"), which with the picture comparison shou
 
 | | What | Why | Size |
 |---|---|---|---|
-| 6.1 | **Japanese cards**, the rest: **reading them from a photo** (1.63.0 does the typing, prices and My cards), and kids mode. | The reader knows English only, but a modern Japanese card prints its number and set code in plain letters ("151/165", "sv2a"): read those, find the cards with that number in a set of that size, and let the picture pick - as for English cards. Only 30% of the cards have a TCGdex picture (and 28 sets no picture at all: see 1.63.0), so cards without one can only be found by the number. Cards before about 2001 print no number. PSA prices and sales links for Japanese cards would need PriceCharting's Japanese sets. | L |
+| 6.1 | **Japanese cards**, the rest: **kids mode**, **real Japanese photos** to check the reading (1.64.0 was tried on made-up ones only), and the set's code (read in 1 photo of 4 on made-up ones - real photos may do better). | 1.63.0 and 1.64.0 do typing, prices, My cards and reading a photo. Cards before about 2001 print no number, and 28 sets have no picture at all, so those can only be found by number, or typed. PSA prices and sales links for Japanese cards would need PriceCharting's Japanese sets. A wider search by number alone, when nothing of the size read looks like the photo, would catch a size TCGdex has wrong. | M |
 | 6.2 | **Chinese and Indonesian cards**, the same way, with the price clearly marked as the Japanese version's. | TCGdex has the cards, but only the Japanese card's price, which these printings usually sell for less than. | M |
 | 6.3 | **Korean cards**, if TCGdex (or another free database) gets them. | 239 cards and no pictures in September 2026: not enough to find cards by. | - |
 

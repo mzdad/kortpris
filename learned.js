@@ -77,10 +77,15 @@ function recogniseLearnedCard(photo, textArea, cardBox, learned = readLearned())
 	return compareWithLearned(photo, textArea, cardBox, learned).card;
 }
 
-// The photos learned of one game's cards: Magic: The Gathering's (magic = true) or Pokémon's. A photo is
-// only compared with its own game's cards.
-function learnedOfGame(magic) {
-	return readLearned().filter((entry) => isMagicId(entry.cardId) === magic);
+// The photos learned of one game's cards: "pokemon", "magic" (Magic: The Gathering) or "japanese" (Japanese
+// Pokémon cards, whose ids start "ja:"). A photo is only compared with its own game's cards.
+function learnedOfGame(game) {
+	return readLearned().filter((entry) => gameOfCardId(entry.cardId) === game);
+}
+
+function gameOfCardId(id) {
+	if (isMagicId(id)) return "magic";
+	return isJapaneseId(id) ? "japanese" : "pokemon";
 }
 
 // The card a recognised photo shows, fresh from the database. But when the reader read the name
@@ -90,10 +95,13 @@ function learnedOfGame(magic) {
 async function findLearnedCard(learnedCard, name, numberText, numberGuesses) {
 	// For a Magic card, the set code and number read in its corner name one printing (see
 	// findMagicCardsOfPhoto in magic-reader.js); a name alone doesn't.
-	const exact = isMagicId(learnedCard.cardId)
-		? await findMagicCardsOfPhoto("", numberText)
-		: await findExactCards(name, allNumberGuesses(numberText, numberGuesses));
-	if (exact && exact.cards.length > 0 && !exact.cards.some((card) => card.id === learnedCard.cardId)) return exact;
+		// A Japanese card's set code and number do (see findJapaneseCards).
+		let exact;
+		if (isMagicId(learnedCard.cardId)) exact = await findMagicCardsOfPhoto("", numberText);
+		else if (isJapaneseId(learnedCard.cardId)) exact = await findJapaneseCards("", numberText, true, numberGuesses);
+		else exact = await findExactCards(name, allNumberGuesses(numberText, numberGuesses));
+		if (exact && exact.cards.length > 0 && (exact.exactFound || !isJapaneseId(learnedCard.cardId))
+			&& !exact.cards.some((card) => card.id === learnedCard.cardId)) return exact;
 	const cards = await findCardsById([learnedCard.cardId]);
 	if (cards.length === 0) return null;
 	return { cards: cards, description: { key: "matchLearned", values: {} }, totalCount: 1, exactFound: true, learned: true };

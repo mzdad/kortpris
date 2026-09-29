@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kortpris Japanese card test</title>
+<style>
+	body { font: 14px/1.45 system-ui, sans-serif; margin: 0; padding: 16px; background: #EDF0F5; color: #141C28; }
+	h1 { font-size: 1.3rem; margin: 0 0 4px; }
+	p { margin: 0 0 12px; max-width: 75ch; }
+	#summary { font-weight: 700; font-size: 1.05rem; }
+	.table-wrap { overflow-x: auto; }
+	table { border-collapse: collapse; background: #fff; }
+	th, td { padding: 6px 10px; border-bottom: 1px solid #D6DCE6; text-align: left; vertical-align: top; }
+	th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #586579; }
+	.pass { color: #1E7A4C; font-weight: 700; }
+	.fail { color: #B3261E; font-weight: 700; }
+	code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Kortpris Japanese card test</h1>
+<p>Development tool, not part of the app. Japanese Pokémon cards from many sets, each made into a fake phone photo
+from its picture (TCGdex's, or Scrydex's up to the set's printed size: see japanesePictures in japanese.js), run
+through the app's Japanese reader and search (japanese-reader.js, japanese.js), and scored. The real Japanese photos,
+when there are some, are in the private <code>dev-local/</code> folder, listed with the right answers in
+<code>dev-local/japanese-photos.json</code>. It asks TCGdex and Scrydex a few questions each.</p>
+<p id="summary">Running…</p>
+<div class="table-wrap">
+	<table>
+		<thead><tr><th>Card</th><th>Printed</th><th>Number read</th><th>Set code read</th><th>Found</th><th>Seconds</th><th>Details</th></tr></thead>
+		<tbody id="rows"></tbody>
+	</table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
+<script src="pokemon-names.js?v=1.64.0"></script>
+<script src="card-names.js?v=1.64.0"></script>
+<script src="set-codes.js?v=1.64.0"></script>
+<script src="card-finder.js?v=1.64.0"></script>
+<script src="sparkle.js?v=1.64.0"></script>
+<script src="reader.js?v=1.64.0"></script>
+<script src="storage.js?v=1.64.0"></script>
+<script src="card-ids.js?v=1.64.0"></script>
+<script src="cards.js?v=1.64.0"></script>
+<script src="japanese-sets.js?v=1.64.0"></script>
+<script src="japanese.js?v=1.64.0"></script>
+<script src="matcher.js?v=1.64.0"></script>
+<script src="japanese-reader.js?v=1.64.0"></script>
+<script>
+"use strict";
+
+// A fairly kind phone photo: the pictures are only about 800 pixels tall, so the tiny print already has
+// far less detail than in a real photo.
+const PHOTO_WIDTH = 3000;
+const PHOTO_HEIGHT = 4000;
+const TABLE_COLOURS = ["#8B6B4A", "#5E6670", "#2E3440"];
+const RANDOM_SEED = 11;
+// Every this many sets of japanese-sets.js are tried (newest first), two cards of each.
+const SET_STEP = 2;
+// ?only=SV2a,M3 runs just the sets whose id is one of these; ?real=1 the real photos alone.
+const only = new URLSearchParams(location.search).get("only");
+const realOnly = new URLSearchParams(location.search).has("real");
+
+const rows = document.getElementById("rows");
+const summary = document.getElementById("summary");
+
+runAllTests();
+
+async function runAllTests() {
+	setCardSearchLanguage("ja");   // the searches ask the Japanese database (cards.js)
+	const scores = { total: 0, number: 0, code: 0, first: 0, openedRight: 0, openedWrong: 0, seconds: 0, pictureless: 0 };
+	const random = seededRandom(RANDOM_SEED);
+	if (!realOnly) {
+		const cards = await chooseCards();
+		for (const card of cards) {
+			const photo = await makeFakePhoto(await loadImage(card.images.large), random);
+			await testOnePhoto(card, card.name, photo, scores);
+			summary.textContent = "Running… " + scores.total + " of " + cards.length;
+		}
+	}
+	// Real photos, when there are some: [{ photo, id (as "SV2a-151"), name }].
+	let real = [];
+	try {
+		real = await fetch("dev-local/japanese-photos.json", { cache: "no-store" }).then((response) => response.json());
+	} catch (error) {
+		// none yet
+	}
+	for (const entry of real) {
+		const [card] = await findJapaneseCardsById([JAPANESE_ID_START + entry.id]);
+		if (!card) continue;
+		const photo = await fetch("dev-local/" + entry.photo, { cache: "no-store" }).then((response) => response.blob());
+		await testOnePhoto(card, "REAL " + entry.name, photo, scores);
+	}
+	const line = "Number read " + scores.number + "/" + scores.total
+		+ " · set code read " + scores.code + "/" + scores.total
+		+ " · shown first " + scores.first + "/" + scores.total
+		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong"
+		+ " · " + (scores.seconds / Math.max(1, scores.total)).toFixed(1) + " s per photo";
+	summary.textContent = line;
+	console.log("JAPANESE TEST: " + line);
+	window.testScores = scores;   // lets a script read the result
+}
+
+// Two cards from every SET_STEP-th set that came out since 2016, with a picture: the same ones every run.
+async function chooseCards() {
+	const sets = await japaneseSets();
+	const ids = [];
+	let count = 0;
+	for (const [setId, [date]] of Object.entries(JAPANESE_SETS)) {
+		// (Not the promos, and not "Start Deck 100": its cards are reprints that print their own sets' numbers.)
+		if (setId.includes("-") || setId === "MC" || date < "2016-01-01") continue;
+		if (only && !only.split(",").includes(setId)) continue;
+		if (!only && count++ % SET_STEP !== 0) continue;
+		const set = sets.byId.get(setId);
+		if (!set || !set.printedTotal || set.printedTotal < 30) continue;
+		for (const number of [7, Math.floor(set.printedTotal * 0.6)]) ids.push(JAPANESE_ID_START + setId + "-" + String(number).padStart(3, "0"));
+	}
+	const cards = await findJapaneseCardsById(ids);
+	return cards.filter((card) => card.images);
+}
+
+async function testOnePhoto(card, label, photo, scores) {
+	const started = performance.now();
+	const details = [];
+	let reading = null;
+	let foundAt = -1;
+	let opened = "";
+	try {
+		// The same steps as the app (scanJapanesePhoto and searchForCard in app.js), without the screen.
+		const look = await lookAtPhoto(photo);
+		reading = await readJapanesePhoto(look);
+		details.push("card found by " + (reading.cardBox ? reading.cardBox.foundBy : "nothing") + ", guesses " + JSON.stringify(reading.numberGuesses));
+		const shown = [reading.setCode, reading.number].filter(Boolean).join(" ");
+		const found = await findCards("", shown, true, reading.numberGuesses);
+		details.push("cards found: " + found.cards.length + (found.exactFound ? ", named by its code" : ""));
+		let pick = { cards: found.cards, clear: false };
+		if (found.cards.length > 0) {
+			const ranked = await rankByLook(reading.photo, null, found.cards, reading.cardBox);
+			pick = pickJapaneseCard(ranked, found, { setSizes: found.setSizes, codeSets: reading.setCode ? [reading.setCode] : [], numbersRead: found.numbersRead });
+			const right = ranked.find((entry) => entry.card.id === card.id);
+			const picked = ranked.find((entry) => entry.card === pick.cards[0]);
+			details.push("look: right " + (right ? right.distance.toFixed(2) : "-") + ", first shown " + (picked ? picked.card.id + " " + picked.distance.toFixed(2) : "-"));
+		}
+		foundAt = pick.cards.findIndex((each) => each.id === card.id);
+		if (pick.clear && pick.cards.length > 0) opened = foundAt === 0 ? "opened by itself: right" : "opened by itself: WRONG " + pick.cards[0].id;
+	} catch (error) {
+		console.error(error);
+		details.push("error: " + error.message);
+	}
+	const seconds = (performance.now() - started) / 1000;
+	const printedNumber = String(Number(card.number));
+	const numberOk = Boolean(reading) && parseJapaneseNumberPlain(reading.number) === printedNumber
+		&& (!card.set.printedTotal || Number(reading.number.split("/")[1]) === card.set.printedTotal);
+	const codeOk = Boolean(reading) && reading.setCode === card.set.id;
+	if (opened) details.push(opened);
+	scores.total++;
+	if (numberOk) scores.number++;
+	if (codeOk) scores.code++;
+	if (foundAt === 0) scores.first++;
+	if (opened.endsWith("right")) scores.openedRight++;
+	if (opened.includes("WRONG")) scores.openedWrong++;
+	scores.seconds += seconds;
+	addRow(photo, card, label, reading, numberOk, codeOk, foundAt, seconds, details.join("\n"));
+}
+
+// "151/165" -> "151" (no zeros in front).
+function parseJapaneseNumberPlain(number) {
+	const digits = String(number || "").split("/")[0];
+	return /^\d+$/.test(digits) ? String(Number(digits)) : "";
+}
+
+async function makeFakePhoto(cardImage, random) {
+	const canvas = document.createElement("canvas");
+	canvas.width = PHOTO_WIDTH;
+	canvas.height = PHOTO_HEIGHT;
+	const ctx = canvas.getContext("2d", { willReadFrequently: true });
+	ctx.fillStyle = TABLE_COLOURS[Math.floor(random() * TABLE_COLOURS.length)];
+	ctx.fillRect(0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
+	// The card: a little smaller than the photo, slightly off-centre and tilted, a little soft.
+	const cardHeight = PHOTO_HEIGHT * between(random, 0.78, 0.86);
+	const cardWidth = cardHeight * cardImage.width / cardImage.height;
+	ctx.save();
+	ctx.translate(PHOTO_WIDTH / 2 + between(random, -0.04, 0.04) * PHOTO_WIDTH, PHOTO_HEIGHT / 2 + between(random, -0.03, 0.03) * PHOTO_HEIGHT);
+	ctx.rotate(between(random, -2, 2) * Math.PI / 180);
+	ctx.imageSmoothingQuality = "high";
+	ctx.filter = "blur(1.5px)";
+	ctx.drawImage(cardImage, -cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight);
+	ctx.restore();
+	// Camera speckle.
+	const pixels = ctx.getImageData(0, 0, PHOTO_WIDTH, PHOTO_HEIGHT);
+	for (let i = 0; i < pixels.data.length; i += 4) {
+		const speck = (random() - 0.5) * 10;
+		pixels.data[i] += speck;
+		pixels.data[i + 1] += speck;
+		pixels.data[i + 2] += speck;
+	}
+	ctx.putImageData(pixels, 0, 0);
+	return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+}
+
+function loadImage(url) {
+	// The "load" event, not decode(): decode() stalls while the page is hidden.
+	return new Promise((resolve, reject) => {
+		const image = new Image();
+		image.crossOrigin = "anonymous";   // allowed by the image servers, and keeps the canvas readable
+		image.onload = () => resolve(image);
+		image.onerror = () => reject(new Error("Card picture didn't load: " + url));
+		image.src = url;
+	});
+}
+
+function between(random, low, high) {
+	return low + random() * (high - low);
+}
+
+function seededRandom(seed) {
+	// Mulberry32: a tiny random number generator that gives the same sequence for the same seed.
+	return function () {
+		seed |= 0;
+		seed = (seed + 0x6D2B79F5) | 0;
+		let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+		x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+		return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+function addRow(photo, card, label, reading, numberOk, codeOk, foundAt, seconds, details) {
+	const tr = document.createElement("tr");
+	const thumb = document.createElement("img");
+	thumb.src = URL.createObjectURL(photo);
+	thumb.style.width = "70px";
+	const printed = card.set.id + " " + card.number + (card.set.printedTotal ? "/" + card.set.printedTotal : "");
+	const cells = [
+		thumb,
+		label + "\n" + printed,
+		mark(numberOk, reading ? reading.number || "(nothing)" : "(error)"),
+		mark(codeOk, reading ? reading.setCode || "(nothing)" : "(error)"),
+		mark(foundAt === 0, foundAt >= 0 ? "position " + (foundAt + 1) : "not found"),
+		seconds.toFixed(1),
+		"<code>" + escapeText(details) + "</code>",
+	];
+	for (const content of cells) {
+		const td = document.createElement("td");
+		if (content instanceof Node) td.append(content);
+		else td.innerHTML = content.includes("<") ? content : "<code>" + escapeText(content) + "</code>";
+		tr.append(td);
+	}
+	rows.append(tr);
+}
+
+function mark(ok, text) {
+	return `<span class="${ok ? "pass" : "fail"}">${ok ? "PASS" : "FAIL"}</span> <code>${escapeText(text)}</code>`;
+}
+
+function escapeText(text) {
+	return String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+}
+</script>
+</body>
+</html>

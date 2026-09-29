@@ -1339,10 +1339,9 @@ async function scanPhoto(imageFile, frame = null) {
 		await scanMagicPhoto(imageFile, frame, scanId);
 		return;
 	}
-	// A Japanese card can't be read from a photo yet: the reader knows English only.
+	// A Japanese card is read in its own way (see scanJapanesePhoto).
 	if (game === "japanese") {
-		searchButton.disabled = false;
-		setStatus("japanesePhotoSoon", {}, "error");
+		await scanJapanesePhoto(imageFile, frame, scanId);
 		return;
 	}
 
@@ -1389,7 +1388,7 @@ async function scanPhoto(imageFile, frame = null) {
 			freeLook(look);
 			return;
 		}
-		if (look) learnedLook = compareWithLearned(look.photo, null, look.cardBox, learnedOfGame(false));
+		if (look) learnedLook = compareWithLearned(look.photo, null, look.cardBox, learnedOfGame("pokemon"));
 		let openedEarly = null;
 		if (learnedLook && learnedLook.card) openedEarly = await openLearnedEarly(learnedLook.card, look, scanId);
 		if (scanId !== latestScanId) {
@@ -1417,7 +1416,7 @@ async function scanPhoto(imageFile, frame = null) {
 		// Compared already when the card's own box was found before the reading: the place of the
 		// text isn't needed then. Otherwise now, by the place of the text.
 		if (!learnedLook || !reading.cardBox) {
-			learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null, learnedOfGame(false));
+			learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null, learnedOfGame("pokemon"));
 		}
 		lastPhoto = photoFacts(reading.photo, reading.textArea, reading.cardBox || null, reading.setName || "", learnedLook, reading.setCode || "");
 	}
@@ -1494,7 +1493,7 @@ async function scanMagicPhoto(imageFile, frame, scanId) {
 	}
 	if (scanId !== latestScanId) return;
 	searchButton.disabled = false;
-	const learnedLook = compareWithLearned(reading.photo, null, reading.cardBox, learnedOfGame(true));
+	const learnedLook = compareWithLearned(reading.photo, null, reading.cardBox, learnedOfGame("magic"));
 	lastPhoto = photoFacts(reading.photo, null, reading.cardBox, "", learnedLook);
 	// The set code read by the number, and the names the name read fits just as well (see readMagicPhoto).
 	lastPhoto.codeSets = reading.setCode ? [reading.setCode] : [];
@@ -1753,7 +1752,8 @@ async function searchForCard(byViewer = false) {
 		if (searchId !== latestSearchId) return;   // a newer photo or search took over
 		// A Magic card that only its name was read for opens once its picture looks like the photo
 		// (see pickMagicCard in magic-reader.js), even when it has one printing only.
-		const lookFirst = magic && lastPhoto !== null && !byViewer && !found.byCorner && !found.learned;
+		const lookFirst = (magic || japanese) && lastPhoto !== null && !byViewer && !found.learned
+			&& !(magic ? found.byCorner : found.exactFound);
 		if (found.learned) {
 			// Show the recognised card's own name and number, whatever was read.
 			nameInput.value = found.cards[0].name;
@@ -1804,6 +1804,8 @@ async function searchForCard(byViewer = false) {
 			const suggested = found.suggestedIds || [];
 			const pick = magic
 				? pickMagicCard(ranked, found, { codeSets: lastPhoto.codeSets, printedYears: lastPhoto.printedYears || [], suggestedIds: suggested })
+				: japanese
+				? pickJapaneseCard(ranked, found, { setSizes: found.setSizes, codeSets: lastPhoto.codeSets, numbersRead: found.numbersRead, suggestedIds: suggested })
 				: pickBestMatch(ranked, cardLocated, {
 					setSizes: found.setSizes,
 					setName: lastPhoto.setName,
@@ -1839,6 +1841,57 @@ async function searchForCard(byViewer = false) {
 	} finally {
 		if (searchId === latestSearchId) searchButton.disabled = false;
 	}
+}
+
+// A photo of a Japanese Pokémon card (scanPhoto has cleared the screen for it): its number and set code are
+// read (japanese-reader.js; the name is Japanese, which the reader can't read), then the cards with that number
+// in a set of that size are searched for and compared with the photo, and learned from the viewer's answer
+// (see searchForCard). Claude isn't asked: it reads English cards.
+async function scanJapanesePhoto(imageFile, frame, scanId) {
+	getOcrWorker();   // the text reader gets ready meanwhile (it downloads the first time)
+	setStatus("readerStarting");
+	showProgress(null);
+	const failed = (key) => {
+		searchButton.disabled = false;
+		hideProgress();
+		setStatus(key, {}, "error");
+	};
+	const look = await lookAtPhotoSafely(imageFile, frame);
+	if (!look) {
+		if (scanId === latestScanId) failed("japaneseReadFailed");   // a photo the browser can't open
+		return;
+	}
+	if (scanId !== latestScanId) {
+		freeLook(look);
+		return;
+	}
+	setStatus("reading");
+	let reading;
+	try {
+		reading = await readJapanesePhoto(look, () => scanId === latestScanId);
+	} catch (error) {
+		if (error.stopped || scanId !== latestScanId) return;   // stopped: another photo came
+		console.error(error);
+		failed(error.tooManyLookups ? "apiTooMany" : "apiDown");
+		return;
+	}
+	if (scanId !== latestScanId) return;
+	searchButton.disabled = false;
+	const learnedLook = compareWithLearned(reading.photo, null, reading.cardBox, learnedOfGame("japanese"));
+	lastPhoto = photoFacts(reading.photo, null, reading.cardBox, "", learnedLook);
+	// The set the code read names ("SV2a"), for telling apart cards that look alike.
+	lastPhoto.codeSets = reading.setCode ? [reading.setCode] : [];
+	const shown = [reading.setCode, reading.number].filter(Boolean).join(" ");
+	nameInput.value = "";
+	numberInput.value = shown;
+	scannedNumbers = { shown: shown, guesses: reading.numberGuesses };
+	// Nothing read, and no learned card the photo looks like: searching on nothing would show random cards.
+	if (lastPhoto.learnedCard === null && !reading.number && lastPhoto.learnedSuggestions.length === 0) {
+		failed("japaneseReadFailed");
+		return;
+	}
+	if (lastPhoto.learnedCard === null && !reading.number) lastPhoto.textUsable = false;
+	await searchForCard();
 }
 
 // Magic cards for searchForCard: those that fit the photo's reading (see findMagicCardsOfPhoto in
