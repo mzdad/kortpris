@@ -5,6 +5,30 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.58.0
+
+- **7.7 Faint names on old white Magic cards, in part** (you said: "start with 7.7"). The names of Ice
+  Age, Mirage and Urza's Legacy cards are letters embossed on the frame: light letters with a shadow, on
+  a textured bar. The reader now has two more ways to read a name, tried last, so only a card whose name
+  isn't found yet pays for them: the light print cut hard (black and white) from a strip cut close around
+  the name, and "sparse text" (Tesseract's mode for letters scattered over a picture) in the dark print.
+  - Your photos: Femeref Knight, Radiant, Archangel and one of the two foil Geist of Saint Traft photos now read. Names read
+    28 of 32 (25), the right card first 24 (21), opened by itself 15 (13) - all right, none wrong - at
+    1.3 seconds a photo. In the test browser, Femeref Knight opened as Mirage 18 and Radiant, Archangel as
+    Urza's Legacy 20, from the app's "Choose photo".
+  - Found by measuring, first: 90 ways of reading on the five hardest photos (three strips, two sizes,
+    five ways of taking the ink, three Tesseract modes), then 288 on the two that stayed unread. The
+    plain ways read almost none of these names; each new way reads some that no other does. The wider
+    strip, cut hard, read "Radiant, Archangel" too, but at confidence 0, and the rule that faint words
+    don't count (1.57.0) still throws that out: the close strip reads it at 78, so it counts.
+  - Still unread: **Kismet** and **Kjeldoran Knight**. The best reading of Kjeldoran Knight, in any of
+    about 400 ways, got about half its letters; Kismet's exact reads were noise the reader itself rated 0.
+    Their cards are only about 700 pixels wide in these photos (they came through Signal), so the app's
+    own camera, which gives several times that, may read them: worth trying.
+  - Not touched: a name read only at confidence 0 still doesn't count; the frame's word "TRAINER" on
+    Pokémon Trainer cards read as "Train Troops" in the sparse-text way, when a Pokémon photo is read as
+    a Magic card (see 7.8).
+
 ## Done in 1.57.0
 
 - **7.2 Magic cards from a photo, and learned Magic cards** (you put 32 photos of your Magic cards in
@@ -804,7 +828,8 @@ Coast asks fan apps to say they are unofficial, which the page's foot now does.
 |---|---|---|---|
 | 7.5 | **Tell a Magic foil from its normal copy** in the photo, by its rainbow shine, and open it on its foil price. | Your two foil Icy Manipulators come second, behind the normal copy with the same picture. The glitter measure that finds Pokémon reverse holos doesn't tell Magic foils apart (foils 0.8–1.8, normal cards 0.8–3.6): a Magic foil shines in rainbows, not fine glitter. | M |
 | 7.6 | **Magic printings with the same picture**: read the copyright year at the bottom (Summer Magic ©1994, Fourth Edition ©1995) and see the border's colour. | Your Sengir Vampire and Nightmare come second or third, behind Summer Magic copies worth many times more. The list shows both to tap, and a tapped one is learned. | M |
-| 7.7 | **Faint names on old white Magic cards**: light letters on a light frame (Kismet, Kjeldoran Knight, Femeref Knight, Radiant). | 4 of your 32 photos read no name; the name box can be typed in meanwhile. | S–M |
+| 7.7 | **Faint names on old white Magic cards**, the last two: Kismet and Kjeldoran Knight. | Two of your 32 photos read no name; the name box can be typed in meanwhile. 1.58.0 reads the others (Femeref Knight, Radiant, Archangel), but no way of reading this Tesseract reader has tried gets more than half of these two names: light letters with a shadow, on a bar of the same grey, about 30 pixels tall in a photo cut down by Signal. First try photos from the app's own camera. | S |
+| 7.8 | **A Pokémon card photographed in Magic mode** makes up a Magic name. | Reading 46 Pokémon photos and 28 pictures without a card as Magic cards, 16 of 74 got a sure name ("The Sea Devils", "Chameleon Blur") in 1.57.0 - 18 in 1.58.0. The look check then lists printings that look nothing like the photo. The app could say "this doesn't look like a Magic card" when none of the printings' pictures comes close (0.6 is a match, 1.5 the most) - and a Pokémon card's yellow border tells the two games apart. | S |
 | 7.4 | **Other card games** with a free database, the same way (Yu-Gi-Oh!, Lorcana). | With a game switch in place, each game is its database, its reading and its texts. | M each |
 
 ## Not planned

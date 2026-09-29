@@ -14,18 +14,30 @@
 // card finder often finds the edge inside the white border (see card-finder.js), and the name then sits
 // higher in the box.
 const MAGIC_NAME_STRIP = { x0: 0.04, x1: 0.84, y0: -0.01, y1: 0.12 };
+// The same, cut close around the name: without the frame's edge above it or the picture's top below it,
+// which faint letters lose out to. It only fits a card whose box sits right on the card.
+const MAGIC_NAME_CLOSE_STRIP = { x0: 0.03, x1: 0.75, y0: 0.01, y1: 0.08 };
 // Ways of reading the name strip, in turn, until one finds a card's name. cardWidth: how wide the whole
 // card is at that enlargement, in pixels. ink: "light" for a copy of only the light print, "dark" for
 // only the dark print, "" for the photo itself (see inkAgainstBackground in reader.js). On 32 real
 // photos (version 1.57.0) the first way read 13 names; the light one reads the white names of older
 // cards, which the others can't see on their textured frames; the smaller and bigger ones each read a
 // few more. (Letters much taller than 40 pixels read worse: at 2,000 pixels wide, 13 names fewer.)
+// style: how the ink copy is cut ("soft" keeps shades of grey, "hard" is black and white; see
+// inkAgainstBackground in reader.js). strip: where to read, if not MAGIC_NAME_STRIP. The last two are
+// for the faint, embossed names of Ice Age, Mirage and Urza's Legacy cards (roadmap 7.7), which the
+// plain ways read nothing of, and each reads a few names that no other way does: the light print cut
+// hard, from a strip cut close around the name ("Femeref Knight", "Radiant, Archangel"), and sparse
+// text (Tesseract's mode for letters scattered over a picture) in the dark print ("Geist of Saint Traft"
+// on foil). They come last: only cards whose name isn't found by then pay for them.
 const MAGIC_NAME_READS = [
 	{ cardWidth: 1000, ink: "", mode: "block" },
 	{ cardWidth: 1000, ink: "light", mode: "ink" },
 	{ cardWidth: 1000, ink: "dark", mode: "ink" },
 	{ cardWidth: 1400, ink: "", mode: "block" },
 	{ cardWidth: 700, ink: "", mode: "block" },
+	{ cardWidth: 1000, ink: "light", style: "hard", mode: "ink", strip: MAGIC_NAME_CLOSE_STRIP },
+	{ cardWidth: 1000, ink: "dark", style: "soft", mode: "scattered" },
 ];
 // When no way finds a name, the card may be upside down: the other end of the card is read in the first
 // this many ways, turned the right way up.
@@ -225,18 +237,19 @@ function magicNameList() {
 async function readMagicName(worker, original, card, names, stillWanted, ways) {
 	const cardWidth = card.x1 - card.x0;
 	const cardHeight = card.y1 - card.y0;
-	const area = {
-		x0: card.x0 + cardWidth * MAGIC_NAME_STRIP.x0,
-		x1: card.x0 + cardWidth * MAGIC_NAME_STRIP.x1,
-		y0: card.y0 + cardHeight * MAGIC_NAME_STRIP.y0,
-		y1: card.y0 + cardHeight * MAGIC_NAME_STRIP.y1,
-	};
 	const found = [];
 	for (const way of ways) {
 		stopUnlessWanted(stillWanted, original);
+		const strip = way.strip || MAGIC_NAME_STRIP;
+		const area = {
+			x0: card.x0 + cardWidth * strip.x0,
+			x1: card.x0 + cardWidth * strip.x1,
+			y0: card.y0 + cardHeight * strip.y0,
+			y1: card.y0 + cardHeight * strip.y1,
+		};
 		const zoom = way.cardWidth / cardWidth;
 		const closeUp = cropAndZoom(original, area, zoom);
-		const picture = way.ink ? inkAgainstBackground(closeUp, "soft", way.ink === "light") : closeUp;
+		const picture = way.ink ? inkAgainstBackground(closeUp, way.style || "soft", way.ink === "light") : closeUp;
 		const read = await readPage(worker, picture, way.mode);
 		const name = closestMagicName(read.lines, names, cardHeight * zoom * MAGIC_NAME_MIN_HEIGHT);
 		if (!name) continue;
@@ -344,7 +357,7 @@ async function readMagicCorners(worker, original, card, stillWanted) {
 		for (const way of MAGIC_CORNER_READS) {
 			stopUnlessWanted(stillWanted, original);
 			const closeUp = cutFromCard(original, card, place, way.cardWidth);
-			const picture = way.ink ? inkAgainstBackground(closeUp, "soft", way.ink === "light") : closeUp;
+			const picture = way.ink ? inkAgainstBackground(closeUp, way.style || "soft", way.ink === "light") : closeUp;
 			const read = await readPage(worker, picture, way.mode);
 			const facts = magicCornerFacts(read.text);
 			if (facts.setCode && facts.number) return facts;

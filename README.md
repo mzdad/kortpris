@@ -140,7 +140,9 @@ the top is read in up to five ways until one fits a name in Scryfall's list of a
 first Magic photo, kept a day; `closestMagicName`): up to one letter in four may be misread, the end of
 a long name may be lost, and words the reader read only faintly count only when they spell a long name
 exactly, as bits of a frame are easily read as "Fear" or "Pain", which are cards too. A name that fits
-nowhere: the card may be upside down, and its other end is read. Cards from 2014 on print their number,
+nowhere: the card may be upside down, and its other end is read. The faint, embossed names of Ice Age,
+Mirage and Urza's Legacy cards have two more ways, tried last (`MAGIC_NAME_READS`): the light print cut
+hard, from a strip close around the name, and sparse text in the dark print. Cards from 2014 on print their number,
 rarity, set code and language in the bottom-left corner ("246/297 R" over "SOI • EN"): read with only the
 light print kept, and a misread code is made a real set's of the size read (`magic-sets.js`: "SOT" is
 SOI). Cards from 1998 to 2014 print only "28/350", at the end of the bottom line. The corner's card
@@ -150,10 +152,10 @@ Scryfall's smallest pictures), and a card opens by itself only when its picture 
 (`pickMagicCard`). The German, French and Italian black-bordered printings of 1994-95 are left out, as
 the English name was read. Learned cards work for Magic cards too: tap the right one in the list, and the
 next photo of it opens at once. Tested with `dev_magic_photos_test.html` on 32 real photos (29 cards
-from 1994 to 2018, 16 photographed sideways, 4 foils): turned right 32, names read 25, numbers read 10
-of the 17 that print one, the right card first 21, opened by itself 13 - all right, none wrong. Still
-hard: the same picture in another printing (Summer Magic, a foil's normal copy), faint names on old
-white cards, and glare.
+from 1994 to 2018, 16 photographed sideways, 4 foils): turned right 32, names read 28, numbers read 10
+of the 17 that print one, the right card first 24, opened by itself 15 - all right, none wrong. Still
+hard: the same picture in another printing (Summer Magic, a foil's normal copy), the faintest names on
+old white cards (Kismet, Kjeldoran Knight), and glare.
 
 **The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed
 2x and with the phone's light on, because the phone's own camera screen can't be told to do either.
