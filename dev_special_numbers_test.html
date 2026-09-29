@@ -26,6 +26,7 @@
 phone photo of each from the database's own picture, runs it through the app's reader and search, and
 scores the result. The last column shows how the number corners were read.</p>
 <p id="summary">Running…</p>
+<p id="texts"></p>
 <div class="table-wrap">
 	<table>
 		<thead><tr><th>Card</th><th>Printed</th><th>Number read</th><th>Found</th><th>Seconds</th><th>Number corners read as</th></tr></thead>
@@ -34,16 +35,16 @@ scores the result. The last column shows how the number corners were read.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.60.0"></script>
-<script src="card-names.js?v=1.60.0"></script>
-<script src="set-codes.js?v=1.60.0"></script>
-<script src="card-finder.js?v=1.60.0"></script>
-<script src="sparkle.js?v=1.60.0"></script>
-<script src="reader.js?v=1.60.0"></script>
-<script src="storage.js?v=1.60.0"></script>
-<script src="card-ids.js?v=1.60.0"></script>
-<script src="cards.js?v=1.60.0"></script>
-<script src="matcher.js?v=1.60.0"></script>
+<script src="pokemon-names.js?v=1.61.0"></script>
+<script src="card-names.js?v=1.61.0"></script>
+<script src="set-codes.js?v=1.61.0"></script>
+<script src="card-finder.js?v=1.61.0"></script>
+<script src="sparkle.js?v=1.61.0"></script>
+<script src="reader.js?v=1.61.0"></script>
+<script src="storage.js?v=1.61.0"></script>
+<script src="card-ids.js?v=1.61.0"></script>
+<script src="cards.js?v=1.61.0"></script>
+<script src="matcher.js?v=1.61.0"></script>
 <script>
 "use strict";
 
@@ -94,6 +95,18 @@ window.numberCandidates = function (text) {
 	return realNumberCandidates(text);
 };
 
+// Numbers as printed on promo cards, typed or read as text (no photo): what the search finds. "MEP en 009" is
+// what a friend's phone gave for an Alakazam in version 1.60.0: "No Alakazam card has the number MEP en 009".
+// read: what the reader (numberCandidates) makes of the text, when it should make something.
+const NUMBER_TEXTS = [
+	{ text: "MEP EN 009", name: "Alakazam", id: "mep-009", read: "MEP009" },
+	{ text: "MEP en 009", name: "Alakazam", id: "mep-009" },
+	{ text: "MEP EN 003", name: "Alakazam", id: "mep-003" },
+	{ text: "MEP EN 009", name: "", id: "mep-009" },
+	{ text: "SVP EN 001", name: "", id: "svp-001", read: "SVP001" },
+	{ text: "SVP EN 100", name: "Grafaiai", id: "svp-100", read: "SVP100" },
+];
+
 const rows = document.getElementById("rows");
 const summary = document.getElementById("summary");
 
@@ -102,6 +115,7 @@ runAllTests();
 async function runAllTests() {
 	const cards = only ? TEST_CARDS.filter((card) => only.split(",").some((part) => card.id.includes(part))) : TEST_CARDS;
 	const random = seededRandom(RANDOM_SEED);
+	const textChecks = await checkNumberTexts();
 	const scores = { total: 0, number: 0, first: 0, openedRight: 0, openedWrong: 0, byNumber: 0, seconds: 0 };
 	const allRows = [];
 	for (const card of TEST_CARDS) {
@@ -126,8 +140,33 @@ async function runAllTests() {
 		+ " · " + (scores.seconds / scores.total).toFixed(1) + " s per photo";
 	summary.textContent = line;
 	console.log("SPECIAL NUMBERS TEST: " + line);
+	scores.textsPassed = textChecks.passed;
+	scores.textsTotal = textChecks.total;
 	window.testScores = scores;   // lets a script read the result
 	window.testRows = allRows;
+}
+
+// Each of NUMBER_TEXTS: the search must put the right card first, and the reader must read the text as
+// expected. Shown under the summary.
+async function checkNumberTexts() {
+	const lines = [];
+	let passed = 0;
+	for (const test of NUMBER_TEXTS) {
+		let verdict;
+		try {
+			const found = await findCards(test.name, test.text);
+			const first = found.cards[0];
+			const read = test.read ? realNumberCandidates(test.text).map((guess) => guess.number)[0] : null;
+			const ok = Boolean(first) && first.id === test.id && (!test.read || read === test.read);
+			verdict = (ok ? "PASS" : "FAIL") + " " + (first ? first.id : "no card") + (test.read ? ", read as " + read : "");
+			if (ok) passed++;
+		} catch (problem) {
+			verdict = "FAIL " + problem;
+		}
+		lines.push("\"" + test.text + "\"" + (test.name ? " + " + test.name : "") + " -> " + test.id + ": " + verdict);
+	}
+	document.getElementById("texts").innerHTML = "<code>Number texts: " + passed + "/" + NUMBER_TEXTS.length + "\n" + lines.join("\n") + "</code>";
+	return { passed: passed, total: NUMBER_TEXTS.length };
 }
 
 async function testOnePhoto(card, photo) {

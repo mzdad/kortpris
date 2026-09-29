@@ -45,8 +45,9 @@ const SCRYDEX_PICTURES = "https://images.scrydex.com/pokemon/";
 // Where they came from until 1.44.0: the old database, which may close in March 2027.
 const OLD_PICTURES = "https://images.pokemontcg.io/";
 // Promo sets whose cards print a code before a plain number: "SVP EN 001" is card 1 of the
-// Scarlet & Violet Black Star promos, set "svp".
-const PROMO_SET_CODES = { SVP: "svp" };
+// Scarlet & Violet Black Star promos, set "svp"; "MEP EN 009" card 9 of the Mega Evolution ones, "mep"
+// (a friend's Alakazam gave "No Alakazam card has the number MEP en 009" until version 1.61.0).
+const PROMO_SET_CODES = { SVP: "svp", MEP: "mep" };
 // The shops' pages for a card, by their own product numbers. (Cardmarket's is the form its own
 // article gives for Magic cards, "cardmarket.com/Magic/Products?idProduct=1", which also picks the
 // viewer's language; Cardmarket stops robots, so it couldn't be tried from here.)

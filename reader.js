@@ -198,9 +198,9 @@ const PROMO_NUMBER = /(?<![A-Za-z])(SWSH|HGSS|SM|XY|BW|DP)\s?(\d{1,3}|0\d{3})(?!
 // A few cards of older sets are numbered the same way: "SH10", "SL1", "RT1", "AR1". Only in
 // capitals and without a space, as printed: small print like "aR 7" is no number.
 const OLD_CODE_NUMBER = /(?<![A-Za-z0-9])(SH|SL|RT|AR)(\d{1,2})(?![A-Za-z0-9\/])/g;
-// Scarlet & Violet promos print their set's code, the language and the number: "SVP EN 001".
-// The code sits white on black in a little box, and is only now and then read.
-const SVP_NUMBER = /SVP[^\d\/]{0,6}?(\d{1,3})(?![\d\/])/g;
+// Scarlet & Violet and Mega Evolution promos print their set's code, the language and the number:
+// "SVP EN 001", "MEP EN 009". The code sits white on black in a little box, and is only now and then read.
+const PROMO_SET_NUMBER = /(SVP|MEP)[^\d\/]{0,6}?(\d{1,3})(?![\d\/])/g;
 // Sets within a set, numbered with letters on both sides of the "/": "GG01/GG70" is card 1 of
 // Crown Zenith's Galarian Gallery. Tiny letters are often misread as digits ("6Go1/6670"), so
 // these numbers are recognised by their set size after the "/", which is always one of these.
@@ -1212,8 +1212,8 @@ function numberCandidates(text) {
 	for (const match of cleaned.matchAll(OLD_CODE_NUMBER)) {
 		found.push({ number: match[1] + match[2], sawSlash: true });
 	}
-	for (const match of cleaned.matchAll(SVP_NUMBER)) {
-		found.push({ number: "SVP" + match[1], sawSlash: true });
+	for (const match of cleaned.matchAll(PROMO_SET_NUMBER)) {
+		found.push({ number: match[1] + match[2], sawSlash: true });
 	}
 	// The "/" can also vanish altogether ("4102") or turn into a digit ("107130", "2397091").
 	for (const digits of cleaned.match(/(?<!\d)\d{4,7}(?!\d)/g) || []) {

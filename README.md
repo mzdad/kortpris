@@ -8,8 +8,8 @@ cards: see **Magic: The Gathering cards** below).
 A web page with nothing to install. What happens to a photo:
 
 1. **Photo → text.** [Tesseract.js](https://github.com/naptha/tesseract.js) reads the
-   card's name and collector number (like `4/102`, or a promo's code like `SWSH193` or
-   `SVP EN 001`) on the phone itself. It starts a second after the app opens (`startReaderEarly`),
+   card's name and collector number (like `4/102`, or a promo's code like `SWSH193`,
+   `SVP EN 001` or `MEP EN 009`) on the phone itself. It starts a second after the app opens (`startReaderEarly`),
    so its download (about 7 MB, once) and start don't hold up the first scan. Numbers of a set within a set, like `GG01/GG70` (Galarian
    Gallery) or `TG05/TG30` (Trainer Gallery), are recognised by the set size after the "/", as
    their tiny letters are often misread as digits: "6Go1/6670" is GG01 (`LETTERED_SETS` in

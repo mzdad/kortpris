@@ -5,6 +5,31 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.61.0
+
+- **Mega Evolution promo numbers: an error a friend got scanning an Alakazam** (you added two pictures:
+  their phone's screen, and the card). The screen said "No "Alakazam" card has the number MEP en 009.
+  Check the number in the bottom corner and press Search again." and listed 24 Alakazams to pick from.
+  - The card is the Mega Evolution Black Star Promo Alakazam, number 009, which prints "MEP EN 009" in its
+    corner. Scarlet & Violet promos ("SVP EN 001") were understood - the code names the set, and the number
+    counts within it - but the Mega Evolution ones ("MEP") were not, in two places: the search took
+    "MEP en 009" for one number, "MEPEN009", which no card has (`PROMO_SET_CODES` in `cards.js`), and the reader
+    would not have picked "MEP EN 009" out of the corner's text either (`PROMO_SET_NUMBER` in `reader.js`,
+    which was `SVP_NUMBER`). The set's code, MEP, was already in the code list (1.7); it was those two lists.
+    How the text "MEP en 009" got into their box, typed or read, isn't known; the reader couldn't have made
+    it before this fix, so it was probably typed from the card.
+  - Now "Alakazam" with "MEP en 009" finds the one card, the Mega Evolution promo Alakazam 009 - also without
+    the name, and "MEP EN 003" finds the other promo Alakazam. Scarlet & Violet promos work as before.
+  - Tested: a new set of six text checks at the top of `dev_special_numbers_test.html` (typed or read text
+    against the card the search must find, MEP and SVP), all six right; the special numbers test on photos as
+    before (19 read, 24 first, 22 opened by themselves, none wrong); and your 46 real photos as before: 46
+    first, 45 opened by themselves, none wrong, 25 by the number alone.
+  - Not solved: your picture of the card itself. It is a silver-bordered card in a white binder pocket, next to
+    another card, taken from below, so the card's edges are slanted and its silver border blends into the
+    pocket: the card isn't found, and the whole photo is read as the card ("counters"). With the card's place
+    given by hand, the name still didn't read (its letters are pale outlines over the picture), nor the corner
+    (the card is 780 pixels wide in the photo). See 1.13.
+
 ## Done in 1.60.0
 
 - **7.8 A Pokémon card photographed with Magic picked** (you said: "Sure good work, go for 7.8"). Read as
@@ -810,6 +835,7 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black: the rest. | 6 of 27 full-art numbers still aren't read in 1.40.0 (8 in 1.28.0). The made-up photos are made from the database's small pictures, so a real photo may read better: worth checking with a few real full-art photos first. The name and the look find these cards anyway. | S |
 | 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: the rest. Full-art cards on a grey table. | The name strip, the number corners and the set code (1.7) need them. On the 2 made-up full-art photos on a grey table, the best box found covers only the card's top-left part (81% of it): the silver border is the table's colour, so the card's own bottom and right edges hardly show. Checking the box can't help there - the name strip is in that part too, and reads the right name - so it takes a better way to see a silver border on grey. They are found by name and picture anyway, and the app's own camera doesn't need this: its frame gives the edges (1.1). | M |
 | 1.12 | **Pokémon cards photographed sideways**, turned the right way up the way Magic cards are since 1.57.0 (`lookAtMagicPhoto`): the card is the biggest card-shaped box, upright or turned. | Photos sent through a messenger can lose which way up they are (16 of your 32 Magic photos did). The Pokémon reader needs its 46-photo test to stay the same. | S |
+| 1.13 | **Cards photographed at an angle in a binder pocket**: the card's edges are slanted (a "keystone" picture), and a silver border blends into the white pocket. Your Alakazam MEP 009 (`dev-local/alakazam.jpg`) is the case. | The shape finder looks for straight, square edges: on this photo none of its 21 candidate boxes fits the card (the best is off at every edge, and no side scores above 0.6), and the whole photo was read as the card. It needs a perspective-corrected box: four slanted edges, cut out flat, and a border that may be silver. Only worth it if photos like this are common: binders are how many people keep their cards. | M-L |
 
 ## 2. Quicker
 
