@@ -1856,9 +1856,14 @@ async function scanJapanesePhoto(imageFile, frame, scanId) {
 		hideProgress();
 		setStatus(key, {}, "error");
 	};
-	const look = await lookAtPhotoSafely(imageFile, frame);
+	let look = null;
+	try {
+		look = await lookAtJapanesePhoto(imageFile, frame);
+	} catch (error) {
+		console.error(error);   // a photo the browser can't open
+	}
 	if (!look) {
-		if (scanId === latestScanId) failed("japaneseReadFailed");   // a photo the browser can't open
+		if (scanId === latestScanId) failed("japaneseReadFailed");
 		return;
 	}
 	if (scanId !== latestScanId) {
@@ -2179,6 +2184,8 @@ function versionHintKey(card, versions) {
 function collectorNumber(card) {
 	// A Magic card's corner names its set too: "M11 146" (see parseMagicNumber in magic.js).
 	if (isMagicCard(card)) return card.set.id.toUpperCase() + " " + card.number;
+	// A Japanese card prints its set's size as wide as its number, "065/063" (TCGdex keeps only 63).
+	if (isJapaneseCard(card) && card.set.printedTotal) return card.number + "/" + String(card.set.printedTotal).padStart(card.number.length, "0");
 	return card.set.printedTotal ? card.number + "/" + card.set.printedTotal : card.number;
 }
 

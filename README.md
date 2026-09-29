@@ -128,7 +128,7 @@ those of 90 sets, under "sv2a_ja-25" (a set's code in small letters, "_ja", and 
 listed in `japanese-sets.js`: only a set with a picture found under that name is used, as a guessed name
 (PMCG1 as "pcg1") gave another set's pictures.
 
-**Japanese cards from a photo** (version 1.64.0, `japanese-reader.js`). The text reader knows English only, so
+**Japanese cards from a photo** (versions 1.64.0 and 1.65.0, `japanese-reader.js`). The text reader knows English only, so
 the name (in Japanese) is not read at all. A modern Japanese card prints its number, and its set's code, in plain
 letters in the bottom-left corner - "G [sv2a] 151/165 RR", a regulation mark, the code in a little box, the
 number and the size of the set, the rarity - and those are read: the number by the Pokémon reader's own
@@ -138,11 +138,13 @@ with that number in a set of that size are searched for (`findJapaneseCards`) an
 photo, as for English cards. The code does not name a card when it comes from a photo, as it can be misread and
 sets of the same size print the same numbers (SV6a and SV7a): it only puts that set's cards first, and helps
 pick among cards that look alike. A card opens by itself when its picture is at most 1.0 from the photo's
-(`pickJapaneseCard`); a card with no picture is listed, not opened. A photo with no number asks for it to be
+(`pickJapaneseCard`); a card with no picture is listed, not opened, after the cards that look like the photo and the
+cards of the set the code names. A card lying sideways is turned upright (`lookAtJapanesePhoto`: found in the photo turned
+either way), and one whose number can't be read is read the other way up. A photo with no number asks for it to be
 typed. Learned cards (tap the right one) work for Japanese cards too, kept apart from the other games'
 (`learnedOfGame`). Tested with `dev_japanese_test.html`, which makes fake phone photos of 80 Japanese cards from 40
-sets since 2016 from their pictures, and with real photos in `dev-local/japanese-photos.json` when there
-are some. Not yet: kids mode.
+sets since 2016 from their pictures (number read 67, opened by itself 67 right, none wrong), and with real photos in
+`dev-local/japanese-photos.json` (4: numbers read 4, the right card first 4, 3 opened by themselves). Not yet: kids mode.
 
 **Magic: The Gathering cards** (version 1.55.0, `magic.js`). A switch above the search picks the
 game, remembered on the phone (`setGame` in `app.js`); in kids mode two big buttons pick it (see Kids mode).

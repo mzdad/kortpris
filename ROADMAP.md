@@ -5,8 +5,36 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
-## Done in 1.64.0
+## Done in 1.65.0
 
+- **6.1 Japanese cards, third part: your four real photos** (you said: "i added 4 japanese cards in the dev folder
+  for you to use aswell if oyu want them for test"). They are Chandelure V (S8 014/100), Mega Venusaur ex (M1L
+  076/063), Ivysaur (M1L 065/063) and Ultra Necrozma GX (SM8b 104/150), the last one lying sideways. They are listed in
+  `dev-local/japanese-photos.json`, which `dev_japanese_test.html` reads. The first try, with 1.64.0: numbers read 3 of
+  4, the right card first 0 of 4. Now: **numbers read 4 of 4, the right card first 4 of 4, three opened by
+  themselves with their prices, none wrong.** In the app, on the test copy, each of the four did the same:
+  Ivysaur "M1L · 065/063 · Illustration rare · DKK 52", Mega Venusaur ex "M1L · 076/063 · Ultra Rare · DKK 58",
+  Ultra Necrozma GX "SM8b · 104/150 · DKK 11", and Chandelure V listed first as "Best match".
+  - **A card lying sideways is turned upright** (`lookAtJapanesePhoto`): found in the photo turned either way, as
+    Magic cards are (roadmap 1.12 is this for English Pokémon cards). A sideways card can be turned two ways with the
+    same card-shaped box, one of them upside down, so when no number reads, the card is read the other way up too.
+  - **The right card was last** for Chandelure V: no picture of it exists anywhere (TCGdex has none, and Scrydex has none
+    of the four Sword & Shield sets of 2021), and cards with a picture, however wrong, ranked above it. Now a card of the
+    set the code names comes before cards that look like nothing (`pickJapaneseCard`). Its code, "S8", was read.
+  - **Your two Mega Brave secret rares had no picture at all**: 1.63.0 gave Scrydex pictures only up to a set's printed
+    size (63), as in 5 sets Scrydex numbers the secret rares differently. Checked in every set that has TCGdex
+    pictures above the printed size (20 sets, 10 cards each): Scrydex is right in 15 and wrong in exactly SV6a, SV7a,
+    SV8a, SV9 and SV9a. Now only those five are held to the printed size; Scrydex's Ivysaur 65 and Mega Venusaur 76 are
+    yours (`JAPANESE_SCRYDEX_TO_PRINTED_ONLY`).
+  - The set's code is read for 1 of your 4 ("S8"; "m1L" comes out as "ull", "sm8b" as nothing) and 26 of 84 in all: the
+    code is a tiny white-on-black box. Look-alike letters are now matched ("mIL" for "m1L"). A tight crop around just
+    the box, read as one line - what the English reader does - read it worse (2 of 28), because the box moves between
+    card designs, so it stays as it was. The number and the picture do the work; the code only orders the list.
+  - Also: a card's number is shown as it is printed, "065/063", not "065/63". English and Magic as before: the Magic
+    test is unchanged (28 names, 27 first, 20 opened, none wrong), and the made-up Japanese photos too (number read 67
+    of 80, opened 67 right, none wrong).
+
+## Done in 1.64.0
 - **6.1 Japanese cards, second part: reading them from a photo** (you said: "ALright can we add the japanese
   cards"; the first part, 1.63.0, was typing, prices and My cards). With Japanese picked, "Take photo" and
   "Choose photo" read the card: its **number and set code**, printed in plain letters in the bottom-left corner
@@ -949,7 +977,7 @@ number in plain letters ("SV2P 006/071"), which with the picture comparison shou
 
 | | What | Why | Size |
 |---|---|---|---|
-| 6.1 | **Japanese cards**, the rest: **kids mode**, **real Japanese photos** to check the reading (1.64.0 was tried on made-up ones only), and the set's code (read in 1 photo of 4 on made-up ones - real photos may do better). | 1.63.0 and 1.64.0 do typing, prices, My cards and reading a photo. Cards before about 2001 print no number, and 28 sets have no picture at all, so those can only be found by number, or typed. PSA prices and sales links for Japanese cards would need PriceCharting's Japanese sets. A wider search by number alone, when nothing of the size read looks like the photo, would catch a size TCGdex has wrong. | M |
+| 6.1 | **Japanese cards**, the rest: **kids mode**, **more real Japanese photos** (4 so far: see 1.65.0), and the set's code (read in 1 of the 4 real photos, 26 of 84 in all). | 1.63.0 to 1.65.0 do typing, prices, My cards and reading a photo. Cards before about 2001 print no number, and 28 sets have no picture at all (the 1996-99 sets, the e-Card sets and Sword & Shield's 2021 sets), so those can only be found by number, or typed. PSA prices and sales links for Japanese cards would need PriceCharting's Japanese sets. A wider search by number alone, when nothing of the size read looks like the photo, would catch a size TCGdex has wrong. | M |
 | 6.2 | **Chinese and Indonesian cards**, the same way, with the price clearly marked as the Japanese version's. | TCGdex has the cards, but only the Japanese card's price, which these printings usually sell for less than. | M |
 | 6.3 | **Korean cards**, if TCGdex (or another free database) gets them. | 239 cards and no pictures in September 2026: not enough to find cards by. | - |
 

@@ -295,15 +295,18 @@ function sortJapaneseNewestFirst(cards) {
 }
 
 // A card's pictures: TCGdex's when it has the card's, else Scrydex's - for the sets of japanese-sets.js
-// that Scrydex has pictures of, and only for the numbers up to the set's printed size: above it are the
-// secret rares, which Scrydex numbers differently from TCGdex (compared in the 22 sets that have both: up to
-// the printed size the same card, all but one of the ones tried, and above it almost every one another card).
-// null when neither has.
+// that Scrydex has pictures of. Above a set's printed size are its secret rares: in most sets Scrydex numbers
+// them as TCGdex does, but in these five it doesn't (compared with TCGdex's own pictures in the 20 sets that
+// have some above the printed size: 10 of 10 tried were the same card in 15 sets, and 0 of 10 in these), so
+// there they get none. Sets that have no picture of TCGdex's to compare with are trusted: Mega Brave's cards 65
+// and 76 of 63 are the right ones. null when neither has a picture.
+const JAPANESE_SCRYDEX_TO_PRINTED_ONLY = ["SV6a", "SV7a", "SV8a", "SV9", "SV9a"];
+
 function japanesePictures(image, setId, localId, printedTotal) {
 	if (image) return { small: image + PICTURE_SMALL, large: image + PICTURE_LARGE };
 	const code = (JAPANESE_SETS[setId] || [])[1];
 	if (!code || !/^\d+$/.test(localId)) return null;
-	if (printedTotal && Number(localId) > printedTotal) return null;
+	if (printedTotal && Number(localId) > printedTotal && JAPANESE_SCRYDEX_TO_PRINTED_ONLY.includes(setId)) return null;
 	const address = SCRYDEX_PICTURES + code + "_ja-" + Number(localId);
 	return { small: address + "/small", large: address + "/large" };
 }

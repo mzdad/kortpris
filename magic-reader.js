@@ -153,28 +153,6 @@ function hasPokemonBorder(photo) {
 	return findYellowCard(photo) !== null;
 }
 
-function boxArea(box) {
-	return box ? (box.x1 - box.x0) * (box.y1 - box.y0) : 0;
-}
-
-// A copy of a picture given this many quarter turns clockwise.
-function turnedPicture(picture, turns) {
-	const sideways = turns % 2 === 1;
-	const turned = document.createElement("canvas");
-	turned.width = sideways ? picture.height : picture.width;
-	turned.height = sideways ? picture.width : picture.height;
-	const ctx = turned.getContext("2d", { willReadFrequently: true });   // same on every PC (see shrinkPhoto)
-	ctx.translate(turned.width / 2, turned.height / 2);
-	ctx.rotate(turns * Math.PI / 2);
-	ctx.drawImage(picture, -picture.width / 2, -picture.height / 2);
-	return turned;
-}
-
-// A box in a picture, where it is once the picture is turned half round.
-function boxTurnedOver(box, picture) {
-	return { ...box, x0: picture.width - box.x1, x1: picture.width - box.x0, y0: picture.height - box.y1, y1: picture.height - box.y0 };
-}
-
 // ---------- Reading it ----------
 
 // Reads a photo looked at already (see lookAtMagicPhoto). Returns what readCardPhoto in reader.js
