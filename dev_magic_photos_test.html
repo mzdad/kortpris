@@ -33,19 +33,19 @@ listed with the right answers in <code>dev-local/magic-photos.json</code>. It as
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.58.0"></script>
-<script src="card-names.js?v=1.58.0"></script>
-<script src="set-codes.js?v=1.58.0"></script>
-<script src="card-finder.js?v=1.58.0"></script>
-<script src="sparkle.js?v=1.58.0"></script>
-<script src="reader.js?v=1.58.0"></script>
-<script src="storage.js?v=1.58.0"></script>
-<script src="card-ids.js?v=1.58.0"></script>
-<script src="cards.js?v=1.58.0"></script>
-<script src="matcher.js?v=1.58.0"></script>
-<script src="magic.js?v=1.58.0"></script>
-<script src="magic-sets.js?v=1.58.0"></script>
-<script src="magic-reader.js?v=1.58.0"></script>
+<script src="pokemon-names.js?v=1.59.0"></script>
+<script src="card-names.js?v=1.59.0"></script>
+<script src="set-codes.js?v=1.59.0"></script>
+<script src="card-finder.js?v=1.59.0"></script>
+<script src="sparkle.js?v=1.59.0"></script>
+<script src="reader.js?v=1.59.0"></script>
+<script src="storage.js?v=1.59.0"></script>
+<script src="card-ids.js?v=1.59.0"></script>
+<script src="cards.js?v=1.59.0"></script>
+<script src="matcher.js?v=1.59.0"></script>
+<script src="magic.js?v=1.59.0"></script>
+<script src="magic-sets.js?v=1.59.0"></script>
+<script src="magic-reader.js?v=1.59.0"></script>
 <script>
 "use strict";
 
@@ -66,7 +66,7 @@ async function runAllPhotos() {
 	// ?only=_007,_021 runs just the photos whose file names contain one of those.
 	const only = new URLSearchParams(location.search).get("only");
 	if (only) photos = photos.filter((photo) => only.split(",").some((part) => photo.photo.includes(part)));
-	const scores = { total: 0, turnedRight: 0, name: 0, corner: 0, cornerPrinted: 0, found: 0, openedRight: 0, openedWrong: 0 };
+	const scores = { total: 0, turnedRight: 0, name: 0, corner: 0, cornerPrinted: 0, found: 0, openedRight: 0, openedWrong: 0, yearRight: 0, yearWrong: 0 };
 	let totalSeconds = 0;
 	for (const photo of photos) {
 		const file = await fetch("dev-local/" + photo.photo, { cache: "no-store" }).then((response) => response.blob());
@@ -75,6 +75,8 @@ async function runAllPhotos() {
 		const details = [];
 		let reading = null;
 		let foundAt = -1;
+		let yearRead = 0;
+		let yearRight = false;
 		let opened = "";
 		try {
 			// The same steps as the app (scanMagicPhoto and searchForCard in app.js), without the screen.
@@ -84,11 +86,19 @@ async function runAllPhotos() {
 				+ ", card found by " + (reading.cardBox ? reading.cardBox.foundBy : "nothing"));
 			if (Boolean(seen.turns) === photo.turned) scores.turnedRight++;
 			const found = await findMagicCardsOfPhoto(reading.name, reading.number, reading.otherNames);
+			if (reading.printedYears.length > 0) {
+				// The year read at the bottom, against the year the right card's set came out.
+				yearRead = reading.printedYears[0];
+				const rightCard = found.cards.find((card) => rightIds.includes(card.id));
+				// Only judged when the right card was among those found (a name that wasn't read has no year to compare).
+				yearRight = rightCard ? releaseYear(rightCard) === yearRead : null;
+				details.push("year read: " + yearRead + (yearRight === false ? " (WRONG)" : yearRight === null ? " (right card not found)" : ""));
+			}
 			details.push("printings found: " + found.cards.length + (found.byCorner ? ", named by the corner" : ""));
 			let pick = { cards: found.cards, clear: false };
 			if (found.cards.length > 0) {
 				const ranked = await rankByLook(reading.photo, null, found.cards, reading.cardBox, () => {}, true);
-				pick = pickMagicCard(ranked, found, { codeSets: reading.setCode ? [reading.setCode] : [] });
+				pick = pickMagicCard(ranked, found, { codeSets: reading.setCode ? [reading.setCode] : [], printedYears: reading.printedYears });
 				const right = ranked.find((entry) => rightIds.includes(entry.card.id));
 				const wrong = ranked.find((entry) => !rightIds.includes(entry.card.id));
 				details.push("look: right " + (right ? right.distance.toFixed(2) : "-") + ", best wrong " + (wrong ? wrong.distance.toFixed(2) + " " + wrong.card.set.id + " " + wrong.card.name : "-"));
@@ -111,6 +121,7 @@ async function runAllPhotos() {
 		if (printsCorner) scores.cornerPrinted++;
 		if (printsCorner && cornerOk) scores.corner++;
 		if (foundAt === 0) scores.found++;
+		if (yearRead && yearRight !== null) yearRight ? scores.yearRight++ : scores.yearWrong++;
 		if (opened.endsWith("right")) scores.openedRight++;
 		if (opened.includes("WRONG")) scores.openedWrong++;
 		addRow(file, photo, reading, nameOk, printsCorner ? cornerOk : null, foundAt, seconds, details.join("\n"));
@@ -121,6 +132,7 @@ async function runAllPhotos() {
 		+ " · number read " + scores.corner + "/" + scores.cornerPrinted
 		+ " · right card shown first " + scores.found + "/" + scores.total
 		+ " · opened by itself " + scores.openedRight + " right, " + scores.openedWrong + " wrong"
+			+ " · year read " + scores.yearRight + " right, " + scores.yearWrong + " wrong"
 		+ " · " + (totalSeconds / scores.total).toFixed(1) + " s per photo";
 	summary.textContent = line;
 	console.log("MAGIC PHOTO TEST: " + line);

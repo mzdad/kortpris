@@ -150,12 +150,17 @@ opens at once when it has the name read (`findMagicCardsOfPhoto`). Otherwise the
 with the number read, if any - are compared with the photo by their pictures (`rankByLook`, with
 Scryfall's smallest pictures), and a card opens by itself only when its picture is close to the photo
 (`pickMagicCard`). The German, French and Italian black-bordered printings of 1994-95 are left out, as
-the English name was read. Learned cards work for Magic cards too: tap the right one in the list, and the
+the English name was read. Old cards that print no number (before 1998) are told apart by the year in the
+copyright line at the bottom (`readMagicYear`, version 1.59.0): Fourth Edition prints "1995 Wizards of the
+Coast", Summer Magic "Illus. (c) 1994 Anson Maddocks", Revised no year, and later cards a range ("1993-1999"),
+of which the last year counts. Four ways of reading it are tried until two agree, and among printings
+that look alike, the ones from that year go first (`pickMagicCard`); the others follow, so a misread year
+never hides the right card. Learned cards work for Magic cards too: tap the right one in the list, and the
 next photo of it opens at once. Tested with `dev_magic_photos_test.html` on 32 real photos (29 cards
 from 1994 to 2018, 16 photographed sideways, 4 foils): turned right 32, names read 28, numbers read 10
-of the 17 that print one, the right card first 24, opened by itself 15 - all right, none wrong. Still
-hard: the same picture in another printing (Summer Magic, a foil's normal copy), the faintest names on
-old white cards (Kismet, Kjeldoran Knight), and glare.
+of the 17 that print one, the right card first 27, opened by itself 20 - all right, none wrong - and 7
+years read, all right. Still hard: a foil and its normal copy, the faintest names on old white cards
+(Kismet, Kjeldoran Knight), Unlimited and Beta against Revised (only their borders differ), and glare.
 
 **The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed
 2x and with the phone's light on, because the phone's own camera screen can't be told to do either.

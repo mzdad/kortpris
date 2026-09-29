@@ -74,6 +74,25 @@ const MAGIC_CORNER_READS = [
 // the bottom line, by the copyright.
 const MAGIC_CORNER_LEFT = { x0: 0.02, x1: 0.45, y0: 0.925, y1: 0.995 };
 const MAGIC_CORNER_RIGHT = { x0: 0.5, x1: 0.98, y0: 0.925, y1: 0.995 };
+// Cards from 1994 to about 2003 print the year of their printing in the copyright line at the bottom
+// ("1995 Wizards of the Coast, Inc. All rights reserved." on Fourth Edition; a range, "1993-1999", on
+// later ones; Summer Magic prints it in the artist's line, "Illus. (c) 1994 Anson Maddocks"). Printings
+// with the same picture - Fourth Edition, Summer Magic and Revised, worth very different sums - are
+// told apart by it (roadmap 7.6). Read in these ways, in turn, from this place, until two agree on a year:
+// the reader gets the digits wrong now and then ("1905", "096"), and a misread year would put a wrong
+// printing first, so two ways must agree. Only years from MAGIC_YEAR_FIRST to MAGIC_YEAR_LAST count: 1993
+// is the first year of every range ("1993-1999"), and later cards print their number, which names the
+// printing (cards from 1998 on).
+const MAGIC_YEAR_PLACE = { x0: 0.02, x1: 0.65, y0: 0.90, y1: 0.998 };
+const MAGIC_YEAR_READS = [
+	{ cardWidth: 2500, ink: "", mode: "block" },
+	{ cardWidth: 3200, ink: "", mode: "block" },
+	{ cardWidth: 2500, ink: "light", mode: "ink" },
+	{ cardWidth: 2000, ink: "dark", mode: "ink" },
+];
+const MAGIC_YEAR_FIRST = 1994;
+const MAGIC_YEAR_LAST = 2003;
+const MAGIC_YEARS_AGREED = 2;
 // What tiny capitals in a set code are misread as, both ways ("SOT" is SOI, "DDG" is DDQ, "ARH" is AKH).
 const CODE_LOOKALIKES = ["IT1L", "O0DQUCG", "HKN", "S5", "B8", "Z2", "EF", "MN", "VY", "RK"];
 // At most this many printings of a name are compared with the photo: the newest ones, as Scryfall
@@ -151,7 +170,9 @@ function boxTurnedOver(box, picture) {
 // returns for a Pokémon card - { name, nameSure, number, numberGuesses, setCode, photo, textArea,
 // cardBox, sparkle } - where number is what a viewer would type for the card's corner ("SOI 246", or
 // "28" when no set code is printed), and setCode the set's code in Scryfall's small letters ("soi");
-// plus otherNames: names that fit what was read just as well as name (see closestMagicName).
+// plus otherNames: names that fit what was read just as well as name (see closestMagicName), and
+// printedYears: the year the copyright line printed at the bottom, when two ways of reading agree on
+// one (see MAGIC_YEAR_READS) - [1995], or [].
 // Throws when Scryfall's list of names can't be had (the reading can't tell a name from a smudge
 // without it). stillWanted: as for readCardPhoto.
 async function readMagicPhoto(seen, stillWanted = () => true) {
@@ -185,6 +206,8 @@ async function readMagicPhoto(seen, stillWanted = () => true) {
 		stopUnlessWanted(stillWanted, original);
 		const corner = await readMagicCorners(worker, original, card, stillWanted);
 		const number = corner.number ? [corner.setCode.toUpperCase(), corner.number].filter(Boolean).join(" ") : "";
+		// Without a number, and with a name to look up, the year printed at the bottom tells printings apart.
+		const printedYear = !corner.number && name.name ? await readMagicYear(worker, original, card, stillWanted) : 0;
 		return {
 			name: name.name,
 			nameSure: name.sure,
@@ -192,6 +215,7 @@ async function readMagicPhoto(seen, stillWanted = () => true) {
 			number: number,
 			numberGuesses: [],
 			setCode: corner.setCode,
+			printedYears: printedYear ? [printedYear] : [],
 			photo: photo,
 			textArea: null,
 			cardBox: cardBox,
@@ -370,6 +394,32 @@ async function readMagicCorners(worker, original, card, stillWanted) {
 	return { setCode: "", number: "" };
 }
 
+// The year printed in the copyright line at the bottom of an old card (card is the card's box in the
+// full-size original), or 0. Each of MAGIC_YEAR_READS gives one vote: the last year in what it read (of a
+// range like "1993-1999" that is the printing's); the first year two votes agree on is the answer.
+async function readMagicYear(worker, original, card, stillWanted) {
+	const votes = new Map();
+	for (const way of MAGIC_YEAR_READS) {
+		stopUnlessWanted(stillWanted, original);
+		const closeUp = cutFromCard(original, card, MAGIC_YEAR_PLACE, way.cardWidth);
+		const picture = way.ink ? inkAgainstBackground(closeUp, way.style || "soft", way.ink === "light") : closeUp;
+		const read = await readPage(worker, picture, way.mode);
+		const year = lastYearIn(read.text);
+		if (!year) continue;
+		votes.set(year, (votes.get(year) || 0) + 1);
+		if (votes.get(year) >= MAGIC_YEARS_AGREED) return year;
+	}
+	return 0;
+}
+
+// The last year in some text that a card of MAGIC_YEAR_FIRST to MAGIC_YEAR_LAST may print, or 0. (Any
+// year 1900 to 2039 is looked for, so that a later one after it isn't skipped.)
+function lastYearIn(text) {
+	const years = [...text.matchAll(/(?<!\d)(19\d\d|20[0-3]\d)(?!\d)/g)].map((match) => Number(match[1]));
+	const last = years.length > 0 ? years[years.length - 1] : 0;
+	return last >= MAGIC_YEAR_FIRST && last <= MAGIC_YEAR_LAST ? last : 0;
+}
+
 // A part of the card (place: shares of its width and height), cut from the full-size original and
 // enlarged to the card being cardWidth pixels wide.
 function cutFromCard(original, card, place, cardWidth) {
@@ -484,15 +534,31 @@ async function findMagicCardsOfPhoto(name, numberText, otherNames = []) {
 
 // Which of the cards found for a photo (see findMagicCardsOfPhoto) it shows, from how much each looks
 // like it (ranked: from rankByLook in matcher.js): what pickBestMatch in matcher.js decides with these
-// clues - { cards, clear } - codeSets being the set code read by the number ("soi"). But a card the
-// corner didn't name opens by itself only when its picture looks like the photo
-// (MAGIC_LOOK_MOST_DISTANCE): a misread name can be a real card's, and then its printings are only
-// compared with each other.
+// clues - { cards, clear } - codeSets being the set code read by the number ("soi"), and printedYears the
+// year of the copyright line (see readMagicYear). But a card the corner didn't name opens by itself only
+// when its picture looks like the photo (MAGIC_LOOK_MOST_DISTANCE): a misread name can be a real card's,
+// and then its printings are only compared with each other.
+// Printings with the same picture look alike, whatever their year, so the ones from the year read are
+// chosen among first, and the others follow: were the year misread, the right card is still in the list.
 function pickMagicCard(ranked, found, clues = {}) {
+	const { printedYears = [], ...otherClues } = clues;
+	const ofYear = ranked.filter((entry) => printedYears.includes(releaseYear(entry.card)));
+	if (ofYear.length === 0 || ofYear.length === ranked.length) return pickMagicAmong(ranked, found, otherClues);
+	const others = ranked.filter((entry) => !ofYear.includes(entry));
+	const pick = pickMagicAmong(ofYear, found, otherClues);
+	return { cards: [...pick.cards, ...others.map((entry) => entry.card)], clear: pick.clear };
+}
+
+function pickMagicAmong(ranked, found, clues) {
 	const pick = pickBestMatch(ranked, true, clues);
 	if (!pick.clear || found.byCorner) return pick;
 	const first = ranked.find((entry) => entry.card === pick.cards[0]);
 	return { cards: pick.cards, clear: first.distance <= MAGIC_LOOK_MOST_DISTANCE };
+}
+
+// The year a card's set came out, which is when its cards were printed.
+function releaseYear(card) {
+	return Number((card.set.releaseDate || "").slice(0, 4));
 }
 
 // True when a printing's number is the one read: "36★" (a foil-only printing) and "036" are 36.

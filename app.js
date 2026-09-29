@@ -1456,6 +1456,7 @@ async function scanMagicPhoto(imageFile, frame, scanId) {
 	lastPhoto = photoFacts(reading.photo, null, reading.cardBox, "", learnedLook);
 	// The set code read by the number, and the names the name read fits just as well (see readMagicPhoto).
 	lastPhoto.codeSets = reading.setCode ? [reading.setCode] : [];
+	lastPhoto.printedYears = reading.printedYears;
 	lastPhoto.otherNames = reading.otherNames;
 	nameInput.value = reading.name;
 	numberInput.value = reading.number;
@@ -1757,7 +1758,7 @@ async function searchForCard(byViewer = false) {
 			const cardLocated = lastPhoto.cardBox !== null || lastPhoto.textArea !== null;
 			const suggested = found.suggestedIds || [];
 			const pick = magic
-				? pickMagicCard(ranked, found, { codeSets: lastPhoto.codeSets, suggestedIds: suggested })
+				? pickMagicCard(ranked, found, { codeSets: lastPhoto.codeSets, printedYears: lastPhoto.printedYears || [], suggestedIds: suggested })
 				: pickBestMatch(ranked, cardLocated, {
 					setSizes: found.setSizes,
 					setName: lastPhoto.setName,

@@ -5,6 +5,34 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.59.0
+
+- **7.6 Magic printings with the same picture, by the year at the bottom** (you said: "i would go 7.6").
+  Your Sengir Vampire and Nightmare, both Fourth Edition, came second and third in the list, behind
+  Summer Magic copies worth many times more. The bottom of the two printings differs: Fourth Edition
+  prints "1995 Wizards of the Coast, Inc." in a line of its own, Summer Magic "Illus. (c) 1994 Anson
+  Maddocks" (the year in the artist's line), and Revised no year at all. Cards from 1996 on print a range,
+  "1993-1999", of which the last year is the printing's.
+  - New `readMagicYear`: when a card's name was read but no number, the bottom strip is read in up to
+    four ways, each giving one vote (the last year in what it read), until two agree. Only 1994 to 2003
+    count: 1993 starts every range, and later cards print their number.
+  - Among printings that look alike, the ones from that year go first, and the rest follow in their
+    order of looks, so a year read wrong never hides the right card. If none is from that year, the
+    year is ignored.
+  - Your 32 photos: the right card first 27 (24), opened by itself 20 (15) - all right, none wrong. Years
+    read: 7, all right (Eron the Relentless, Femeref Knight, Royal Assassin, Bad Moon, Nightmare, Sengir
+    Vampire, Terror); the other old cards give no two ways that agree. In the test browser, Sengir Vampire now
+    opens as Fourth Edition 160 by itself. It costs up to four readings (about 0.6 seconds here), only for
+    old cards with a name and no number.
+  - Checked on Scryfall's own pictures, since you have no photo of a Summer Magic card: Sengir Vampire,
+    Nightmare and Royal Assassin read 1994 for Summer Magic, 1995 for Fourth Edition, and nothing for
+    Revised, Unlimited and Beta. One card from each of 52 sets from 1994 to 2003: the year read equalled
+    the set's release year for 44 of the 47 that read (5 read nothing, among them a Summer Magic and a
+    Revised card), and 3 were a year off (Visions, Rivals Quick Start, the foreign Chronicles). Those
+    sets' cards can be pushed behind another printing of the same picture, but never out of the list.
+  - Not done: Unlimited and Beta against Revised print no year, and only their borders differ (black,
+    against Revised's white): see 7.9. A foil and its normal copy: 7.5.
+
 ## Done in 1.58.0
 
 - **7.7 Faint names on old white Magic cards, in part** (you said: "start with 7.7"). The names of Ice
@@ -827,9 +855,9 @@ Coast asks fan apps to say they are unofficial, which the page's foot now does.
 | | What | Why | Size |
 |---|---|---|---|
 | 7.5 | **Tell a Magic foil from its normal copy** in the photo, by its rainbow shine, and open it on its foil price. | Your two foil Icy Manipulators come second, behind the normal copy with the same picture. The glitter measure that finds Pokémon reverse holos doesn't tell Magic foils apart (foils 0.8–1.8, normal cards 0.8–3.6): a Magic foil shines in rainbows, not fine glitter. | M |
-| 7.6 | **Magic printings with the same picture**: read the copyright year at the bottom (Summer Magic ©1994, Fourth Edition ©1995) and see the border's colour. | Your Sengir Vampire and Nightmare come second or third, behind Summer Magic copies worth many times more. The list shows both to tap, and a tapped one is learned. | M |
 | 7.7 | **Faint names on old white Magic cards**, the last two: Kismet and Kjeldoran Knight. | Two of your 32 photos read no name; the name box can be typed in meanwhile. 1.58.0 reads the others (Femeref Knight, Radiant, Archangel), but no way of reading this Tesseract reader has tried gets more than half of these two names: light letters with a shadow, on a bar of the same grey, about 30 pixels tall in a photo cut down by Signal. First try photos from the app's own camera. | S |
 | 7.8 | **A Pokémon card photographed in Magic mode** makes up a Magic name. | Reading 46 Pokémon photos and 28 pictures without a card as Magic cards, 16 of 74 got a sure name ("The Sea Devils", "Chameleon Blur") in 1.57.0 - 18 in 1.58.0. The look check then lists printings that look nothing like the photo. The app could say "this doesn't look like a Magic card" when none of the printings' pictures comes close (0.6 is a match, 1.5 the most) - and a Pokémon card's yellow border tells the two games apart. | S |
+| 7.9 | **Magic printings that differ by border**: Unlimited and Beta (black) against Revised (white), by the border's colour in the photo. | They print no year, so 1.59.0's year doesn't help, and a Beta or Unlimited card is worth far more than a Revised one with the same picture. It needs a photo of each to test: none of your 32 is one. | S |
 | 7.4 | **Other card games** with a free database, the same way (Yu-Gi-Oh!, Lorcana). | With a game switch in place, each game is its database, its reading and its texts. | M each |
 
 ## Not planned
