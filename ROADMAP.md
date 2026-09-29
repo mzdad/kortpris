@@ -5,6 +5,26 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.62.0
+
+- **Auto mode on an Android phone, a way to find out why it is forgotten** (you said: "Also seemed like Auto
+  mode not kept on, on and android phone", and, asked what it did: it switched itself off).
+  - **Not reproduced.** The Auto choice is saved on the phone the moment the button is tapped, and read back
+    when the app opens. Tried in the test browser with an Android phone's size and name, and a pretend camera
+    showing a card: Auto tapped on, the photo taken by itself after 2 seconds, the scan finished, the camera
+    opened again - Auto still on, the button still yellow, and the next photo taken by itself at once; and after
+    reloading the app, still on. Nothing in the code switches it off but a tap on the button.
+  - **So the phone probably can't keep it.** Its browser may throw away what a page saved (a link opened inside
+    another app's own browser - Signal, Messenger, Facebook - or a browser set to clear its data), which
+    would also forget the language, kids mode and the chosen game. Or the choice was toggled twice.
+  - **New: `?camera` shows what the phone remembers.** Open https://mzdad.github.io/kortpris/?camera and the
+    line at the bottom, after the version, says for example `cameraAuto=on (in use: on), storage ok`: what is
+    saved, what the app is using, and whether the phone can save anything at all (`storage BLOCKED` if not).
+    It updates when Auto is tapped. To settle it, ask your friend to open that address in their usual browser
+    (not from inside another app), tap Auto on, close the app fully, open the same address again, and say what
+    the line reads: `never chosen` means the phone forgot it between visits, `on` with the button off would be a
+    bug in the app, and `BLOCKED` that the browser lets pages save nothing.
+
 ## Done in 1.61.0
 
 - **Mega Evolution promo numbers: an error a friend got scanning an Alakazam** (you added two pictures:

@@ -451,6 +451,19 @@ function applyLanguage() {
 	if (cameraMessage.dataset.key) showCameraMessage(cameraMessage.dataset.key);
 }
 
+// What this phone has saved about "Auto", and whether it can save anything at all: for finding out why a
+// phone seems to forget its Auto choice (a friend's Android phone did, version 1.61.0). Shown at the bottom
+// of the page with ?camera, like "cameraAuto=on (in use: on), storage ok". "never chosen" after Auto was
+// tapped on means the phone forgot it between visits; "storage BLOCKED" that it can't remember anything.
+function storageDetails() {
+	const saved = readStorage(CAMERA_AUTO_STORAGE_KEY);
+	const testKey = "kortpris.storageTest";
+	const works = writeStorage(testKey, "1") && readStorage(testKey) === "1";
+	removeStorage(testKey);
+	return CAMERA_AUTO_STORAGE_KEY.replace("kortpris.", "") + "=" + (saved === null ? "never chosen" : saved)
+		+ " (in use: " + (autoShutterOn() ? "on" : "off") + "), storage " + (works ? "ok" : "BLOCKED");
+}
+
 function renderFooter() {
 	appVersionText.textContent = t("appVersion", { version: APP_VERSION });
 	// How big the last photo from the app's camera was, and which kind: it helps find out why a
@@ -467,6 +480,7 @@ function renderFooter() {
 			appVersionText.textContent += " · " + t(lastCameraPhoto.sharpened ? "cameraSharpened" : "cameraSharp", values);
 		}
 	}
+	if (SHOWS_CAMERA_DETAILS) appVersionText.textContent += " · " + storageDetails();
 	if (shownCurrency() !== currency) {
 		ratesNote.textContent = t("ratesMissing");
 	} else if (ratesDate && currency !== "EUR") {
@@ -673,6 +687,7 @@ cameraAutoButton.addEventListener("click", () => {
 	cameraAuto = !autoShutterOn();
 	chooseCameraAuto(cameraAuto);
 	renderCameraButtons();
+	if (SHOWS_CAMERA_DETAILS) renderFooter();
 	if (cameraAuto) {
 		showCameraMessage("cameraAutoHint");
 		watchForCard(false);

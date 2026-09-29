@@ -191,7 +191,8 @@ sharpening them made numbers read worse. On 10 old cards, sharp and slightly sof
 1080p) read 9 or 10 numbers, as many as the phone's own photos. With `?camera` in the address,
 the bottom of the page then says what the camera gave ("camera 2160×3840 (live picture) · soft
 (0.18), sharpened"), to find out what a phone does (`SHOWS_CAMERA_DETAILS`; shown to everyone
-until 1.41.2). "Use the phone's own camera" at the bottom opens the old camera screen, and so does
+until 1.41.2). The same line says what the phone remembers about "Auto" and whether it can save at all
+(`storageDetails`, from 1.62.0: `cameraAuto=on (in use: on), storage ok`). "Use the phone's own camera" at the bottom opens the old camera screen, and so does
 the button when the page can't have a live camera.
 
 **Learning.** When the app can't tell which card a photo shows (or opens the wrong one) and the
