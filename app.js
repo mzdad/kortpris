@@ -91,10 +91,11 @@ const KID_STATUS = {
 	readFailed: "kidNotFound",
 	unsureName: "kidNotFound",
 	needNameOrNumber: "kidNotFound",
-	magicStatusIdle: "kidMagicIdle",
+	magicStatusIdle: "kidMagicIdle",   // under the big photo button: the other way, typing the name
 	magicNeedName: "kidMagicIdle",
-	magicNoPhoto: "kidMagicNoPhoto",
 	magicNoMatch: "kidMagicNotFound",
+	magicReadFailed: "kidNotFound",
+	magicUnsureName: "kidNotFound",
 	claudeNotACard: "kidNotFound",
 	apiDown: "kidTryLater",
 	apiTooMany: "kidTryLater",
@@ -104,7 +105,7 @@ const KID_STATUS = {
 // ...with a picture, so it can be understood without reading...
 const KID_STATUS_ICONS = {
 	kidIdle: "📷", kidBusy: "🔎", kidFound: "🎉", kidPickOne: "👇", kidNotFound: "🤔", kidTryLater: "⏳",
-	kidMagicIdle: "✏️", kidMagicNoPhoto: "✏️", kidMagicNotFound: "🤔",
+	kidMagicIdle: "✏️", kidMagicNotFound: "🤔",
 };
 // ...and these are also said out loud. (A found card is said with its name and value instead.)
 const KID_SPOKEN = {
@@ -113,7 +114,6 @@ const KID_SPOKEN = {
 	kidNotFound: "sayNotFound",
 	kidTryLater: "sayTryLater",
 	kidMagicIdle: "sayMagicIdle",
-	kidMagicNoPhoto: "sayMagicNoPhoto",
 	kidMagicNotFound: "sayMagicNotFound",
 };
 
@@ -152,7 +152,6 @@ const numberInput = document.getElementById("number-input");
 const numberLabel = document.querySelector("label[for='number-input']");
 const gameButtons = document.querySelectorAll("[data-game]");   // the switch, and kids mode's big buttons
 const kidGamePictures = document.querySelectorAll(".kid-game-picture");
-const gameHint = document.getElementById("game-hint");
 const searchButton = document.getElementById("search-button");
 const detail = document.getElementById("detail");
 const results = document.getElementById("results");
@@ -497,8 +496,8 @@ for (const button of languageButtons) {
 // ---------- Which card game ----------
 // The Scan screen searches Pokémon cards (TCGdex, cards.js) or Magic: The Gathering cards
 // (Scryfall, magic.js), picked by the switch above the search - in kids mode, by two big buttons at
-// the top, a Poké Ball and a gem. Magic cards are found by typing: the photo reading knows Pokémon
-// cards only (ROADMAP.md, 7.2). My cards keeps both, in groups of their own.
+// the top, a Poké Ball and a gem. Each game's photos are read in their own way (reader.js,
+// magic-reader.js). My cards keeps both, in groups of their own.
 
 for (const button of gameButtons) {
 	button.addEventListener("click", () => setGame(button.dataset.game));
@@ -509,8 +508,7 @@ function setGame(chosen) {
 	game = chosen;
 	writeStorage(GAME_STORAGE_KEY, game);
 	// Whatever the Scan screen showed was about the other game: a photo being read or searched stops,
-	// and its card, photo and texts go. The start (the steps, or kids mode's big photo button) comes
-	// back, for Pokémon cards (see renderGame).
+	// and its card, photo and texts go. The start (the steps, or kids mode's big photo button) comes back.
 	latestScanId++;
 	latestSearchId++;
 	lastPhoto = null;
@@ -525,11 +523,9 @@ function setGame(chosen) {
 	hideProgress();
 	clearResults();
 	setNotice(null);
-	setStatus(idleStatusKey());   // in kids mode, Magic's is also said out loud (see KID_SPOKEN)
+	setStatus(idleStatusKey());
 	renderGame();
-	// Magic cards start with typing the name. (Focusing from the tap also brings up a phone's keyboard.)
-	if (game === "magic") nameInput.focus();
-	else if (kidsMode) say(t("sayGamePokemon"));
+	if (kidsMode) say(t("sayPressYellowButton"));
 }
 
 // What the status says before anything happens: how to start, for the game searched.
@@ -541,13 +537,12 @@ function idleStatusKey() {
 function renderGame() {
 	const magic = game === "magic";
 	for (const button of gameButtons) button.setAttribute("aria-pressed", String(button.dataset.game === game));
-	// style.css hides what is about photos for Magic cards (the steps, kids mode's big photo button),
-	// and shows kids mode the search box instead.
+	// Kids mode shows the search box for Magic cards (see style.css): an old card's fancy letters can
+	// be too much for the reader, and a child can type its name instead.
 	document.body.classList.toggle("game-magic", magic);
 	nameInput.placeholder = t(magic ? "magicNamePlaceholder" : "namePlaceholder");
 	numberLabel.textContent = t(magic ? "magicNumberLabel" : "numberLabel");
 	numberInput.placeholder = t(magic ? "magicNumberPlaceholder" : "numberPlaceholder");
-	gameHint.hidden = !magic;
 	// The example is a Pokémon card's photo.
 	exampleButton.hidden = magic;
 	if (statusMessage.key === "statusIdle" || statusMessage.key === "magicStatusIdle") {
@@ -556,22 +551,11 @@ function renderGame() {
 	}
 }
 
-// Magic cards can't be read from a photo yet: the photo buttons say so (in kids mode out loud too),
-// and point to the search. Returns true when they did.
-function magicPhotoRefused() {
-	if (game !== "magic") return false;
-	showView("scan");
-	setStatus("magicNoPhoto", {}, "error");
-	nameInput.focus();
-	return true;
-}
-
 // ---------- Buttons ----------
 
 cameraButton.addEventListener("click", () => openCamera());
 kidStartButton.addEventListener("click", () => openCamera());
 libraryButton.addEventListener("click", () => {
-	if (magicPhotoRefused()) return;
 	showView("scan");
 	if (kidsMode) say(t("sayChoosePhoto"));
 	libraryInput.click();
@@ -579,7 +563,6 @@ libraryButton.addEventListener("click", () => {
 
 // afterSave: opened by "Save and scan the next", so the camera says the last card was saved.
 function openCamera(afterSave = false) {
-	if (magicPhotoRefused()) return;
 	showView("scan");
 	// Said from the button press on purpose: iPhones only let a page start speaking from a tap,
 	// and after this first time it may also speak by itself when the card is found.
@@ -794,7 +777,7 @@ function setKidsMode(on, speakIt = true) {
 	kidsMode = on;
 	writeStorage(KIDS_MODE_STORAGE_KEY, kidsMode ? "on" : "off");
 	applyLanguage();
-	if (kidsMode && speakIt) say(t(game === "magic" ? "sayKidsModeOnMagic" : "sayKidsModeOn"));
+	if (kidsMode && speakIt) say(t("sayKidsModeOn"));
 	else if (!kidsMode) stopSpeaking();
 }
 cameraInput.addEventListener("change", () => takeFileFrom(cameraInput));
@@ -802,7 +785,8 @@ libraryInput.addEventListener("change", () => takeFileFrom(libraryInput));
 
 searchForm.addEventListener("submit", (event) => {
 	event.preventDefault();   // stay on this page instead of reloading it
-	if (game === "magic") searchForMagicCard();
+	// After a photo, a Magic card is searched for like a Pokémon card: compared with the photo, and learned.
+	if (game === "magic" && !lastPhoto) searchForMagicCard();
 	else searchForCard(true);
 });
 
@@ -1323,6 +1307,11 @@ async function scanPhoto(imageFile, frame = null) {
 	searchButton.disabled = true;
 	setNotice(null);
 	versionHint = null;
+	// A Magic card is read in its own way (see scanMagicPhoto).
+	if (game === "magic") {
+		await scanMagicPhoto(imageFile, frame, scanId);
+		return;
+	}
 
 	// With a saved API key, and signed in to an account, Claude reads the card. If that fails
 	// for any reason, the built-in reader takes over, and a notice says why.
@@ -1367,7 +1356,7 @@ async function scanPhoto(imageFile, frame = null) {
 			freeLook(look);
 			return;
 		}
-		if (look) learnedLook = compareWithLearned(look.photo, null, look.cardBox);
+		if (look) learnedLook = compareWithLearned(look.photo, null, look.cardBox, learnedOfGame(false));
 		let openedEarly = null;
 		if (learnedLook && learnedLook.card) openedEarly = await openLearnedEarly(learnedLook.card, look, scanId);
 		if (scanId !== latestScanId) {
@@ -1395,7 +1384,7 @@ async function scanPhoto(imageFile, frame = null) {
 		// Compared already when the card's own box was found before the reading: the place of the
 		// text isn't needed then. Otherwise now, by the place of the text.
 		if (!learnedLook || !reading.cardBox) {
-			learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null);
+			learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null, learnedOfGame(false));
 		}
 		lastPhoto = photoFacts(reading.photo, reading.textArea, reading.cardBox || null, reading.setName || "", learnedLook, reading.setCode || "");
 	}
@@ -1421,6 +1410,66 @@ async function scanPhoto(imageFile, frame = null) {
 		hideProgress();
 		setStatus("unsureName", {}, "error");
 		numberInput.classList.add("needs-attention");
+		return;
+	}
+	await searchForCard();
+}
+
+// A photo of a Magic: The Gathering card (scanPhoto has cleared the screen for it): the card is found and
+// read (magic-reader.js), then searched for as a Pokémon card is - its printings compared with the photo,
+// and learned from the viewer's answer (see searchForCard). Claude isn't asked: it reads Pokémon cards.
+async function scanMagicPhoto(imageFile, frame, scanId) {
+	getOcrWorker();   // the text reader gets ready meanwhile (it downloads the first time)
+	setStatus("readerStarting");
+	showProgress(null);
+	const failed = (key) => {
+		searchButton.disabled = false;
+		hideProgress();
+		setStatus(key, {}, "error");
+	};
+	let look;
+	try {
+		look = await lookAtMagicPhoto(imageFile, frame);
+	} catch (error) {
+		console.error(error);   // a photo the browser can't open
+		if (scanId === latestScanId) failed("magicReadFailed");
+		return;
+	}
+	if (scanId !== latestScanId) {
+		freeLook(look);
+		return;
+	}
+	setStatus("reading");
+	let reading;
+	try {
+		reading = await readMagicPhoto(look, () => scanId === latestScanId);
+	} catch (error) {
+		if (error.stopped || scanId !== latestScanId) return;   // stopped: another photo came
+		console.error(error);
+		// Scryfall's list of card names didn't come, which the reader needs.
+		failed(error.tooManyLookups ? "magicTooMany" : "apiDown");
+		return;
+	}
+	if (scanId !== latestScanId) return;
+	searchButton.disabled = false;
+	const learnedLook = compareWithLearned(reading.photo, null, reading.cardBox, learnedOfGame(true));
+	lastPhoto = photoFacts(reading.photo, null, reading.cardBox, "", learnedLook);
+	// The set code read by the number, and the names the name read fits just as well (see readMagicPhoto).
+	lastPhoto.codeSets = reading.setCode ? [reading.setCode] : [];
+	lastPhoto.otherNames = reading.otherNames;
+	nameInput.value = reading.name;
+	numberInput.value = reading.number;
+	scannedNumbers = { shown: reading.number, guesses: [] };
+	// A learned card is found by its looks, so it doesn't matter how badly the text read. Otherwise a name
+	// the reader isn't sure of, and no number, would only find cards that look nothing like the photo -
+	// unless the photo looks somewhat like cards the app has learned: those are shown.
+	if (lastPhoto.learnedCard === null && !reading.nameSure && !reading.number) {
+		if (lastPhoto.learnedSuggestions.length > 0) {
+			lastPhoto.textUsable = false;
+			await searchForCard();
+			return;
+		}
+		failed(reading.name ? "magicUnsureName" : "magicReadFailed");
 		return;
 	}
 	await searchForCard();
@@ -1627,9 +1676,12 @@ async function searchForCard(byViewer = false) {
 	// Otherwise the photo's card is known, and the viewer is looking up the price of another card.
 	const answersPhoto = byViewer && lastPhoto !== null && (lastPhoto.card === null || lastPhoto.recognised);
 	resultsForPhoto = lastPhoto !== null && (!byViewer || answersPhoto);
-	if (!learnedCard && suggestions.length === 0 && !canSearch(nameInput.value, numberInput.value)) {
+	// Magic cards are searched for in their own way (see findMagicCardsForSearch).
+	const magic = game === "magic";
+	const searchable = magic ? canSearchMagic(nameInput.value, numberInput.value) : canSearch(nameInput.value, numberInput.value);
+	if (!learnedCard && suggestions.length === 0 && !searchable) {
 		hideProgress();
-		setStatus("needNameOrNumber", {}, "error");
+		setStatus(magic ? "magicNeedName" : "needNameOrNumber", {}, "error");
 		return;
 	}
 
@@ -1645,10 +1697,17 @@ async function searchForCard(byViewer = false) {
 		const guesses = numberInput.value.trim() === scannedNumbers.shown ? scannedNumbers.guesses : [];
 		let found = null;
 		if (learnedCard) found = await findLearnedCard(learnedCard, nameInput.value, numberInput.value, guesses);
-		if (!found && useText) found = await findCards(nameInput.value, numberInput.value, lastPhoto !== null, guesses);
+		if (!found && useText) {
+			found = magic
+				? await findMagicCardsForSearch(byViewer)
+				: await findCards(nameInput.value, numberInput.value, lastPhoto !== null, guesses);
+		}
 		if (!found) found = { cards: [], description: null, totalCount: 0, exactFound: false };
 		found = await withLearnedSuggestions(found, suggestions);
 		if (searchId !== latestSearchId) return;   // a newer photo or search took over
+		// A Magic card that only its name was read for opens once its picture looks like the photo
+		// (see pickMagicCard in magic-reader.js), even when it has one printing only.
+		const lookFirst = magic && lastPhoto !== null && !byViewer && !found.byCorner && !found.learned;
 		if (found.learned) {
 			// Show the recognised card's own name and number, whatever was read.
 			nameInput.value = found.cards[0].name;
@@ -1660,22 +1719,23 @@ async function searchForCard(byViewer = false) {
 			numberInput.value = found.matchedNumber;
 			scannedNumbers.shown = found.matchedNumber;
 		}
-		showNumberHint(found);
+		if (!magic) showNumberHint(found);
 		if (found.cards.length === 0) {
 			hideProgress();
-			setStatus("noMatch", {}, "error");
+			setStatus(magic ? "magicNoMatch" : "noMatch", {}, "error");
 		} else if (found.suggestedOnly) {
 			// Only learned cards the photo looks somewhat like: shown to pick from, but never opened
 			// by themselves, as the text read gave nothing to back them up.
 			hideProgress();
 			setStatus("learnedSuggested");
 			showResults(found.cards, found.description, null, null, found.suggestedIds);
-		} else if (found.cards.length === 1) {
+		} else if (found.cards.length === 1 && !lookFirst) {
 			await loadPrices(found.cards[0]);
 			if (searchId !== latestSearchId) return;
 			hideProgress();
 			setStatus(found.learned ? "learnedOpened" : "foundOne");
-			if (!found.exactFound) fixMisreadName(found.cards[0], guesses);
+			if (magic && !byViewer) showMagicCardRead(found.cards[0]);
+			else if (!found.exactFound && !magic) fixMisreadName(found.cards[0], guesses);
 			showResults(found.cards, found.description, found.cards[0].id, null);
 			if (answersPhoto) rememberCard(found.cards[0]);
 			else if (!byViewer) takeFor(found.cards[0], Boolean(found.learned));
@@ -1690,27 +1750,30 @@ async function searchForCard(byViewer = false) {
 				if (searchId !== latestSearchId) return;
 				setStatus("comparingProgress", { done: done, total: total });
 				showProgress(done / total);
-			});
+			}, magic);
 			if (searchId !== latestSearchId) return;
 			hideProgress();
 			// Only trust looks when the reader also found where the card sits in the photo.
 			const cardLocated = lastPhoto.cardBox !== null || lastPhoto.textArea !== null;
 			const suggested = found.suggestedIds || [];
-			const pick = pickBestMatch(ranked, cardLocated, {
-				setSizes: found.setSizes,
-				setName: lastPhoto.setName,
-				codeSets: lastPhoto.codeSets,
-				numbersRead: found.numbersRead,
-				looksReverseHolo: lastPhoto.looksReverseHolo,
-				suggestedIds: suggested,
-			});
+			const pick = magic
+				? pickMagicCard(ranked, found, { codeSets: lastPhoto.codeSets, suggestedIds: suggested })
+				: pickBestMatch(ranked, cardLocated, {
+					setSizes: found.setSizes,
+					setName: lastPhoto.setName,
+					codeSets: lastPhoto.codeSets,
+					numbersRead: found.numbersRead,
+					looksReverseHolo: lastPhoto.looksReverseHolo,
+					suggestedIds: suggested,
+				});
 			const cards = firstPageWith(pick.cards, suggested);
 			const best = cards[0].id;
 			if (pick.clear) {
 				await loadPrices(cards[0]);
 				if (searchId !== latestSearchId) return;
 				setStatus("bestMatchOpened");
-				fixMisreadName(cards[0], guesses);
+				if (magic) showMagicCardRead(cards[0]);
+				else fixMisreadName(cards[0], guesses);
 				showResults(cards, found.description, best, best, suggested);
 				if (answersPhoto) rememberCard(cards[0]);
 				else if (!byViewer) takeFor(cards[0], false);
@@ -1723,16 +1786,35 @@ async function searchForCard(byViewer = false) {
 		console.error(error);
 		if (searchId !== latestSearchId) return;
 		hideProgress();
-		// Asked too often today from this internet connection (see askOnce in cards.js).
-		setStatus(error.tooManyLookups ? "apiTooMany" : "apiDown", {}, "error");
+		// Asked too often today from this internet connection (see askOnce in cards.js), or of
+		// Scryfall, which refuses for half a minute (see askScryfallOnce in magic.js).
+		const tooMany = magic ? "magicTooMany" : "apiTooMany";
+		setStatus(error.tooManyLookups ? tooMany : "apiDown", {}, "error");
 	} finally {
 		if (searchId === latestSearchId) searchButton.disabled = false;
 	}
 }
 
-// Magic: The Gathering cards are found by what was typed: their name, and the set code and number from
-// the card's bottom-left corner (see findMagicCards in magic.js). There is no photo, so nothing is
-// compared or learned.
+// Magic cards for searchForCard: those that fit the photo's reading (see findMagicCardsOfPhoto in
+// magic-reader.js), with the other names it fitted as well - or, searched by the viewer, what they typed,
+// a misspelt name too (see findMagicCards in magic.js).
+async function findMagicCardsForSearch(byViewer) {
+	const otherNames = !byViewer && lastPhoto ? lastPhoto.otherNames || [] : [];
+	const found = await findMagicCardsOfPhoto(nameInput.value, numberInput.value, otherNames);
+	if (found.cards.length === 0 && byViewer) return findMagicCards(nameInput.value, numberInput.value);
+	return found;
+}
+
+// A Magic card opened for a photo: its own name and corner in the boxes ("SOI 246"), whatever was read.
+function showMagicCardRead(card) {
+	nameInput.value = card.name;
+	numberInput.value = collectorNumber(card);
+	scannedNumbers.shown = numberInput.value;
+}
+
+// Magic: The Gathering cards found by what was typed, without a photo: their name, and the set code and
+// number from the card's bottom-left corner (see findMagicCards in magic.js). There is no photo, so
+// nothing is compared or learned.
 async function searchForMagicCard() {
 	const searchId = ++latestSearchId;
 	resultsForPhoto = false;

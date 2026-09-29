@@ -17,8 +17,7 @@
 // Its prices come with it, so it never waits for them (see withPrices in cards.js).
 
 const SCRYFALL_API = "https://api.scryfall.com";
-// Magic cards' ids start with this, so a saved card's id alone says which game it is from.
-const MAGIC_ID_START = "mtg:";
+// (Magic cards' ids start with MAGIC_ID_START, "mtg:" - see isMagicId in cards.js.)
 // Saved Magic cards say where their ids are from, as Pokémon cards say "tcgdex" (see CARD_DATABASE).
 const MAGIC_DATABASE = "scryfall";
 // Scryfall's questions are asked one at a time, this far apart: it allows two searches a second.
@@ -33,10 +32,6 @@ const MAGIC_RARITIES = {
 };
 
 let scryfallTurn = Promise.resolve();   // the question asked last: the next one waits for it
-
-function isMagicId(id) {
-	return String(id).startsWith(MAGIC_ID_START);
-}
 
 function isMagicCard(card) {
 	return Boolean(card) && card.game === "magic";

@@ -77,13 +77,23 @@ function recogniseLearnedCard(photo, textArea, cardBox, learned = readLearned())
 	return compareWithLearned(photo, textArea, cardBox, learned).card;
 }
 
+// The photos learned of one game's cards: Magic: The Gathering's (magic = true) or Pokémon's. A photo is
+// only compared with its own game's cards.
+function learnedOfGame(magic) {
+	return readLearned().filter((entry) => isMagicId(entry.cardId) === magic);
+}
+
 // The card a recognised photo shows, fresh from the database. But when the reader read the name
 // and number of another card exactly, that one wins: the same picture is printed in several sets
 // (Base Set and Base Set 2 Dratini), and only the number tells them apart. Returns what findCards
 // in cards.js returns, plus learned: true - or null when the database doesn't have the card.
 async function findLearnedCard(learnedCard, name, numberText, numberGuesses) {
-	const exact = await findExactCards(name, allNumberGuesses(numberText, numberGuesses));
-	if (exact && !exact.cards.some((card) => card.id === learnedCard.cardId)) return exact;
+	// For a Magic card, the set code and number read in its corner name one printing (see
+	// findMagicCardsOfPhoto in magic-reader.js); a name alone doesn't.
+	const exact = isMagicId(learnedCard.cardId)
+		? await findMagicCardsOfPhoto("", numberText)
+		: await findExactCards(name, allNumberGuesses(numberText, numberGuesses));
+	if (exact && exact.cards.length > 0 && !exact.cards.some((card) => card.id === learnedCard.cardId)) return exact;
 	const cards = await findCardsById([learnedCard.cardId]);
 	if (cards.length === 0) return null;
 	return { cards: cards, description: { key: "matchLearned", values: {} }, totalCount: 1, exactFound: true, learned: true };
@@ -129,11 +139,12 @@ async function learnCard(card, photo, textArea, cardBox, photoKey) {
 		name: card.name,
 		number: collectorNumber(card),   // (an anniversary reprint has no set size: "69", not "69/null")
 		setName: card.set.name,
-		image: card.images ? card.images.small : null,
+		// (A Magic card's small picture: its list shows it small, as My cards does.)
+		image: card.images ? card.images.thumb || card.images.small : null,
 		thumbnail: packThumbnail(seen.grid),
 		photoKey: photoKey,
 		learnedAt: Date.now(),
-		db: CARD_DATABASE,
+		db: isMagicId(card.id) ? MAGIC_DATABASE : CARD_DATABASE,
 	});
 	return writeLearned(trimLearned(learned));
 }
@@ -144,7 +155,9 @@ async function learnCard(card, photo, textArea, cardBox, photoKey) {
 let movingLearned = false;
 async function moveLearnedToTcgdex() {
 	if (movingLearned) return false;
-	const old = readLearned().filter((entry) => entry.db !== CARD_DATABASE);
+	// (Magic cards come from Scryfall, and never had other ids.)
+	const isOld = (entry) => entry.db !== CARD_DATABASE && !isMagicId(entry.cardId);
+	const old = readLearned().filter(isOld);
 	if (old.length === 0) return false;
 	movingLearned = true;
 	try {
@@ -154,7 +167,7 @@ async function moveLearnedToTcgdex() {
 		const learned = readLearned();
 		let changed = false;
 		for (const entry of learned) {
-			if (entry.db === CARD_DATABASE) continue;
+			if (!isOld(entry)) continue;
 			const card = cards.find((found) => found.id === current.get(entry.cardId));
 			if (!card) continue;
 			Object.assign(entry, {
@@ -274,7 +287,8 @@ function whenLearnedChanges(redraw) {
 // card's place in the photo isn't known.
 async function cardInPhoto(card, photo, textArea, cardBox) {
 	if ((!cardBox && !textArea) || !card.images) return null;
-	const picture = await loadPicture(card.images.small);
+	// The picture rankByLook in matcher.js compared: a Magic card's smallest one.
+	const picture = await loadPicture(card.images.thumb || card.images.small);
 	const cardGrid = colourGrid(picture, artworkOf({ x0: 0, y0: 0, x1: picture.width, y1: picture.height }));
 	let best = { grid: null, distance: Infinity };
 	for (const grid of photoArtworkGrids(photo, textArea, cardBox, true)) {

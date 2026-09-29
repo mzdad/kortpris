@@ -1,7 +1,7 @@
 # Kortpris
 
-Photograph a Pokémon card on your phone and see what it sells for. Magic: The Gathering cards can
-be looked up by name too (see **Magic: The Gathering cards** below).
+Photograph a Pokémon or Magic: The Gathering card on your phone and see what it sells for (Magic
+cards: see **Magic: The Gathering cards** below).
 
 **Live at <https://mzdad.github.io/kortpris/>.** Every push to `main` updates it.
 
@@ -114,8 +114,8 @@ A web page with nothing to install. What happens to a photo:
 
 **Magic: The Gathering cards** (version 1.55.0, `magic.js`). A switch above the search picks the
 game, remembered on the phone (`setGame` in `app.js`); in kids mode two big buttons pick it (see Kids mode).
-Magic cards come from [Scryfall](https://scryfall.com), free and without a key, and are found by
-typing: the name - misspelt ones are corrected by Scryfall's own guess, and words that fit no name
+Magic cards come from [Scryfall](https://scryfall.com), free and without a key, and are found from a
+photo (see **Magic cards from a photo** below) or by typing: the name - misspelt ones are corrected by Scryfall's own guess, and words that fit no name
 exactly list every card with them in its name - and, if typed, the set code and number from the
 card's bottom-left corner ("M11 149", `parseMagicNumber`), which pin down one printing. Every
 printing is listed, newest first, with its picture; cards not out yet, and those only played
@@ -130,8 +130,30 @@ card's page links to its sales on PriceCharting like a Pokémon card's, graded a
 is its name, "Magic" and its set as PriceCharting names it ("M11" for Magic 2011,
 `priceChartingMagicSearch`), with "Foil" for a foil copy, and for a normal copy PriceCharting's special
 editions ([Foil], [Borderless]...) are left out, which mostly leaves the one card, so its page opens
-straight away. The photo reading, the PSA price table (its price service knows Pokémon cards only)
-and learned cards are still Pokémon only (roadmap 7.2).
+straight away. The PSA price table is still Pokémon only: its price service knows Pokémon cards only.
+
+**Magic cards from a photo** (version 1.57.0, `magic-reader.js`, roadmap 7.2). With Magic picked, a
+photo is read in Magic's own way (`scanMagicPhoto` in `app.js`). The card is found by its shape
+(`lookAtMagicPhoto`), also lying sideways: then the photo is turned a quarter, as the card is the biggest
+card-shaped box that way, where upright only its picture or text box has a card's shape. The name along
+the top is read in up to five ways until one fits a name in Scryfall's list of all 36,000 (asked at the
+first Magic photo, kept a day; `closestMagicName`): up to one letter in four may be misread, the end of
+a long name may be lost, and words the reader read only faintly count only when they spell a long name
+exactly, as bits of a frame are easily read as "Fear" or "Pain", which are cards too. A name that fits
+nowhere: the card may be upside down, and its other end is read. Cards from 2014 on print their number,
+rarity, set code and language in the bottom-left corner ("246/297 R" over "SOI • EN"): read with only the
+light print kept, and a misread code is made a real set's of the size read (`magic-sets.js`: "SOT" is
+SOI). Cards from 1998 to 2014 print only "28/350", at the end of the bottom line. The corner's card
+opens at once when it has the name read (`findMagicCardsOfPhoto`). Otherwise the name's printings - those
+with the number read, if any - are compared with the photo by their pictures (`rankByLook`, with
+Scryfall's smallest pictures), and a card opens by itself only when its picture is close to the photo
+(`pickMagicCard`). The German, French and Italian black-bordered printings of 1994-95 are left out, as
+the English name was read. Learned cards work for Magic cards too: tap the right one in the list, and the
+next photo of it opens at once. Tested with `dev_magic_photos_test.html` on 32 real photos (29 cards
+from 1994 to 2018, 16 photographed sideways, 4 foils): turned right 32, names read 25, numbers read 10
+of the 17 that print one, the right card first 21, opened by itself 13 - all right, none wrong. Still
+hard: the same picture in another printing (Summer Magic, a foil's normal copy), faint names on old
+white cards, and glare.
 
 **The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed
 2x and with the phone's light on, because the phone's own camera screen can't be told to do either.
@@ -189,8 +211,8 @@ Forget button. Tested with `dev_learning_test.html`.
 yet: one big picture to tap for the camera, the card with 1 to 5 Poké Balls for how valuable
 it is (one Poké Ball, then two Premier, three Great, four Ultra and five Master Balls, from 20, 40, 250 and 520 kroner), one rounded price, versions as little pictures of where the card glitters, and a big
 Save button. Two big buttons at the top pick the game, a Poké Ball for Pokémon and a gem for Magic
-(1.56.0). Magic cards are found by typing, so for them a big name box and Search button take the
-camera picture's place. A Magic card shows 1 to 5 gems instead of balls, at the same prices: they
+(1.56.0). For Magic cards a big name box and Search button sit below the camera picture: an old card's
+fancy letters can be too much for the reader, and a child can type the name instead. A Magic card shows 1 to 5 gems instead of balls, at the same prices: they
 climb like the colours of a Magic card's rarity symbol, one black (common), two silver (uncommon),
 three gold (rare), four orange (mythic rare), and five rainbow gems like a shiny foil card
 (`gemsHtml`). Magic's own mana and planeswalker symbols are left alone: Wizards of the Coast's Fan
@@ -281,6 +303,8 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `cards.js` | Searches the card database (TCGdex), asks for the prices of the cards shown, and keeps its answers for a day |
 | `card-ids.js` | The old database's set ids and TCGdex's, and the 30th Celebration reprints' numbers |
 | `magic.js` | Magic: The Gathering cards and their prices from Scryfall, found by name, set code and number |
+| `magic-reader.js` | Photo → a Magic card: its name, and the set code and number in its corner |
+| `magic-sets.js` | Every Magic set's code and size, to tell a set code read from a misread one |
 | `matcher.js` | Sorts candidate cards by how much they look like the photo |
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
@@ -307,6 +331,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `dev_learning_test.html` | Development tool: checks that learned cards are recognised or suggested, and nothing else is opened |
 | `dev_special_numbers_test.html` | Development tool: promos, gallery and other lettered numbers (see below) |
 | `dev_fullart_test.html` | Development tool: full-art, gold and illustration-rare cards (see below) |
+| `dev_magic_photos_test.html` | Development tool: runs real photos of Magic cards from the private `dev-local/` folder |
 
 ## Publishing a change
 

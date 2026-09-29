@@ -5,6 +5,38 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.57.0
+
+- **7.2 Magic cards from a photo, and learned Magic cards** (you put 32 photos of your Magic cards in
+  `dev-local/` and said: "i PUT IN ALOT OF MAGIC PICTURES IN THE FOLDER LEARN FROM THEM").
+  - With Magic picked, "Take photo" and "Choose photo" read Magic cards: the name along the top, and on
+    cards from 2014 on the number and set code in the bottom-left corner ("246/297 R" over "SOI • EN"),
+    which name the one printing. Older cards are told apart by their picture, as Pokémon cards are.
+  - Cards photographed sideways are turned the right way up (16 of your 32 photos were), and upside
+    down ones too.
+  - The names come from Scryfall's list of all 36,000 Magic cards. A name may have one misread letter in
+    four, or lose its end; but words read only faintly count only when they spell a long name exactly:
+    a bit of the frame is easily read as "Fear" or "Pain", which are cards too.
+  - A misread set code is made a real set's of the size read ("SOT" is SOI, 297 cards): a new list of
+    every set's code and size, `magic-sets.js`.
+  - A card opens by itself only when its corner named it, or its picture looks like the photo;
+    otherwise the printings are listed, closest look first, to tap. The German, French and Italian
+    black-bordered printings of 1994-95 are left out, as an English name was read.
+  - Learned Magic cards: tap the right card in the list, and the next photo of it opens at once
+    ("Recognised: you've shown me this card before"), as for Pokémon cards.
+  - Kids mode: the big photo button is back for Magic, with the name box below it, as an old card's
+    fancy letters can be too much for the reader.
+  - Tested: a new test page, `dev_magic_photos_test.html`, on your 32 photos (29 cards from 1994 to
+    2018, 16 sideways, 4 foils): turned right 32, names read 25, numbers read 10 of the 17 that print
+    one, the right card first 21, opened by itself 13 - all right, none wrong - in 1.5 seconds a photo.
+    In the test browser: the sideways Angrath opened with "RIX 152" filled in; Sengir Vampire listed its
+    printings, and once Fourth Edition was tapped, the same photo opened it at once; in kids mode, Reflect
+    Damage was read aloud with its gem. Your 46 Pokémon photos read exactly as before: 46 first, 45
+    opened by themselves, 0 wrong, 25 by the number alone.
+  - Not yet (new rows 7.5 to 7.7, and 1.12): telling a foil from its normal copy, printings with the same
+    picture (Summer Magic, Fourth Edition), faint names on old white cards (4 of your photos), and
+    sideways Pokémon cards.
+
 ## Done in 1.56.0
 
 - **7.3 Kids mode and sales links for Magic** (you asked: "Please do 7.3 and what could be a good
@@ -702,6 +734,7 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black: the rest. | 6 of 27 full-art numbers still aren't read in 1.40.0 (8 in 1.28.0). The made-up photos are made from the database's small pictures, so a real photo may read better: worth checking with a few real full-art photos first. The name and the look find these cards anyway. | S |
 | 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: the rest. Full-art cards on a grey table. | The name strip, the number corners and the set code (1.7) need them. On the 2 made-up full-art photos on a grey table, the best box found covers only the card's top-left part (81% of it): the silver border is the table's colour, so the card's own bottom and right edges hardly show. Checking the box can't help there - the name strip is in that part too, and reads the right name - so it takes a better way to see a silver border on grey. They are found by name and picture anyway, and the app's own camera doesn't need this: its frame gives the edges (1.1). | M |
+| 1.12 | **Pokémon cards photographed sideways**, turned the right way up the way Magic cards are since 1.57.0 (`lookAtMagicPhoto`): the card is the biggest card-shaped box, upright or turned. | Photos sent through a messenger can lose which way up they are (16 of your 32 Magic photos did). The Pokémon reader needs its 46-photo test to stay the same. | S |
 
 ## 2. Quicker
 
@@ -769,7 +802,9 @@ Coast asks fan apps to say they are unofficial, which the page's foot now does.
 
 | | What | Why | Size |
 |---|---|---|---|
-| 7.2 | **Magic cards from a photo**: the name at the top left, and on cards from 2014 on the set code and number in the bottom-left corner ("146/249 C", "M11 • EN"), which pin down the printing; then the picture comparison picks among the rest. With it, **learned Magic cards** (moved here from 7.3 in 1.56.0): a Magic card the app read wrong is remembered, like a Pokémon card. Needs 10–20 photos of your own Magic cards to test with. | Typing is slow, and many cards have been printed many times (Lightning Bolt 70 times): only the corner or the picture tells them apart. Older cards print no set code, so there the picture decides. The app learns from photos it read wrong, so learning needs the photo reading first. | L |
+| 7.5 | **Tell a Magic foil from its normal copy** in the photo, by its rainbow shine, and open it on its foil price. | Your two foil Icy Manipulators come second, behind the normal copy with the same picture. The glitter measure that finds Pokémon reverse holos doesn't tell Magic foils apart (foils 0.8–1.8, normal cards 0.8–3.6): a Magic foil shines in rainbows, not fine glitter. | M |
+| 7.6 | **Magic printings with the same picture**: read the copyright year at the bottom (Summer Magic ©1994, Fourth Edition ©1995) and see the border's colour. | Your Sengir Vampire and Nightmare come second or third, behind Summer Magic copies worth many times more. The list shows both to tap, and a tapped one is learned. | M |
+| 7.7 | **Faint names on old white Magic cards**: light letters on a light frame (Kismet, Kjeldoran Knight, Femeref Knight, Radiant). | 4 of your 32 photos read no name; the name box can be typed in meanwhile. | S–M |
 | 7.4 | **Other card games** with a free database, the same way (Yu-Gi-Oh!, Lorcana). | With a game switch in place, each game is its database, its reading and its texts. | M each |
 
 ## Not planned

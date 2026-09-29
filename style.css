@@ -642,14 +642,13 @@ body.kids #account-panel,
 body.kids #owner-switch,
 body.kids footer p:not(.app-version),
 body.kids .button-words { display: none; }
-/* Before the first photo, the big start picture says it all. Magic cards are found by typing their
-   name (see setGame in app.js): kids mode shows the search box for them instead. */
+/* Before the first photo, the big start picture says it all. A Magic card's name can also be typed (an
+   old card's fancy letters can be too much for the reader; see renderGame in app.js): kids mode shows
+   the search box for them too, below the big start picture. */
 body.kids:not(.game-magic) .lookup:has(.scan-row.no-photo),
 body.kids:not(.game-magic) #search-form { display: none; }
 body.kids.game-magic .fields input { font-size: 1.2rem; padding: 14px; }
 body.kids.game-magic #search-button { min-height: 58px; font-size: 1.2rem; }
-/* The steps and kids mode's big photo button are about photos, which Magic cards can't be read from yet. */
-body.game-magic .intro { display: none; }
 
 body.kids { --bar-height: 100px; }
 body.kids .status { font-size: 1.25rem; font-weight: 700; }

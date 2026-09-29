@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Kortpris</title>
-<meta name="description" content="Photograph a Pokémon card and see what it sells for on Cardmarket and TCGplayer.">
+<meta name="description" content="Photograph a Pokémon or Magic card and see what it sells for on Cardmarket and TCGplayer.">
 <meta name="theme-color" content="#EDF0F5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0E141D" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='1' width='22' height='30' rx='3' fill='%23F5C518'/%3E%3Crect x='8' y='4' width='16' height='13' rx='1.5' fill='%23141C28'/%3E%3C/svg%3E">
@@ -19,7 +19,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@500&display=swap" crossorigin>
-<link rel="stylesheet" href="style.css?v=1.56.0">
+<link rel="stylesheet" href="style.css?v=1.57.0">
 </head>
 <body>
 
@@ -102,7 +102,6 @@
 					<button type="button" data-game="pokemon" aria-pressed="true">Pokémon</button>
 					<button type="button" data-game="magic" aria-pressed="false">Magic</button>
 				</div>
-				<p id="game-hint" class="hint" data-text="magicHint" hidden></p>
 			</div>
 			<div id="scan-row" class="scan-row no-photo">
 				<img id="photo-thumb" class="photo-thumb" data-alt="yourPhoto" alt="" hidden>
@@ -443,32 +442,34 @@
 	<button type="button" id="camera-phone" class="camera-phone" data-text="cameraUsePhone"></button>
 </div>
 
-<!-- Our own files (these, and style.css at the top) end in ?v=1.56.0. Change it on every
+<!-- Our own files (these, and style.css at the top) end in ?v=1.57.0. Change it on every
      release (see README), so phones never mix new and old files from their cache. -->
 <!-- Tesseract reads text out of pictures (OCR = optical character recognition). -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js" crossorigin="anonymous"></script>
-<script src="strings.js?v=1.56.0"></script>
-<script src="pokemon-names.js?v=1.56.0"></script>
-<script src="card-names.js?v=1.56.0"></script>
-<script src="set-codes.js?v=1.56.0"></script>
-<script src="storage.js?v=1.56.0"></script>
-<script src="currency.js?v=1.56.0"></script>
-<script src="firebase-config.js?v=1.56.0"></script>
-<script src="password.js?v=1.56.0"></script>
-<script src="account.js?v=1.56.0"></script>
-<script src="speech.js?v=1.56.0"></script>
-<script src="card-finder.js?v=1.56.0"></script>
-<script src="sparkle.js?v=1.56.0"></script>
-<script src="reader.js?v=1.56.0"></script>
-<script src="card-ids.js?v=1.56.0"></script>
-<script src="cards.js?v=1.56.0"></script>
-<script src="magic.js?v=1.56.0"></script>
-<script src="matcher.js?v=1.56.0"></script>
-<script src="learned.js?v=1.56.0"></script>
-<script src="camera.js?v=1.56.0"></script>
-<script src="collection.js?v=1.56.0"></script>
-<script src="graded.js?v=1.56.0"></script>
-<script src="claude.js?v=1.56.0"></script>
-<script src="app.js?v=1.56.0"></script>
+<script src="strings.js?v=1.57.0"></script>
+<script src="pokemon-names.js?v=1.57.0"></script>
+<script src="card-names.js?v=1.57.0"></script>
+<script src="set-codes.js?v=1.57.0"></script>
+<script src="storage.js?v=1.57.0"></script>
+<script src="currency.js?v=1.57.0"></script>
+<script src="firebase-config.js?v=1.57.0"></script>
+<script src="password.js?v=1.57.0"></script>
+<script src="account.js?v=1.57.0"></script>
+<script src="speech.js?v=1.57.0"></script>
+<script src="card-finder.js?v=1.57.0"></script>
+<script src="sparkle.js?v=1.57.0"></script>
+<script src="reader.js?v=1.57.0"></script>
+<script src="card-ids.js?v=1.57.0"></script>
+<script src="cards.js?v=1.57.0"></script>
+<script src="magic.js?v=1.57.0"></script>
+<script src="matcher.js?v=1.57.0"></script>
+<script src="magic-sets.js?v=1.57.0"></script>
+<script src="magic-reader.js?v=1.57.0"></script>
+<script src="learned.js?v=1.57.0"></script>
+<script src="camera.js?v=1.57.0"></script>
+<script src="collection.js?v=1.57.0"></script>
+<script src="graded.js?v=1.57.0"></script>
+<script src="claude.js?v=1.57.0"></script>
+<script src="app.js?v=1.57.0"></script>
 </body>
 </html>

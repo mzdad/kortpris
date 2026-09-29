@@ -273,15 +273,26 @@ async function cardsOfSet(setId) {
 }
 
 // The cards with these ids ("lc-72"), fresh from the database, in the same order. An id the
-// database doesn't have is left out.
+// database doesn't have is left out. Magic cards' ids ("mtg:...") are asked of Scryfall (see
+// findMagicCardsById in magic.js).
 async function findCardsById(ids) {
-	const cards = [];
-	for (let start = 0; start < ids.length; start += IDS_PER_QUESTION) {
-		const some = ids.slice(start, start + IDS_PER_QUESTION);
+	const pokemonIds = ids.filter((id) => !isMagicId(id));
+	const magicIds = ids.filter(isMagicId);
+	const cards = magicIds.length > 0 ? await findMagicCardsById(magicIds) : [];
+	for (let start = 0; start < pokemonIds.length; start += IDS_PER_QUESTION) {
+		const some = pokemonIds.slice(start, start + IDS_PER_QUESTION);
 		// Two ids at least (see cardsNumbered).
 		cards.push(...await cardsWhere("id: " + JSON.stringify("eq:" + [...some, some[0]].join("|"))));
 	}
 	return ids.map((id) => cards.find((card) => card.id === id)).filter(Boolean);
+}
+
+// Magic: The Gathering cards' ids start with this (see magic.js), so a card's id alone says which game
+// it is from.
+const MAGIC_ID_START = "mtg:";
+
+function isMagicId(id) {
+	return String(id).startsWith(MAGIC_ID_START);
 }
 
 // The ids TCGdex knows these cards by, for ids from the old database, pokemontcg.io ("base6-86"

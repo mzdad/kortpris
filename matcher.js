@@ -80,8 +80,10 @@ const REPRINT_CORNER_GAP = 1.3;
 // cardBox is where the card is in the photo, when card-finder.js found it;
 // without it, the card's place is estimated from its text. onProgress(done, total) is told
 // after each candidate's picture: with a few hundred of them, this takes a while.
-async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = () => {}) {
-	const photoGrids = photoArtworkGrids(photo, textArea, cardBox);
+// wideSearch: see photoArtworkGrids. Magic cards are compared that way: on a white-bordered one,
+// the card's box is often found just inside its white border (see lookAtMagicPhoto in magic-reader.js).
+async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = () => {}, wideSearch = false) {
+	const photoGrids = photoArtworkGrids(photo, textArea, cardBox, wideSearch);
 
 	// Each stamp corner of the photo, also a little shifted (see STAMP_CORNERS).
 	const photoCorners = cardBox ? STAMP_CORNERS.map((corner) => cornerGridsOfPhoto(photo, cardBox, corner)) : null;
@@ -91,7 +93,9 @@ async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = (
 		let distance = Infinity;   // a picture that doesn't load goes last
 		let corners = null;
 		try {
-			const picture = await loadPicture(card.images && card.images.small);
+			// A Magic card's smallest picture (146 pixels wide) is plenty for the blurry thumbnail, and a
+			// tenth of the download: a card can have dozens of printings to compare.
+			const picture = await loadPicture(card.images && (card.images.thumb || card.images.small));
 			const wholeCard = { x0: 0, y0: 0, x1: picture.width, y1: picture.height };
 			distance = closestGridDistance(photoGrids, colourGrid(picture, artworkOf(wholeCard)));
 			if (photoCorners) corners = cornerDistance(photoCorners, picture, wholeCard);

@@ -1,7 +1,7 @@
 {
 	"name": "Kortpris",
 	"short_name": "Kortpris",
-	"description": "Photograph a Pokémon card and see what it sells for.",
+	"description": "Photograph a Pokémon or Magic card and see what it sells for.",
 	"start_url": "./",
 	"scope": "./",
 	"display": "standalone",
