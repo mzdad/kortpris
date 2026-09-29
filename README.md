@@ -155,11 +155,14 @@ copyright line at the bottom (`readMagicYear`, version 1.59.0): Fourth Edition p
 Coast", Summer Magic "Illus. (c) 1994 Anson Maddocks", Revised no year, and later cards a range ("1993-1999"),
 of which the last year counts. Four ways of reading it are tried until two agree, and among printings
 that look alike, the ones from that year go first (`pickMagicCard`); the others follow, so a misread year
-never hides the right card. Learned cards work for Magic cards too: tap the right one in the list, and the
+never hides the right card. A Pokémon card photographed with Magic picked is spotted by its yellow border
+(`hasPokemonBorder`, from `findYellowCard`) before anything is read, and the status says to pick Pokémon:
+read as a Magic card, it would only be given a made-up name. Learned cards work for Magic cards too: tap the
+right one in the list, and the
 next photo of it opens at once. Tested with `dev_magic_photos_test.html` on 32 real photos (29 cards
 from 1994 to 2018, 16 photographed sideways, 4 foils): turned right 32, names read 28, numbers read 10
 of the 17 that print one, the right card first 27, opened by itself 20 - all right, none wrong - and 7
-years read, all right. Still hard: a foil and its normal copy, the faintest names on old white cards
+years read, all right; none of the Magic photos taken for a Pokémon card, and 37 of the 46 Pokémon photos told apart. Still hard: a foil and its normal copy, the faintest names on old white cards
 (Kismet, Kjeldoran Knight), Unlimited and Beta against Revised (only their borders differ), and glare.
 
 **The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed

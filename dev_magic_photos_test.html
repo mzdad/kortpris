@@ -33,19 +33,19 @@ listed with the right answers in <code>dev-local/magic-photos.json</code>. It as
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.59.0"></script>
-<script src="card-names.js?v=1.59.0"></script>
-<script src="set-codes.js?v=1.59.0"></script>
-<script src="card-finder.js?v=1.59.0"></script>
-<script src="sparkle.js?v=1.59.0"></script>
-<script src="reader.js?v=1.59.0"></script>
-<script src="storage.js?v=1.59.0"></script>
-<script src="card-ids.js?v=1.59.0"></script>
-<script src="cards.js?v=1.59.0"></script>
-<script src="matcher.js?v=1.59.0"></script>
-<script src="magic.js?v=1.59.0"></script>
-<script src="magic-sets.js?v=1.59.0"></script>
-<script src="magic-reader.js?v=1.59.0"></script>
+<script src="pokemon-names.js?v=1.60.0"></script>
+<script src="card-names.js?v=1.60.0"></script>
+<script src="set-codes.js?v=1.60.0"></script>
+<script src="card-finder.js?v=1.60.0"></script>
+<script src="sparkle.js?v=1.60.0"></script>
+<script src="reader.js?v=1.60.0"></script>
+<script src="storage.js?v=1.60.0"></script>
+<script src="card-ids.js?v=1.60.0"></script>
+<script src="cards.js?v=1.60.0"></script>
+<script src="matcher.js?v=1.60.0"></script>
+<script src="magic.js?v=1.60.0"></script>
+<script src="magic-sets.js?v=1.60.0"></script>
+<script src="magic-reader.js?v=1.60.0"></script>
 <script>
 "use strict";
 
@@ -66,7 +66,7 @@ async function runAllPhotos() {
 	// ?only=_007,_021 runs just the photos whose file names contain one of those.
 	const only = new URLSearchParams(location.search).get("only");
 	if (only) photos = photos.filter((photo) => only.split(",").some((part) => photo.photo.includes(part)));
-	const scores = { total: 0, turnedRight: 0, name: 0, corner: 0, cornerPrinted: 0, found: 0, openedRight: 0, openedWrong: 0, yearRight: 0, yearWrong: 0 };
+	const scores = { total: 0, turnedRight: 0, name: 0, corner: 0, cornerPrinted: 0, found: 0, openedRight: 0, openedWrong: 0, yearRight: 0, yearWrong: 0, takenForPokemon: 0 };
 	let totalSeconds = 0;
 	for (const photo of photos) {
 		const file = await fetch("dev-local/" + photo.photo, { cache: "no-store" }).then((response) => response.blob());
@@ -81,6 +81,10 @@ async function runAllPhotos() {
 		try {
 			// The same steps as the app (scanMagicPhoto and searchForCard in app.js), without the screen.
 			const seen = await lookAtMagicPhoto(file);
+			if (seen.pokemonCard) {
+				scores.takenForPokemon++;
+				details.push("taken for a Pokémon card (WRONG)");
+			}
 			reading = await readMagicPhoto(seen);
 			details.push("turns " + seen.turns + (Boolean(seen.turns) === photo.turned ? "" : " (WRONG)")
 				+ ", card found by " + (reading.cardBox ? reading.cardBox.foundBy : "nothing"));
@@ -127,16 +131,40 @@ async function runAllPhotos() {
 		addRow(file, photo, reading, nameOk, printsCorner ? cornerOk : null, foundAt, seconds, details.join("\n"));
 		summary.textContent = "Running… " + scores.total + " of " + photos.length;
 	}
+	// The other way round: Pokémon photos are told apart by their yellow border (nothing is read).
+	const pokemon = await countPokemonPhotos();
 	const line = "Turned right " + scores.turnedRight + "/" + scores.total
 		+ " · name read " + scores.name + "/" + scores.total
 		+ " · number read " + scores.corner + "/" + scores.cornerPrinted
 		+ " · right card shown first " + scores.found + "/" + scores.total
 		+ " · opened by itself " + scores.openedRight + " right, " + scores.openedWrong + " wrong"
-			+ " · year read " + scores.yearRight + " right, " + scores.yearWrong + " wrong"
+		+ " · year read " + scores.yearRight + " right, " + scores.yearWrong + " wrong"
+		+ " · taken for Pokémon " + scores.takenForPokemon + " (should be 0)"
+		+ (pokemon ? " · Pokémon photos told apart " + pokemon.told + "/" + pokemon.total : "")
 		+ " · " + (totalSeconds / scores.total).toFixed(1) + " s per photo";
 	summary.textContent = line;
 	console.log("MAGIC PHOTO TEST: " + line);
 	window.testScores = scores;   // lets a script read the result
+}
+
+// How many of the Pokémon photos in dev-local/real-photos.json (46 in version 1.60.0) lookAtMagicPhoto takes
+// for a Pokémon card: the ones with a yellow border. null when the list isn't there.
+async function countPokemonPhotos() {
+	let list;
+	try {
+		list = await fetch("dev-local/real-photos.json", { cache: "no-store" }).then((response) => response.json());
+	} catch (error) {
+		return null;
+	}
+	if (new URLSearchParams(location.search).get("only")) return null;
+	let told = 0;
+	for (const entry of list) {
+		const blob = await fetch("dev-local/" + entry.file, { cache: "no-store" }).then((response) => response.blob());
+		const seen = await lookAtMagicPhoto(blob);
+		if (seen.pokemonCard) told++;
+		seen.original.close();
+	}
+	return { told: told, total: list.length };
 }
 
 function addRow(file, photo, reading, nameOk, cornerOk, foundAt, seconds, details) {

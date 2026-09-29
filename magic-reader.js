@@ -115,7 +115,8 @@ let magicNamesPromise = null;
 
 // Where the card is in the photo, before any text is read: what lookAtPhoto in reader.js gives for a
 // Pokémon card - { original, photo, framed, cardBox, doubtfulBox } - plus turns: how many quarter
-// turns clockwise the photo was given, so that the card stands upright in it (0 or 1). A card lying
+// turns clockwise the photo was given, so that the card stands upright in it (0 or 1), and pokemonCard:
+// true when the photo shows a Pokémon card (see hasPokemonBorder). A card lying
 // sideways is found in the photo turned: then it is the biggest card-shaped box, where upright only a
 // part of it has a card's shape (its picture, or its text box). frame: as for readCardPhoto.
 async function lookAtMagicPhoto(imageFile, frame = null) {
@@ -125,7 +126,7 @@ async function lookAtMagicPhoto(imageFile, frame = null) {
 	// In the app's own camera, the card is held upright in the white frame.
 	if (framed) {
 		const found = findCardByShape(photo);
-		return { original, photo, framed, cardBox: found && fitsFrame(found, framed) ? found : framed, doubtfulBox: null, turns: 0 };
+		return { original, photo, framed, cardBox: found && fitsFrame(found, framed) ? found : framed, doubtfulBox: null, turns: 0, pokemonCard: hasPokemonBorder(photo) };
 	}
 	const upright = findCardByShape(photo) || wholePhotoCard(photo);
 	const turnedPhoto = turnedPicture(photo, 1);
@@ -133,13 +134,23 @@ async function lookAtMagicPhoto(imageFile, frame = null) {
 	if (sideways && boxArea(sideways) > boxArea(upright)) {
 		const turnedOriginal = await createImageBitmap(turnedPicture(original, 1));
 		original.close();
-		return { original: turnedOriginal, photo: turnedPhoto, framed: null, cardBox: sideways, doubtfulBox: null, turns: 1 };
+		return { original: turnedOriginal, photo: turnedPhoto, framed: null, cardBox: sideways, doubtfulBox: null, turns: 1, pokemonCard: hasPokemonBorder(turnedPhoto) };
 	}
 	// A box that may only be the card's (see MIN_DOUBTFUL_SHAPE_SCORE) is taken all the same: the name
 	// read where the box says it is printed checks it (see readMagicPhoto). Without any, the card may
 	// fill the photo, or reach past its edge.
 	const cardBox = upright || findCardAtPhotoEdge(photo);
-	return { original, photo, framed: null, cardBox, doubtfulBox: null, turns: 0 };
+	return { original, photo, framed: null, cardBox, doubtfulBox: null, turns: 0, pokemonCard: hasPokemonBorder(photo) || hasPokemonBorder(turnedPhoto) };
+}
+
+// True when the photo shows a card with a yellow border all round (findYellowCard in card-finder.js): most
+// Pokémon cards from 1999 to 2022 have one, and no Magic card does. (Gold-bordered tournament decks are the
+// exception; a Magic card taken for a Pokémon card can still be searched for by typing its name.) A Pokémon
+// card is no Magic card: read as one, it only gets a made-up name - 16 of 74 photos without a Magic card
+// were given a sure one (version 1.57.0). On 46 Pokémon photos this finds 37; on 32 Magic photos and 28
+// pictures with no card, none.
+function hasPokemonBorder(photo) {
+	return findYellowCard(photo) !== null;
 }
 
 function boxArea(box) {

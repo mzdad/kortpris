@@ -5,6 +5,29 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.60.0
+
+- **7.8 A Pokémon card photographed with Magic picked** (you said: "Sure good work, go for 7.8"). Read as
+  a Magic card, a Pokémon card was given a made-up Magic name - 16 of the 74 photos without a Magic card
+  (46 Pokémon photos and 28 pictures with no card at all) got a sure one, like "The Sea Devils" and "Chameleon
+  Blur" - and then the list showed printings that looked nothing like the photo.
+  - Now the photo is checked for a Pokémon card's yellow border, all round the card, before anything is
+    read (`hasPokemonBorder` in `magic-reader.js`, using `findYellowCard`, which the Pokémon reader already uses): in a moment, where reading takes several seconds. Nothing is read or searched; the status says
+    "That looks like a Pokémon card. Tap Pokémon above to read it. (A Magic card? Type its name below.)" - in kids
+    mode "A Pokémon card! Press Pokémon at the top", with an ⚡ and said out loud - in English and Danish.
+  - Measured: it spots 37 of the 46 Pokémon photos, and none of the 32 Magic photos or the 28 pictures with no
+    card (also turned a quarter, for a card photographed sideways). The 9 it misses have no yellow border to
+    find - silver borders, a toploader, a reverse holo's shine. In the test browser: a Pokémon photo with Magic
+    picked gives the message at once and reads nothing, in the grown-up view (English, Danish) and in kids mode.
+    Your 32 Magic photos read as in 1.59.0.
+  - Tried and dropped, for the 9 without a yellow border: (1) that no printing of the name read looks like
+    the photo - random Magic pictures come out as close as 0.88 to a Pokémon photo, where your Terror, a real
+    Magic card that reads badly, is 1.3; (2) that the Pokémon reader finds a real Pokémon name in the strip - it did in 5
+    of the 9, but also in 5 of your 32 Magic photos ("Seel", "Greninja", "Tangela"), by chance. Of the 9, 2
+    still get a made-up sure name (IMG_1974's "Infested Werewolf" and IMG_2022's "Asari Captain"), see 7.10.
+  - Not done: the app doesn't switch to Pokémon itself and read the photo again; it says so, and you press the
+    button.
+
 ## Done in 1.59.0
 
 - **7.6 Magic printings with the same picture, by the year at the bottom** (you said: "i would go 7.6").
@@ -856,8 +879,8 @@ Coast asks fan apps to say they are unofficial, which the page's foot now does.
 |---|---|---|---|
 | 7.5 | **Tell a Magic foil from its normal copy** in the photo, by its rainbow shine, and open it on its foil price. | Your two foil Icy Manipulators come second, behind the normal copy with the same picture. The glitter measure that finds Pokémon reverse holos doesn't tell Magic foils apart (foils 0.8–1.8, normal cards 0.8–3.6): a Magic foil shines in rainbows, not fine glitter. | M |
 | 7.7 | **Faint names on old white Magic cards**, the last two: Kismet and Kjeldoran Knight. | Two of your 32 photos read no name; the name box can be typed in meanwhile. 1.58.0 reads the others (Femeref Knight, Radiant, Archangel), but no way of reading this Tesseract reader has tried gets more than half of these two names: light letters with a shadow, on a bar of the same grey, about 30 pixels tall in a photo cut down by Signal. First try photos from the app's own camera. | S |
-| 7.8 | **A Pokémon card photographed in Magic mode** makes up a Magic name. | Reading 46 Pokémon photos and 28 pictures without a card as Magic cards, 16 of 74 got a sure name ("The Sea Devils", "Chameleon Blur") in 1.57.0 - 18 in 1.58.0. The look check then lists printings that look nothing like the photo. The app could say "this doesn't look like a Magic card" when none of the printings' pictures comes close (0.6 is a match, 1.5 the most) - and a Pokémon card's yellow border tells the two games apart. | S |
 | 7.9 | **Magic printings that differ by border**: Unlimited and Beta (black) against Revised (white), by the border's colour in the photo. | They print no year, so 1.59.0's year doesn't help, and a Beta or Unlimited card is worth far more than a Revised one with the same picture. It needs a photo of each to test: none of your 32 is one. | S |
+| 7.10 | **The card game picked and the card in the photo don't match**, the rest: a Pokémon card with no yellow border in Magic mode, and a Magic card in Pokémon mode. | 1.60.0 catches Pokémon cards with a yellow border (37 of 46 photos). The others (silver borders, a toploader, a reverse holo) still get a made-up name from the Magic reader, 2 of 9 - and a Magic card given to the Pokémon reader isn't checked at all. Two ways of telling them apart were tried and dropped (see 1.60.0). Could also switch the game itself and read the photo again, when the border is sure. | M |
 | 7.4 | **Other card games** with a free database, the same way (Yu-Gi-Oh!, Lorcana). | With a game switch in place, each game is its database, its reading and its texts. | M each |
 
 ## Not planned

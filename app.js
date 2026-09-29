@@ -96,6 +96,7 @@ const KID_STATUS = {
 	magicNoMatch: "kidMagicNotFound",
 	magicReadFailed: "kidNotFound",
 	magicUnsureName: "kidNotFound",
+	magicPokemonCard: "kidPokemonCard",
 	claudeNotACard: "kidNotFound",
 	apiDown: "kidTryLater",
 	apiTooMany: "kidTryLater",
@@ -105,7 +106,7 @@ const KID_STATUS = {
 // ...with a picture, so it can be understood without reading...
 const KID_STATUS_ICONS = {
 	kidIdle: "📷", kidBusy: "🔎", kidFound: "🎉", kidPickOne: "👇", kidNotFound: "🤔", kidTryLater: "⏳",
-	kidMagicIdle: "✏️", kidMagicNotFound: "🤔",
+	kidMagicIdle: "✏️", kidMagicNotFound: "🤔", kidPokemonCard: "⚡",
 };
 // ...and these are also said out loud. (A found card is said with its name and value instead.)
 const KID_SPOKEN = {
@@ -115,6 +116,7 @@ const KID_SPOKEN = {
 	kidTryLater: "sayTryLater",
 	kidMagicIdle: "sayMagicIdle",
 	kidMagicNotFound: "sayMagicNotFound",
+	kidPokemonCard: "sayPokemonCard",
 };
 
 // The text key for each kind of card, the group names in "My cards" (CARD_KINDS in collection.js).
@@ -1437,6 +1439,15 @@ async function scanMagicPhoto(imageFile, frame, scanId) {
 	}
 	if (scanId !== latestScanId) {
 		freeLook(look);
+		return;
+	}
+	// A Pokémon card (found by its yellow border): read as a Magic card, it only makes up a name. So nothing is
+	// read, and the viewer is told which game to pick. (A Magic card mistaken for one can still be typed.)
+	if (look.pokemonCard) {
+		freeLook(look);
+		searchButton.disabled = false;
+		hideProgress();
+		setStatus("magicPokemonCard", {}, "error");
 		return;
 	}
 	setStatus("reading");
