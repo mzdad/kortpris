@@ -650,3 +650,444 @@ function findCardShapesInFrame(picture, frame) {
 	}
 	return found.sort((a, b) => b.weakestSide - a.weakestSide);
 }
+
+// ---------- Straightening a card seen at an angle ----------
+
+// A copy of a quadrilateral of the picture, stretched flat into a picture width x height: the card as it
+// would look photographed straight on. corners: the quadrilateral's corners in the picture, [top-left,
+// top-right, bottom-right, bottom-left], each { x, y }. Only the pixels inside it are read from the picture,
+// so a 12-megapixel photo isn't copied whole. Outside the picture the copy is white.
+function flattenedPicture(picture, corners, width, height) {
+	const around = {
+		x0: Math.max(0, Math.floor(Math.min(...corners.map((c) => c.x)) - 2)),
+		y0: Math.max(0, Math.floor(Math.min(...corners.map((c) => c.y)) - 2)),
+		x1: Math.min(picture.width, Math.ceil(Math.max(...corners.map((c) => c.x)) + 2)),
+		y1: Math.min(picture.height, Math.ceil(Math.max(...corners.map((c) => c.y)) + 2)),
+	};
+	const sourceWidth = around.x1 - around.x0;
+	const sourceHeight = around.y1 - around.y0;
+	const source = document.createElement("canvas");
+	source.width = sourceWidth;
+	source.height = sourceHeight;
+	const sourceContext = source.getContext("2d", { willReadFrequently: true });
+	sourceContext.drawImage(picture, -around.x0, -around.y0);
+	const from = sourceContext.getImageData(0, 0, sourceWidth, sourceHeight).data;
+	const flat = document.createElement("canvas");
+	flat.width = width;
+	flat.height = height;
+	const flatContext = flat.getContext("2d", { willReadFrequently: true });
+	const to = flatContext.createImageData(width, height);
+	// Every pixel of the flat copy is looked up in the picture, where the map says it lies, and blended
+	// from the four pixels around that place.
+	const map = flatToPicture(corners, width, height);
+	const lastX = sourceWidth - 1;
+	const lastY = sourceHeight - 1;
+	let out = 0;
+	for (let v = 0; v < height; v++) {
+		for (let u = 0; u < width; u++) {
+			const scale = map[6] * u + map[7] * v + 1;
+			const x = (map[0] * u + map[1] * v + map[2]) / scale - around.x0;
+			const y = (map[3] * u + map[4] * v + map[5]) / scale - around.y0;
+			if (x >= 0 && y >= 0 && x <= lastX && y <= lastY) {
+				const x0 = Math.min(Math.floor(x), lastX - 1);
+				const y0 = Math.min(Math.floor(y), lastY - 1);
+				const shareX = x - x0;
+				const shareY = y - y0;
+				const at = (y0 * sourceWidth + x0) * 4;
+				const below = sourceWidth * 4;
+				for (let colour = 0; colour < 3; colour++) {
+					const top = from[at + colour] * (1 - shareX) + from[at + 4 + colour] * shareX;
+					const bottom = from[at + below + colour] * (1 - shareX) + from[at + below + 4 + colour] * shareX;
+					to.data[out + colour] = top * (1 - shareY) + bottom * shareY;
+				}
+			} else {
+				to.data[out] = to.data[out + 1] = to.data[out + 2] = 255;
+			}
+			to.data[out + 3] = 255;
+			out += 4;
+		}
+	}
+	flatContext.putImageData(to, 0, 0);
+	return flat;
+}
+
+// The perspective map from a flat picture width x height to a quadrilateral of the photo: 8 numbers a to h,
+// where the flat point (u, v) is at x = (a*u + b*v + c) / (g*u + h*v + 1) and y = (d*u + e*v + f) / (g*u + h*v + 1)
+// in the photo. The corners of the flat picture go to the four corners given (top-left, top-right,
+// bottom-right, bottom-left); the eight numbers are found by solving the eight equations that says.
+function flatToPicture(corners, width, height) {
+	const flatCorners = [[0, 0], [width, 0], [width, height], [0, height]];
+	const rows = [];
+	flatCorners.forEach(([u, v], index) => {
+		const { x, y } = corners[index];
+		rows.push([u, v, 1, 0, 0, 0, -u * x, -v * x, x]);
+		rows.push([0, 0, 0, u, v, 1, -u * y, -v * y, y]);
+	});
+	// Gaussian elimination: each row in turn is made the only one with a number in its column.
+	for (let column = 0; column < 8; column++) {
+		let pivot = column;
+		for (let row = column + 1; row < 8; row++) {
+			if (Math.abs(rows[row][column]) > Math.abs(rows[pivot][column])) pivot = row;
+		}
+		[rows[column], rows[pivot]] = [rows[pivot], rows[column]];
+		for (let row = 0; row < 8; row++) {
+			if (row === column) continue;
+			const factor = rows[row][column] / rows[column][column];
+			for (let k = column; k < 9; k++) rows[row][k] -= factor * rows[column][k];
+		}
+	}
+	return rows.map((row, index) => row[8] / row[index]);
+}
+
+// A card photographed at an angle - in a binder pocket, say, from below - has slanted sides, and its
+// edge against a white pocket or a grey table is faint: findCardByShape wants straight, sharp edges. This
+// looks for four lines the way it does (long straight edges, found by a Hough transform), but:
+// - the lines may lean more (SLANT_MAX_LEAN), each side its own way, so the card is a quadrilateral;
+// - an edge counts by how much brighter the one side is than the other, added up along the whole line
+//   (not by how many pixels pass a fixed test): a faint edge that keeps the same sign along its length
+//   adds up to a lot, where the texture around it (a pocket's dots, a cloth) adds up and cancels;
+// - the four sides of a card all change the same way: the card is darker than its surroundings all round, or
+//   lighter all round, so the left and top edges change one way and the right and bottom edges the other.
+// Only a fallback: it runs when reading the photo as it is found nothing (see readCardPhoto).
+const SLANT_MAX_LEAN = 12;
+const SLANT_LEAN_STEP = 0.5;
+const SLANT_LINES_TRIED = 26;
+// A pixel votes only when the picture changes at least this much across it (grey levels over 4 pixels).
+const SLANT_MIN_CHANGE = 6;
+// Sides of a card seen at an angle may differ this much in length (longest / shortest): 1 is a rectangle.
+const SLANT_MAX_SIDE_RATIO = 1.3;
+// Width / height, in the photo, of a card seen at an angle: 63 / 88 seen from a little above or below.
+const SLANT_SHAPE_MIN = 0.6;
+const SLANT_SHAPE_MAX = 0.86;
+// ...most likely this, and a box this much off (in the same units) is half as likely.
+const SLANT_SHAPE_LIKELY = 0.72;
+const SLANT_SHAPE_SPREAD = 0.12;
+// A box with a smaller one inside it that scores at least this share as well, and whose border is at least this quiet
+// (see ringQuiet), counts only this much of its score: it is a case round the card.
+const SLANT_INNER_AS_GOOD = 0.5;
+const SLANT_INNER_MIN_RING = 0.4;
+const SLANT_OUTER_PENALTY = 0.4;
+// The least change across a side (grey levels between the bands beyond and inside it, the middle of them along it).
+const SLANT_MIN_SIDE_STRENGTH = 12;
+// The most candidates given, and how alike two boxes may be (share of their joint area they share) to count as the same.
+const SLANT_MOST_CANDIDATES = 3;
+// How many boxes have their sides refined (see refinedSlantedCard)...
+const SLANT_REFINED = 12;
+// ...each side moved up to this many map pixels, and its lean changed up to this many degrees, to where the picture changes most.
+const SLANT_REFINE_SHIFT = 2;
+const SLANT_REFINE_LEAN = 1;
+const SLANT_SAME_CARD = 0.8;
+
+// Up to SLANT_MOST_CANDIDATES boxes that may be the card, best first, each { corners, score }: corners are
+// [top-left, top-right, bottom-right, bottom-left] in the photo, each { x, y }.
+function findSlantedCards(photo) {
+	const map = slantMap(photo);
+	const lefts = slantLines(map, true);
+	const tops = slantLines(map, false);
+	const found = [];
+	for (const left of lefts) {
+		for (const right of lefts) {
+			// Left and right edges change the brightness opposite ways.
+			if (right.offset <= left.offset || Math.sign(right.sum) === Math.sign(left.sum)) continue;
+			for (const top of tops) {
+				if (Math.sign(top.sum) !== Math.sign(left.sum)) continue;
+				for (const bottom of tops) {
+					if (bottom.offset <= top.offset || Math.sign(bottom.sum) === Math.sign(top.sum)) continue;
+					const corners = [slantCorner(left, top, map), slantCorner(right, top, map), slantCorner(right, bottom, map), slantCorner(left, bottom, map)];
+					const candidate = scoreSlantedCard(map, corners, [left, right, top, bottom]);
+					if (candidate) found.push(candidate);
+				}
+			}
+		}
+	}
+	found.sort((a, b) => b.score - a.score);
+	// The best few different boxes have their sides moved to where each edge is clearest (the lines found are
+	// a pixel or so off, and a degree or so in their lean), and are scored again.
+	const distinct = [];
+	for (const candidate of found) {
+		if (distinct.length === SLANT_REFINED) break;
+		if (distinct.some((other) => quadsOverlap(other.corners, candidate.corners) >= SLANT_SAME_CARD)) continue;
+		distinct.push(candidate);
+	}
+	const refined = distinct.map((candidate) => refinedSlantedCard(map, candidate) || candidate);
+	// A card has cases around it - a toploader, a sleeve, a binder's pocket - whose edges are as clear, and which
+	// are the same shape. When a smaller box lies inside one and is nearly as good, the smaller is the card.
+	for (const candidate of refined) {
+		const inner = refined.some((other) => other !== candidate && boxInside(other.corners, candidate.corners)
+			&& other.score >= candidate.score * SLANT_INNER_AS_GOOD && other.ring >= SLANT_INNER_MIN_RING);
+		candidate.rank = inner ? candidate.score * SLANT_OUTER_PENALTY : candidate.score;
+	}
+	refined.sort((a, b) => b.rank - a.rank);
+	const chosen = [];
+	for (const candidate of refined) {
+		if (chosen.length === SLANT_MOST_CANDIDATES) break;
+		if (chosen.some((other) => quadsOverlap(other.corners, candidate.corners) >= SLANT_SAME_CARD)) continue;
+		chosen.push(candidate);
+	}
+	// Back from the map to the photo.
+	const scale = photo.width / map.width;
+	return chosen.map((candidate) => ({ score: candidate.score, strengths: candidate.strengths, ring: candidate.ring, shape: candidate.shape, corners: candidate.corners.map((corner) => ({ x: corner.x * scale, y: corner.y * scale })) }));
+}
+
+function slantMap(photo) {
+	// The picture's brightness at SHAPE_FINDER_WIDTH wide, and how much it changes across (gx) and down (gy),
+	// over 4 pixels, with its sign.
+	const width = SHAPE_FINDER_WIDTH;
+	const height = Math.round(photo.height * width / photo.width);
+	const small = document.createElement("canvas");
+	small.width = width;
+	small.height = height;
+	const ctx = small.getContext("2d", { willReadFrequently: true });
+	ctx.imageSmoothingQuality = "high";
+	ctx.drawImage(photo, 0, 0, width, height);
+	const pixels = ctx.getImageData(0, 0, width, height).data;
+	const grey = new Float32Array(width * height);
+	for (let i = 0; i < grey.length; i++) grey[i] = 0.299 * pixels[i * 4] + 0.587 * pixels[i * 4 + 1] + 0.114 * pixels[i * 4 + 2];
+	const gx = new Float32Array(width * height);
+	const gy = new Float32Array(width * height);
+	for (let y = 2; y < height - 2; y++) {
+		for (let x = 2; x < width - 2; x++) {
+			gx[y * width + x] = grey[y * width + x + 2] - grey[y * width + x - 2];
+			gy[y * width + x] = grey[(y + 2) * width + x] - grey[(y - 2) * width + x];
+		}
+	}
+	return { width, height, grey, gx, gy };
+}
+
+// The most promising lines of one direction, each { isUpright, lean, slope, offset, sum }: as straightLines, but
+// a line's sum is the changes across it added up with their signs (positive: brighter to its right or
+// below, negative: darker), so a line of faint edges that all change the same way beats one of short strong ones.
+function slantLines(map, isUpright, count = SLANT_LINES_TRIED) {
+	const changes = isUpright ? map.gx : map.gy;
+	const across = isUpright ? map.width : map.height;
+	const leans = [];
+	for (let lean = -SLANT_MAX_LEAN; lean <= SLANT_MAX_LEAN + 1e-9; lean += SLANT_LEAN_STEP) leans.push(lean);
+	const slopes = leans.map((lean) => Math.tan(lean * Math.PI / 180));
+	const sums = leans.map(() => new Float32Array(across));
+	for (let y = 0; y < map.height; y++) {
+		for (let x = 0; x < map.width; x++) {
+			const change = changes[y * map.width + x];
+			if (Math.abs(change) < SLANT_MIN_CHANGE) continue;
+			const position = isUpright ? x : y;
+			const along = isUpright ? y - map.height / 2 : x - map.width / 2;
+			for (let k = 0; k < leans.length; k++) {
+				const offset = Math.round(position - along * slopes[k]);
+				if (offset >= 0 && offset < across) sums[k][offset] += change;
+			}
+		}
+	}
+	const all = [];
+	for (let k = 0; k < leans.length; k++) {
+		for (let offset = 1; offset < across - 1; offset++) {
+			// The neighbouring offsets are added, as a blurred edge or a slightly different lean spreads over them.
+			const sum = sums[k][offset - 1] + sums[k][offset] + sums[k][offset + 1];
+			all.push({ isUpright: isUpright, lean: leans[k], slope: slopes[k], offset: offset, sum: sum });
+		}
+	}
+	all.sort((a, b) => Math.abs(b.sum) - Math.abs(a.sum));
+	const chosen = [];
+	for (const line of all) {
+		if (chosen.length === count) break;
+		if (line.offset < across * PHOTO_EDGE_MARGIN || line.offset > across * (1 - PHOTO_EDGE_MARGIN)) continue;
+		if (chosen.some((other) => Math.abs(other.offset - line.offset) <= 5 && Math.abs(other.lean - line.lean) <= 2.5)) continue;
+		chosen.push(line);
+	}
+	return chosen;
+}
+
+function slantCorner(upright, crossing, map) {
+	// Where an upright line meets a crossing one.
+	const y = (crossing.offset + (upright.offset - (map.height / 2) * upright.slope - map.width / 2) * crossing.slope) / (1 - upright.slope * crossing.slope);
+	const x = upright.offset + (y - map.height / 2) * upright.slope;
+	return { x: x, y: y };
+}
+
+// { score, corners } for four lines that may be a card's sides, or null when they can't be.
+function scoreSlantedCard(map, corners, lines) {
+	const [topLeft, topRight, bottomRight, bottomLeft] = corners;
+	const top = topRight.x - topLeft.x;
+	const bottom = bottomRight.x - bottomLeft.x;
+	const left = bottomLeft.y - topLeft.y;
+	const right = bottomRight.y - topRight.y;
+	if (Math.min(top, bottom, left, right) <= 0) return null;
+	if (Math.max(top, bottom) / Math.min(top, bottom) > SLANT_MAX_SIDE_RATIO) return null;
+	if (Math.max(left, right) / Math.min(left, right) > SLANT_MAX_SIDE_RATIO) return null;
+	const height = (left + right) / 2;
+	if (height < map.height * MIN_CARD_HEIGHT_SHARE) return null;
+	const shape = (top + bottom) / 2 / height;
+	if (shape < SLANT_SHAPE_MIN || shape > SLANT_SHAPE_MAX) return null;
+	// Every corner inside the photo, give or take a little.
+	for (const corner of corners) {
+		if (corner.x < -map.width * 0.03 || corner.x > map.width * 1.03 || corner.y < -map.height * 0.03 || corner.y > map.height * 1.03) return null;
+	}
+	const [leftLine, rightLine, topLine, bottomLine] = lines;
+	const strengths = [
+		sideStrength(map, leftLine, topLeft.y, bottomLeft.y),
+		sideStrength(map, rightLine, topRight.y, bottomRight.y),
+		sideStrength(map, topLine, topLeft.x, topRight.x),
+		sideStrength(map, bottomLine, bottomLeft.x, bottomRight.x),
+	];
+	const weakest = Math.min(...strengths);
+	if (weakest < SLANT_MIN_SIDE_STRENGTH) return null;
+	// Of boxes with edges as clear, the one nearest a card's shape is likelier the card: a text box inside it, or
+	// a toploader round it, is seldom the same shape...
+	const offShape = (shape - SLANT_SHAPE_LIKELY) / SLANT_SHAPE_SPREAD;
+	// ...and the one with a border of one colour just inside its edges: a card's own. Inside the edge of a text
+	// box or the artwork there is print or a picture.
+	const ring = ringQuiet(map, corners);
+	return { score: weakest * ring / (1 + offShape * offShape), corners: corners, lines: lines, strengths: strengths, shape: shape, ring: ring };
+}
+
+// How even the band just inside the four sides is, from 0 (print or a picture there) to 1 (one colour, as a
+// card's border is). Each side is sampled along its length at SLANT_RING_DEPTHS (shares of the box's width) in
+// from the edge; the brightness's spread along the side, on average, says how even it is.
+const SLANT_RING_DEPTHS = [0.015, 0.025, 0.035];
+// A spread of this many grey levels halves the quietness.
+const SLANT_RING_SPREAD = 18;
+
+function ringQuiet(map, corners) {
+	const width = (Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) + Math.hypot(corners[2].x - corners[3].x, corners[2].y - corners[3].y)) / 2;
+	let total = 0;
+	let count = 0;
+	for (let side = 0; side < 4; side++) {
+		const from = corners[side];
+		const to = corners[(side + 1) % 4];
+		const length = Math.hypot(to.x - from.x, to.y - from.y);
+		// The direction along the side, and the one pointing into the box (the box's corners run clockwise).
+		const alongX = (to.x - from.x) / length;
+		const alongY = (to.y - from.y) / length;
+		const inX = -alongY;
+		const inY = alongX;
+		for (const depth of SLANT_RING_DEPTHS) {
+			const values = [];
+			// The middle of the side: its ends are the corners, rounded and lit differently.
+			for (let along = length * 0.15; along <= length * 0.85; along += 2) {
+				const x = Math.round(from.x + alongX * along + inX * depth * width);
+				const y = Math.round(from.y + alongY * along + inY * depth * width);
+				if (x < 0 || y < 0 || x >= map.width || y >= map.height) continue;
+				values.push(map.grey[y * map.width + x]);
+			}
+			if (values.length < 5) continue;
+			const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+			total += Math.sqrt(values.reduce((sum, value) => sum + (value - mean) * (value - mean), 0) / values.length);
+			count++;
+		}
+	}
+	if (count === 0) return 0;
+	const spread = total / count / SLANT_RING_SPREAD;
+	return 1 / (1 + spread * spread);
+}
+
+// The same box with each side moved to where the picture changes most across it along its length, then scored
+// again; null when it no longer is a card's shape.
+function refinedSlantedCard(map, candidate) {
+	const [topLeft, topRight, bottomRight, bottomLeft] = candidate.corners;
+	const [left, right, top, bottom] = candidate.lines;
+	const lines = [
+		bestSlantedLine(map, left, topLeft.y, bottomLeft.y),
+		bestSlantedLine(map, right, topRight.y, bottomRight.y),
+		bestSlantedLine(map, top, topLeft.x, topRight.x),
+		bestSlantedLine(map, bottom, bottomLeft.x, bottomRight.x),
+	];
+	const corners = [slantCorner(lines[0], lines[2], map), slantCorner(lines[1], lines[2], map), slantCorner(lines[1], lines[3], map), slantCorner(lines[0], lines[3], map)];
+	return scoreSlantedCard(map, corners, lines);
+}
+
+function bestSlantedLine(map, line, from, to) {
+	// Among the lines near this one, the one with the most change across it, the same way, along from..to.
+	const changes = line.isUpright ? map.gx : map.gy;
+	const length = line.isUpright ? map.height : map.width;
+	const across = line.isUpright ? map.width : map.height;
+	const start = Math.max(2, Math.round(Math.min(from, to)));
+	const end = Math.min(length - 3, Math.round(Math.max(from, to)));
+	const sign = Math.sign(line.sum);
+	let best = line;
+	let bestTotal = -Infinity;
+	for (let leanChange = -SLANT_REFINE_LEAN; leanChange <= SLANT_REFINE_LEAN + 1e-9; leanChange += SLANT_LEAN_STEP) {
+		const lean = line.lean + leanChange;
+		const slope = Math.tan(lean * Math.PI / 180);
+		for (let shift = -SLANT_REFINE_SHIFT; shift <= SLANT_REFINE_SHIFT; shift++) {
+			const offset = line.offset + shift;
+			let total = 0;
+			for (let along = start; along <= end; along++) {
+				const at = Math.round(offset + (along - length / 2) * slope);
+				if (at < 2 || at >= across - 2) continue;
+				const change = sign * changes[line.isUpright ? along * map.width + at : at * map.width + along];
+				// A very strong change (a line of print) counts no more than a clear edge.
+				total += Math.min(change, SLANT_REFINE_CAP);
+			}
+			if (total > bestTotal) {
+				bestTotal = total;
+				best = { isUpright: line.isUpright, lean: lean, slope: slope, offset: offset, sum: line.sum };
+			}
+		}
+	}
+	return best;
+}
+const SLANT_REFINE_CAP = 60;
+
+function sideStrength(map, line, from, to) {
+	// How much brighter (or darker, as the line's own sign says) the band just beyond a side is than the band
+	// just inside it, the same way all along it: the middle of the differences measured at places along the
+	// side from `from` to `to`. Two bands of SLANT_BAND pixels, not just the pixels either side of the edge: a
+	// thin line of print, dark against light on both its sides, then comes to nothing, where a card's edge, with
+	// the table on one side and the border on the other, keeps its whole step. Low where the side is broken up
+	// or the picture changes the other way.
+	const isUpright = line.isUpright;
+	const length = isUpright ? map.height : map.width;
+	const across = isUpright ? map.width : map.height;
+	const sign = Math.sign(line.sum);
+	const seen = [];
+	const start = Math.max(0, Math.round(Math.min(from, to)));
+	const end = Math.min(length - 1, Math.round(Math.max(from, to)));
+	for (let along = start; along <= end; along += 2) {
+		const position = line.offset + (along - length / 2) * line.slope;
+		const before = bandMean(map, isUpright, along, position - SLANT_BAND_FAR, position - SLANT_BAND_NEAR, across);
+		const after = bandMean(map, isUpright, along, position + SLANT_BAND_NEAR, position + SLANT_BAND_FAR, across);
+		if (before === null || after === null) continue;
+		seen.push(sign * (after - before));
+	}
+	if (seen.length === 0) return 0;
+	seen.sort((a, b) => a - b);
+	return seen[Math.floor(seen.length / 2)];
+}
+
+// The bands each side of an edge are measured over: from this many pixels from the line to this many.
+const SLANT_BAND_NEAR = 2;
+const SLANT_BAND_FAR = 7;
+
+function bandMean(map, isUpright, along, from, to, across) {
+	// The mean brightness of the pixels of one row (or column) from `from` to `to` across it, or null when it is out of the picture.
+	const first = Math.round(from);
+	const last = Math.round(to);
+	if (first < 0 || last >= across || along < 0 || along >= (isUpright ? map.height : map.width)) return null;
+	let sum = 0;
+	for (let at = first; at <= last; at++) sum += map.grey[isUpright ? along * map.width + at : at * map.width + along];
+	return sum / (last - first + 1);
+}
+
+function boxInside(inner, outer) {
+	// The inner quadrilateral's bounding box lies within the outer's (a little to spare).
+	const box = (corners) => ({
+		x0: Math.min(...corners.map((c) => c.x)), x1: Math.max(...corners.map((c) => c.x)),
+		y0: Math.min(...corners.map((c) => c.y)), y1: Math.max(...corners.map((c) => c.y)),
+	});
+	const small = box(inner);
+	const big = box(outer);
+	const slack = (big.x1 - big.x0) * 0.02;
+	return small.x0 >= big.x0 - slack && small.x1 <= big.x1 + slack && small.y0 >= big.y0 - slack && small.y1 <= big.y1 + slack
+		&& (small.x1 - small.x0) * (small.y1 - small.y0) < (big.x1 - big.x0) * (big.y1 - big.y0) * 0.95;
+}
+
+function quadsOverlap(a, b) {
+	// The share of two quadrilaterals' joint area (as bounding boxes: close enough) that they share.
+	const box = (corners) => ({
+		x0: Math.min(...corners.map((c) => c.x)), x1: Math.max(...corners.map((c) => c.x)),
+		y0: Math.min(...corners.map((c) => c.y)), y1: Math.max(...corners.map((c) => c.y)),
+	});
+	const one = box(a);
+	const other = box(b);
+	const shared = Math.max(0, Math.min(one.x1, other.x1) - Math.max(one.x0, other.x0)) * Math.max(0, Math.min(one.y1, other.y1) - Math.max(one.y0, other.y0));
+	const area = (each) => (each.x1 - each.x0) * (each.y1 - each.y0);
+	return shared / (area(one) + area(other) - shared);
+}

@@ -139,8 +139,8 @@ photo, as for English cards. The code does not name a card when it comes from a 
 sets of the same size print the same numbers (SV6a and SV7a): it only puts that set's cards first, and helps
 pick among cards that look alike. A card opens by itself when its picture is at most 1.0 from the photo's
 (`pickJapaneseCard`); a card with no picture is listed, not opened, after the cards that look like the photo and the
-cards of the set the code names. A card lying sideways is turned upright (`lookAtJapanesePhoto`: found in the photo turned
-either way), and one whose number can't be read is read the other way up. A photo with no number asks for it to be
+cards of the set the code names. A card lying sideways is turned upright (`lookAtPhoto` with `turnEagerly`: found in the
+photo turned either way, see the Pokémon photos paragraph below), and one whose number can't be read is read the other way up. A photo with no number asks for it to be
 typed. Learned cards (tap the right one) work for Japanese cards too, kept apart from the other games'
 (`learnedOfGame`). Tested with `dev_japanese_test.html`, which makes fake phone photos of 80 Japanese cards from 40
 sets since 2016 from their pictures (number read 67, opened by itself 67 right, none wrong), and with real photos in
@@ -198,6 +198,39 @@ from 1994 to 2018, 16 photographed sideways, 4 foils): turned right 32, names re
 of the 17 that print one, the right card first 27, opened by itself 20 - all right, none wrong - and 7
 years read, all right; none of the Magic photos taken for a Pokémon card, and 37 of the 46 Pokémon photos told apart. Still hard: a foil and its normal copy, the faintest names on old white cards
 (Kismet, Kjeldoran Knight), Unlimited and Beta against Revised (only their borders differ), and glare.
+
+**Pokémon photos lying sideways or at an angle** (version 1.66.0, `reader.js` and `card-finder.js`, roadmap 1.12 and
+1.13). A photo sent through a messenger can lose which way is up, and a card in a binder pocket, or photographed from
+below, has slanted sides. `readCardPhoto` reads a photo once. When that reading is not *sure* of the way up (`isSure`:
+two number reads agree on a whole number, or a known name of at least 5 letters is read in the name strip), it takes
+second chances, in a time of their own (twice the first reading, at least 5 seconds), and the first that is sure
+wins; when none is, the first reading stays. That test has to be strict: a card upside down or sideways reads made-up
+numbers and chance names ("Seel" out of the noise), and a lenient one opened 4 wrong cards. On a photo that was turned,
+only a name read exactly counts, not one a letter off ("Wo-Chien" from the bottom of an upside-down Chansey), and a
+first reading with an exact known name of 7 letters or more is kept when the photo was not turned (`KEEP_NAME_LETTERS`).
+The second chances are the photo turned a quarter each way (the way that worked last first, `lastWorkingTurns`: a phone
+loses which way is up the same way every time; skipped when turning finds no clearly bigger card, `MIN_TURN_GAIN`),
+and then the card cut out straight. They are read "quick" (`readSeenPhoto(..., quick)`): the number places and the name
+strip only, and the rest of the reading is skipped when neither is sure. A card lying sideways is also turned at the
+first look (`lookAtPhoto`), as Magic cards are since 1.57.0: found upright only a part of it has a card's shape, and a
+card found turned that is 1.5 times as big (`MUCH_BIGGER_WHEN_TURNED`; 1.15 times when the upright box is under 55% of
+the photo's height, `UPRIGHT_ENOUGH`) is taken. Both ways of turning a sideways card find a box of the same size, so
+within 5% (`SAME_SIZE`) the way that worked last wins. Japanese photos use the same `lookAtPhoto` with `turnEagerly`,
+which also turns when no card is found upright.
+
+A card at an angle: `findSlantedCards` (`card-finder.js`) finds four slanted sides as lines - a Hough vote on the edge
+map's signed gradient, leans up to 12 degrees, so a faint edge adds up along its whole length - and scores each side by
+its contrast a few pixels either side (thin print lines score low), the quiet of the card's border, and the shape of a
+card (0.72 wide to high); the card beats the frame inside it. `flattenedPicture` stretches the best boxes flat, a
+perspective stretch (`flatToPicture` maps back), 1.5% larger than the lines say. `worthStraightening` decides when: no
+clear box was found, or a slanted box overlaps the found one and a corner is 3% of the card's height or more away from it.
+Tested with `dev_real_photos_test.html?turn=1` and `?turn=3` (each photo turned a quarter), and `?tilt=0.12&zoom=0.8`
+and `?tilt=0.06&zoom=0.85` (as if from below at an angle; `lean`, `contrast`, `blur` and `side` also exist), the right
+card first / opened by itself right, 1.65.0 and now: turned clockwise 0 / 0 and 45 / 44, counter-clockwise 0 / 0 and
+43 / 41, at 12% 22 / 20 and 28 / 26, at 6% 32 / 30 and 34 / 32. None of the turned photos is opened wrong now; at an angle
+3 (12%) and 1 (6%) are, in 1.65.0 and now alike (roadmap 1.14). The upright photos, special numbers, full-art, learning, Japanese and Magic tests are as before. Still
+not read: `dev-local/alakazam.jpg` (1200 x 1600 pixels, its name pale on silver: roadmap 1.16), a binder page's
+neighbours (1.15).
 
 **The app's own camera.** "Take photo" opens a live camera inside the page (`camera.js`), zoomed
 2x and with the phone's light on, because the phone's own camera screen can't be told to do either.
@@ -342,7 +375,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `speech.js` | Reads text aloud with the phone's own voice, picking its most natural one |
 | `pokemon-names.js` | All Pokémon names, used to correct misreads |
 | `card-names.js` | All Trainer and Energy card names, used the same way |
-| `card-finder.js` | Finds where the card is in the photo (yellow border, or shape) |
+| `card-finder.js` | Finds where the card is in the photo (yellow border, shape, or slanted edges), and cuts a slanted card out flat |
 | `set-codes.js` | The set codes printed on cards since 2023 ("PAF"), with their sets and sizes |
 | `reader.js` | Photo → name and number |
 | `cards.js` | Searches the card database (TCGdex), asks for the prices of the cards shown, and keeps its answers for a day |
@@ -434,7 +467,11 @@ right answers, in `dev-local/real-photos.json`; then open
 <http://localhost:8765/dev_real_photos_test.html>. Use the phone's original files: photos
 sent through a chat app are shrunk to half the size or less on the way. `?only=IMG_2022` runs
 just some of them, and `?list=cut-photos` reads another list, `dev-local/cut-photos.json`, the
-same way.
+same way. `?turn=1` (or 3) turns every photo a quarter turn first, as a messenger can, and
+`?tilt=0.12&zoom=0.8` shows each photo as if from below at an angle (also `lean`, `contrast`, `blur`
+and `side`; the top edge is shortened by `tilt`, a share of the width), so the reader has to find the
+card turned or slanted; `?straighten=1` reads each photo cut out straight first. Each row says whether
+the reading was "sure" of the way up.
 
 The number scores in the fake-photo test are pessimistic: the fakes are made from 1024-pixel card
 pictures, so their tiny print has far less detail than a real phone photo.

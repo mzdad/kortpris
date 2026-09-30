@@ -5,6 +5,71 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.66.0
+
+- **1.12 Pokémon cards photographed sideways, and 1.13 cards photographed at an angle** (you said: "do 1.12 and 1.13").
+  Measured on your 46 real photos turned a quarter each way (`?turn=1`, `?turn=3` on `dev_real_photos_test.html`), and
+  shown as if from below at an angle (`?tilt=0.12&zoom=0.8`: the top edge shortened by 12% of the width, the card
+  shrunk to 0.8 and the picture around it mirrored on; `?tilt=0.06&zoom=0.85` for a smaller angle). The right card
+  shown first / opened by itself right, with 1.65.0 and now:
+  - **Turned a quarter clockwise: 0 / 0 (2 opened wrong), now 45 / 44 (none wrong)**, 4.4 s a photo. Numbers read 0 of
+    46, now 37 - as many as with the photos upright.
+  - **Turned a quarter counter-clockwise: 0 / 0 (1 wrong), now 43 / 41 (none wrong)**, numbers read 38.
+  - **At an angle of 12%: 22 / 20 (3 wrong), now 28 / 26 (3 wrong, the same ones)**, numbers read 14, now 23. **At 6%:
+    32 / 30 (1 wrong), now 34 / 32 (1 wrong)**. The wrong ones are a problem of their own: see 1.14.
+  - **Photos held upright are as before**: 46 shown first, 45 opened, none wrong; the special numbers 19 numbers read,
+    24 first, 22 opened; full-art 27 / 27 / 27; the made-up photos 13 first, 12 opened; learning 45 recognised, none
+    wrong, 0 of 92 strangers taken for a learned card; the Japanese photos 71 of 84 numbers, 71 first, 70 opened, none
+    wrong; Magic 32 of 32 turned right, 28 names read, 27 first, 20 opened, none wrong, none taken for a Pokémon. In the
+    app itself, on the test copy: your sideways Pinsir gave "9/64", your
+    sideways Chansey "Chansey, Base Set 2, 3/130" as the best match, and an upright Zapdos was unchanged.
+  - **A second chance when the reading isn't sure of the way up** (`readCardPhoto`). "Sure" (`isSure`) is two number
+    reads agreeing on a whole number, or a known name of at least 5 letters read in the name strip. Then, one at a time,
+    until one is sure: the photo turned a quarter each way (the way that worked last first: a phone loses which way is
+    up the same way every time), and last the card cut out straight (below). Each is read "quick" (`readSeenPhoto(...,
+    quick)`): the number places and the name strip first, and when neither is sure the rest of the reading is skipped.
+    The second chances get a time of their own, twice the first reading and at least 5 s, so a photo that can't be read
+    is told so soon (your Alakazam took 21.9 s to give up with a first version; now 13.5 s, against 6.9 s in 1.65.0).
+    An alternative is taken only when it is sure, and the first reading stays otherwise: a card upside down or sideways
+    reads made-up numbers and chance names, and a "found something" test opened 4 wrong cards. On a photo that had to be
+    turned only an exactly read name counts ("Wo-Chien", one letter off, was read on the bottom of an upside-down
+    Chansey, and "Paras" on a Mr. Mime: they made the wrong way up sure, and so the way that worked last). On an upright
+    photo a name one letter off is still enough (a fifth of the right names have one), and an exact name of 7 letters
+    or more is kept whatever the second chances find (`KEEP_NAME_LETTERS`; found on the special numbers page: a
+    Squawkabilly read as "Aron", a Shuckle as a chance "nre" from a picture cut out).
+  - **A card lying sideways is turned at the first look** (`lookAtPhoto`): found upright, only a part of it has a card's
+    shape (its picture, or its text box), and turned the right way the whole card does. It is turned when the card
+    found turned is 1.5 times as big as the one found upright (`MUCH_BIGGER_WHEN_TURNED`; measured on the 46 photos,
+    upright ones never find a bigger one turned - at most 0.6 times - and sideways ones 1.7 times or more, mostly 2 to
+    3), or 1.15 times as big when the box found upright is under 55% of the photo's height. The two ways of turning a
+    sideways card find boxes of the same size, one of them upside down: within 5% (`SAME_SIZE`) the way that worked last
+    (or the first) is taken, not the one a hair bigger - a Chansey came out upside down that way, and its wrong way then
+    became the way that worked last, which turned a Mr. Mime upside down too. What is
+    found is looked for in the small copy of the photo first; the full-size photo is turned only once it is chosen.
+    The Japanese reader now uses the same `lookAtPhoto` (its own `lookAtJapanesePhoto` is gone) with `turnEagerly`,
+    which keeps what it did: also turning when no card is found upright.
+  - **A card at an angle is cut out straight** (`findSlantedCards` in `card-finder.js`): the four slanted sides are
+    found as lines (a Hough vote on the edge map's signed gradient, leans up to 12 degrees, so a faint edge adds up
+    along its whole length; the left and top edges have the same sign, the right and bottom the opposite), each side is
+    scored by its contrast a few pixels either side of it (thin print lines score low), the card's border must be
+    quiet, and the shape must be a card's (0.72 wide to high, give or take). A card in its toploader or binder pocket
+    has an inner and an outer frame: the card beats the frame inside it. The best boxes are stretched flat
+    (`flattenedPicture`, a perspective stretch), 1.5% larger than the lines say, at most 3200 px on the long side. This
+    is tried when the reading isn't sure and no clear box was found, or a slanted box overlaps the one found yet one
+    of its corners is 3% of the card's height or more from the found box's (`worthStraightening`): a slanted card's
+    bounding box is a card-shaped box that is wrong at the corners where the number and the name are printed. Trying
+    it first on every photo (`?straighten=1`) shows more tilted cards first (36 and 38 of 46 at 12% and 6%, against 28
+    and 34, and quicker) but fewer upright ones (35 of 46 instead of 46, one opened wrong): the finder sometimes cuts
+    out a box that isn't the card, so a better way to tell when to straighten is left (1.17).
+  - **Not solved.** Your Alakazam MEP 009 (`dev-local/alakazam.jpg`) still can't be read, even with the card cut out
+    flat by hand: the photo is 1200 × 1600 pixels, so the name's pale letters on a silver border are a few pixels tall
+    (read as "counters"). It looks like a problem of the picture's size and the pale letters, not of the angle - see
+    1.16. A binder page with several cards can give a neighbour (1.15). Photos at a strong angle are sometimes opened as
+    a wrong card (1.14). A few of your photos still aren't read turned: a Pikachu picture file (both ways), the full-art
+    Cinderace V counter-clockwise, whose number every cut reads differently (see 1.8), and now and then the e-Card
+    Charizard, whose 6/165 comes out as 6/145 in some runs - a photo more or less between two runs is the noise of
+    this test.
+
 ## Done in 1.65.0
 
 - **6.1 Japanese cards, third part: your four real photos** (you said: "i added 4 japanese cards in the dev folder
@@ -949,8 +1014,10 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | 1.5 | **Keep collecting failed photos** in `dev-local/` with the right answers. | Every fix so far came from a real photo that failed. The test set is 40 photos. | ongoing |
 | 1.8 | **Numbers printed white on full-art cards**, in italics and edged in black: the rest. | 6 of 27 full-art numbers still aren't read in 1.40.0 (8 in 1.28.0). The made-up photos are made from the database's small pictures, so a real photo may read better: worth checking with a few real full-art photos first. The name and the look find these cards anyway. | S |
 | 1.9 | **Find the edges of silver-bordered cards** in photos from the phone's own camera: the rest. Full-art cards on a grey table. | The name strip, the number corners and the set code (1.7) need them. On the 2 made-up full-art photos on a grey table, the best box found covers only the card's top-left part (81% of it): the silver border is the table's colour, so the card's own bottom and right edges hardly show. Checking the box can't help there - the name strip is in that part too, and reads the right name - so it takes a better way to see a silver border on grey. They are found by name and picture anyway, and the app's own camera doesn't need this: its frame gives the edges (1.1). | M |
-| 1.12 | **Pokémon cards photographed sideways**, turned the right way up the way Magic cards are since 1.57.0 (`lookAtMagicPhoto`): the card is the biggest card-shaped box, upright or turned. | Photos sent through a messenger can lose which way up they are (16 of your 32 Magic photos did). The Pokémon reader needs its 46-photo test to stay the same. | S |
-| 1.13 | **Cards photographed at an angle in a binder pocket**: the card's edges are slanted (a "keystone" picture), and a silver border blends into the white pocket. Your Alakazam MEP 009 (`dev-local/alakazam.jpg`) is the case. | The shape finder looks for straight, square edges: on this photo none of its 21 candidate boxes fits the card (the best is off at every edge, and no side scores above 0.6), and the whole photo was read as the card. It needs a perspective-corrected box: four slanted edges, cut out flat, and a border that may be silver. Only worth it if photos like this are common: binders are how many people keep their cards. | M-L |
+| 1.14 | **Photos at a strong angle are sometimes opened as a wrong card.** | At an angle of 12%, 3 of the 46 photos were opened by themselves as another card, with 1.65.0 and 1.66.0 alike: a Hitmonchan whose number was read "1/102" (its own is 7/102), a Grimer read "48/61", and a Dratini with no number read at all, whose picture the picture comparison (`matcher.js`) found less like it than another card's (2.18 against 1.40). The comparison isn't corrected for the slant, and a slanted number is misread the same way by more than one cut. A wrong card opened is worse than none: idea, compare the picture after straightening (1.66.0 has it), and open by the picture alone only when the name read agrees. | M |
+| 1.15 | **Binder pages with several cards**: the card asked about is the one in the middle, or the biggest, not a neighbour. | A page of a binder holds nine cards and a photo of it a slanted one for each. The reader takes one box and can read a neighbour's name, sure of the way up, so the boxes cut out straight are not tried. Idea: try each box the finder gives and, when several read sure, let the person pick (the list already does that for cards that look alike). Needs photos of whole binder pages: `dev-local/binder-photos.json` has only the Alakazam. | M |
+| 1.16 | **Small photos of silver-bordered cards in a pocket**: your Alakazam MEP 009 (`dev-local/alakazam.jpg`). | 1200 × 1600 pixels: the name's pale letters on the silver border are a few pixels tall and read as "counters", also when the card is cut out flat by hand - so not a problem of the angle. Ideas: read the name in more sizes and contrasts, or find the card by its picture when nothing reads. It also takes 13.5 s to give up, against 6.9 s in 1.65.0: the second chances could give up sooner when the first reading found nothing at all. | M |
+| 1.17 | **Tell better when to cut a card out straight.** | Cut out straight before any other reading (`?straighten=1`), photos at an angle of 12% and 6% are shown first 36 and 38 times of 46, and quicker (4.4 and 3.5 s a photo), against 28 and 34 as a second chance after a reading that isn't sure, as now. But upright photos are then shown first only 35 times of 46, and one is opened wrong: the finder sometimes cuts out a box that isn't the card. The trigger (`worthStraightening`) needs a cheap way to tell a slanted card from an upright one, for instance the slant of the box's own sides, or reading both and keeping the one that is sure. | S-M |
 
 ## 2. Quicker
 

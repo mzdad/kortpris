@@ -245,8 +245,163 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 	reportProgress = onProgress;
 	onProgress("starting", null);
 	const seen = look || await lookAtPhoto(imageFile, frame);
+	const readingStarted = performance.now();
+	const reading = await readSeenPhotoSafely(seen, stillWanted, onSureNumber);
+	if (reading.sure) {
+		if (seen.turns % 2 === 1) lastWorkingTurns = seen.turns;
+		return reading;
+	}
+	// A long, exact card name is not made up from noise (short ones are), so a reading that found one is kept: it read
+	// the card the right way up, and a reading the other way, or of a picture cut out, would only replace a good name
+	// with a chance one. (Not of a photo that was turned: then the name may be a chance one, read upside down.)
+	if (seen.turns === 0 && reading.nameSure && lettersOnly(reading.name).length >= KEEP_NAME_LETTERS) return reading;
+	// Not sure of it: the card may lie sideways or on its head, which finding it upright (see lookAtPhoto) can
+	// miss - a card-shaped patch of its yellow border, say, is found upright - or the photo may have lost which
+	// way is up. The photo is looked at turned the other ways, one at a time, and the first that reads
+	// sure is taken; if none does, the first reading stays. Not for the app's own camera: the card is held upright
+	// in its frame. All these second chances together get a time of their own (EXTRA_TIME_FACTOR times the first
+	// reading, at least MIN_EXTRA_MS): a photo that can't be read is told so in a reasonable time, on a slow phone too.
+	const giveUpAt = performance.now() + Math.max(MIN_EXTRA_MS, EXTRA_TIME_FACTOR * (performance.now() - readingStarted));
+	if (!frame) {
+		const wasTurnedOneWay = seen.turns % 2 === 1;
+		// The photos of one phone, sent the same way, lose which way is up the same way: the way that worked last is first.
+		const quarters = lastWorkingTurns === 3 ? [3, 1] : [1, 3];
+		for (const turns of wasTurnedOneWay ? [(seen.turns + 2) % 4, 0] : quarters) {
+			if (!stillWanted() || performance.now() > giveUpAt) break;
+			// A photo that can't be read is mostly one too blurry or too dark, which turning doesn't help: it is only
+			// read turned when a bigger card is found there than was found before - except for the way opposite a
+			// turn given already, where the card stands on its head in a box of the same size, and when no card was found
+			// before, so that no box says how big it should be. Looked for in the small copy first, which costs little.
+			const opposite = wasTurnedOneWay && turns === (seen.turns + 2) % 4;
+			if (!opposite && hasClearBox(seen)) {
+				const found = whereIsTheCard(turnedPicture(seen.photo, (turns - seen.turns + 4) % 4), null);
+				if (boxArea(found.cardBox || found.doubtfulBox) <= boxArea(seen.cardBox) * MIN_TURN_GAIN) continue;
+			}
+			const turned = await lookAtPhoto(imageFile, frame, turns);
+			const again = await readSeenPhotoSafely(turned, stillWanted, onSureNumber, true);
+			if (again.sure) {
+				if (turns % 2 === 1) lastWorkingTurns = turns;
+				return again;
+			}
+		}
+	}
+	// Still not sure: the card may be photographed at an angle - in a binder pocket, or from below - with slanted
+	// sides, a faint edge, or a box found for it that is only its slanted shape's bounding box, so that the corners
+	// where the number and the name are printed aren't where the box says. The boxes that may be the card, best
+	// first (see worthStraightening), are cut out straight (lookAtStraightenedPhoto), and the first that reads sure
+	// is taken.
+	if (!frame && seen.turns === 0) {
+		let tried = 0;
+		for (const shares of slantedSharesOf(seen.photo)) {
+			if (tried === STRAIGHTENED_TRIES || !stillWanted() || performance.now() > giveUpAt) break;
+			if (!worthStraightening(seen, shares)) continue;
+			tried++;
+			const again = await readSeenPhotoSafely(await lookAtStraightenedPhoto(imageFile, shares), stillWanted, onSureNumber, true);
+			if (again.sure) return again;
+		}
+	}
+	return reading;
+}
+
+// Sure the card was read the right way up: two reads agreed on a number, "/" and all, or a known name of at least
+// SURE_NAME_LETTERS letters was read in the strip where it is printed. A card on its head, or lying sideways, reads
+// neither - but does read a made-up number here and a chance name ("Seel", out of the noise) there. turned: the photo
+// was turned (or cut out) to stand the card up, so which way up it is isn't known: a name that is one letter off
+// ("Wo-Chien" read on the bottom of an upside-down Chansey) isn't enough then, only one read exactly. (On an upright
+// photo it is: a fifth of the right names read there have a letter wrong.)
+function isSure(placeGuesses, stripName, turned = false) {
+	if (twoReadsAgree(placeGuesses)) return true;
+	if (stripName === null || lettersOnly(stripName.text).length < SURE_NAME_LETTERS) return false;
+	return !turned || stripName.mistakes === 0;
+}
+
+// A reading that found a known name of this many letters is kept whatever the second chances find (see readCardPhoto).
+const KEEP_NAME_LETTERS = 7;
+
+// A name read in the strip must have this many letters to make a reading sure of the way up (see readSeenPhoto):
+// short names are too easily made up from noise.
+const SURE_NAME_LETTERS = 5;
+
+// A look that found the card by its border or its shape, not just guessed at a box.
+function hasClearBox(look) {
+	return Boolean(look.cardBox) && look.cardBox.foundBy !== "whole photo";
+}
+
+// The second chances of readCardPhoto get this many times as long as the first reading took, and at least this
+// many milliseconds, to try.
+const EXTRA_TIME_FACTOR = 2;
+const MIN_EXTRA_MS = 5000;
+
+// A photo is read turned a quarter (see readCardPhoto) only when the card found in it is this many times as big
+// as the one found before.
+const MIN_TURN_GAIN = 1.15;
+// The quarter turn (1 or 3) that last stood a card up that read, until the page is closed.
+let lastWorkingTurns = null;
+
+// How many boxes that may be the card, best first, are cut out straight and read (see lookAtStraightenedPhoto).
+const STRAIGHTENED_TRIES = 2;
+// A box is cut out this much larger (share of its width and height) than the lines found say, as they may be a
+// little inside the card's real edge: the card's own edges, found again in the straight picture, are exact.
+const STRAIGHTENED_MARGIN = 0.015;
+// The most pixels along either side of a card cut out straight.
+const STRAIGHTENED_LONGEST_SIDE = 3200;
+
+// The boxes that may be the card in a photo of a card seen at an angle (findSlantedCards in card-finder.js), best
+// first, each as its four corners as shares of the photo's width and height.
+function slantedSharesOf(photo) {
+	return findSlantedCards(photo).map((found) => found.corners.map((corner) => ({ x: corner.x / photo.width, y: corner.y / photo.height })));
+}
+
+// A box from slantedSharesOf is worth cutting out straight for a look when that look found no clear box, or when it is
+// the same card as the look's box - overlapping it - with a slant: its corners are at least MIN_SLANT of the card's
+// height from those of the look's box, whose sides are straight. (When they are where the box's are, there is nothing to straighten.)
+function worthStraightening(look, shares) {
+	if (!hasClearBox(look)) return true;
+	const box = look.cardBox;
+	const photo = look.photo;
+	const boxCorners = [{ x: box.x0, y: box.y0 }, { x: box.x1, y: box.y0 }, { x: box.x1, y: box.y1 }, { x: box.x0, y: box.y1 }];
+	const corners = shares.map((corner) => ({ x: corner.x * photo.width, y: corner.y * photo.height }));
+	if (quadsOverlap(boxCorners, corners) < MIN_SAME_CARD_OVERLAP) return false;
+	const apart = Math.max(...corners.map((corner, index) => Math.hypot(corner.x - boxCorners[index].x, corner.y - boxCorners[index].y)));
+	return apart >= (box.y1 - box.y0) * MIN_SLANT;
+}
+// The share of two boxes' joint area that they share, at least, for them to be the same card...
+const MIN_SAME_CARD_OVERLAP = 0.6;
+// ...and how far (share of the card's height) a corner of the slanted box is from the straight box's, at least, for the
+// card to be worth straightening.
+const MIN_SLANT = 0.03;
+
+// The photo with a box that may be the card cut out and stretched flat, as a look like lookAtPhoto's. which: the
+// box, as slantedSharesOf gives it, or its number in the list of that for the photo (found here: for the tests).
+// The card is the whole picture, with the shape of a card, so the reading finds its edges at the picture's own.
+async function lookAtStraightenedPhoto(imageFile, which) {
+	const original = await createImageBitmap(imageFile);
+	let shares = which;
+	if (typeof which === "number") shares = slantedSharesOf(shrinkPhoto(original))[which];
+	if (!shares) {
+		original.close();
+		return null;
+	}
+	const centre = { x: shares.reduce((sum, corner) => sum + corner.x, 0) / 4, y: shares.reduce((sum, corner) => sum + corner.y, 0) / 4 };
+	const corners = shares.map((corner) => ({
+		x: (centre.x + (corner.x - centre.x) * (1 + 2 * STRAIGHTENED_MARGIN)) * original.width,
+		y: (centre.y + (corner.y - centre.y) * (1 + 2 * STRAIGHTENED_MARGIN)) * original.height,
+	}));
+	const distance = (from, to) => Math.hypot(corners[to].x - corners[from].x, corners[to].y - corners[from].y);
+	// As big as the card is in the photo, at a card's own shape.
+	const height = Math.min(STRAIGHTENED_LONGEST_SIDE, Math.max((distance(0, 3) + distance(1, 2)) / 2, (distance(0, 1) + distance(3, 2)) / 2 / CARD_SHAPE));
+	const straight = flattenedPicture(original, corners, Math.round(height * CARD_SHAPE), Math.round(height));
+	original.close();
+	const straightOriginal = await createImageBitmap(straight);
+	straight.width = 0;   // its memory goes back at once (an iPhone keeps a forgotten canvas long: see freeCanvas in camera.js)
+	straight.height = 0;
+	const straightPhoto = shrinkPhoto(straightOriginal);
+	return { original: straightOriginal, photo: straightPhoto, framed: null, ...whereIsTheCard(straightPhoto, null), turns: 0 };
+}
+
+async function readSeenPhotoSafely(seen, stillWanted, onSureNumber, quick = false) {
 	try {
-		return await readSeenPhoto(seen, stillWanted, onSureNumber);
+		return await readSeenPhoto(seen, stillWanted, onSureNumber, quick);
 	} catch (error) {
 		// Whatever went wrong - a canvas the phone refused, say - the full-size photo is let go of: it takes a
 		// lot of memory, which the next photo needs. (Letting go of it twice is harmless.)
@@ -255,8 +410,11 @@ async function readCardPhoto(imageFile, onProgress = () => {}, frame = null, { l
 	}
 }
 
-// The reading itself, of a photo looked at already (see readCardPhoto).
-async function readSeenPhoto(seen, stillWanted, onSureNumber) {
+// The reading itself, of a photo looked at already (see readCardPhoto). quick: only a reading sure of the way up is
+// wanted (the photo is read turned or cut out straight after a first reading that wasn't), so when neither the number
+// nor the name strip is sure the rest of the reading is skipped, and what comes back is a reading with nothing in it
+// and sure: false.
+async function readSeenPhoto(seen, stillWanted, onSureNumber, quick = false) {
 	const { original, photo, framed, doubtfulBox } = seen;
 	let cardBox = seen.cardBox;
 	const worker = await getOcrWorker();
@@ -321,7 +479,7 @@ async function readSeenPhoto(seen, stillWanted, onSureNumber) {
 				original.close();
 				return {
 					name: "", nameSure: false, number: early[0], numberGuesses: early, setCode: setCode,
-					photo: photo, textArea: null, cardBox: cardBox, sparkle: sparkle, settled: true,
+					photo: photo, textArea: null, cardBox: cardBox, sparkle: sparkle, settled: true, turns: seen.turns, sure: true,
 				};
 			}
 		}
@@ -330,6 +488,16 @@ async function readSeenPhoto(seen, stillWanted, onSureNumber) {
 	// When it is clear where the card is, only the card is read - not the table, cloth or
 	// toploader around it, whose patterns look like made-up letters.
 	const view = cardBox ? cardView(photo, cardBox) : { picture: photo, x0: 0, y0: 0, zoom: 1 };
+	let stripRead = false;   // the name strip was read already
+	if (quick) {
+		stopUnlessWanted(stillWanted, original);
+		if (cardBox && !stripName) stripName = await readNameStrip(worker, original, cardInOriginal);
+		stripRead = true;
+		if (!isSure(placeGuesses, stripName, seen.turns !== 0)) {
+			original.close();
+			return { name: "", nameSure: false, number: "", numberGuesses: [], setCode: "", photo: photo, textArea: null, cardBox: cardBox, sparkle: null, turns: seen.turns, sure: false };
+		}
+	}
 
 	const firstRead = await readPage(worker, view.picture, "scattered");
 	let name = guessCardName(firstRead.lines, firstRead.textArea);
@@ -337,7 +505,7 @@ async function readSeenPhoto(seen, stillWanted, onSureNumber) {
 	// name, even when the whole card's read found another one somewhere else on the card.
 	if (cardBox) {
 		stopUnlessWanted(stillWanted, original);
-		if (!stripName) stripName = await readNameStrip(worker, original, cardInOriginal);
+		if (!stripName && !stripRead) stripName = await readNameStrip(worker, original, cardInOriginal);
 		if (stripName) name = stripName;
 	}
 	// No known Pokémon found: read it a second time, the other way.
@@ -385,6 +553,8 @@ async function readSeenPhoto(seen, stillWanted, onSureNumber) {
 		cardBox: cardBox,
 		// Does it sparkle outside its picture - a reverse holo? (see sparkle.js)
 		sparkle: sparkleOf(photo, cardBox, textArea),
+		turns: seen.turns,
+		sure: isSure(placeGuesses, stripName, seen.turns !== 0),
 	};
 }
 
@@ -399,17 +569,60 @@ function stopUnlessWanted(stillWanted, original) {
 
 // ---------- Where the card is (see card-finder.js for finding it) ----------
 
+// A card found upright that fills at least this share of the photo's height needs no turning, unless a card
+// this many times as big is found turned (measured on the 46 real photos: upright ones never find a turned card
+// bigger than the upright one - up to 0.6 times - and sideways ones find 1.7 times or more, mostly 2 to 3).
+const UPRIGHT_ENOUGH = 0.55;
+const MUCH_BIGGER_WHEN_TURNED = 1.5;
+// Two boxes are the same size for this purpose when the bigger is less than this many times the smaller.
+const SAME_SIZE = 1.05;
+
 // Where the card is in the photo, found before any text is read: in a moment, where reading takes
-// 5 to 20 seconds. Returns { original, photo, framed, cardBox, doubtfulBox }: the full-size photo
+// 5 to 20 seconds. Returns { original, photo, framed, cardBox, doubtfulBox, turns }: the full-size photo
 // (close it when done with it), the smaller copy most of the reading works on, the camera's frame in
-// that copy (or null), and the card's box in it, or null - or a box that may be the card's, to be
-// checked first (see whereIsTheCard). frame: as for readCardPhoto.
-async function lookAtPhoto(imageFile, frame = null) {
+// that copy (or null), the card's box in it, or null - or a box that may be the card's, to be
+// checked first (see whereIsTheCard) - and turns: how many quarter turns clockwise the photo was given
+// so that the card stands upright in it (0, 1 or 3). A card lying sideways - laid across, or in a photo
+// that lost which way is up (16 of 32 Magic photos did; see lookAtMagicPhoto) - is found in the photo
+// turned either way: it is the biggest card-shaped box, where upright only a part of it has a card's
+// shape. frame: as for readCardPhoto. turns: given when the photo is to be looked at turned that many
+// quarter turns whatever is found (see readCardPhoto: a sideways card can be turned two ways with the
+// same card-shaped box, one of them upside down). turnEagerly: turned also when no card is found upright, and by
+// any card found that way (for Japanese cards, read by readJapanesePhoto, which checks for itself which way up
+// the card is); otherwise only when a box was found upright, and a bigger one turned (see below).
+async function lookAtPhoto(imageFile, frame = null, turns = null, turnEagerly = false) {
 	// createImageBitmap also turns sideways phone photos the right way up.
 	const original = await createImageBitmap(imageFile);
 	const photo = shrinkPhoto(original);
 	const framed = frame ? frameBoxIn(photo, frame) : null;
-	return { original: original, photo: photo, framed: framed, ...whereIsTheCard(photo, framed) };
+	const seen = { original: original, photo: photo, framed: framed, ...whereIsTheCard(photo, framed), turns: 0 };
+	// In the app's own camera the card is held upright in the white frame.
+	if (frame) return seen;
+	let chosen = null;   // the photo turned, with what was found in it, when it is to be turned
+	if (turns !== null) {
+		const turnedPhoto = turnedPicture(photo, turns);
+		chosen = { turns: turns, photo: turnedPhoto, ...whereIsTheCard(turnedPhoto, null) };
+	} else if (seen.cardBox || turnEagerly) {
+		// Turned only when a bigger card is found that way. When the card found upright is small in the photo (or none
+		// is found): clearly bigger (MIN_TURN_GAIN), or with turnEagerly any bigger one. When it looks big enough, only
+		// a much bigger one (MUCH_BIGGER_WHEN_TURNED): a card-shaped part of a card lying sideways looks big enough.
+		const small = !seen.cardBox || (seen.cardBox.y1 - seen.cardBox.y0) / photo.height < UPRIGHT_ENOUGH;
+		let biggest = boxArea(seen.cardBox) * (!small ? MUCH_BIGGER_WHEN_TURNED : turnEagerly ? 1 : MIN_TURN_GAIN);
+		for (const quarter of lastWorkingTurns === 3 ? [3, 1] : [1, 3]) {
+			const turnedPhoto = turnedPicture(photo, quarter);
+			const found = findYellowCard(turnedPhoto) || findCardByShape(turnedPhoto);
+			if (found && !found.doubtful && boxArea(found) > biggest) {
+				chosen = { turns: quarter, photo: turnedPhoto, cardBox: found, doubtfulBox: null };
+				// A card lying sideways is found as big turned either way (one of them upside down), give or take a hair:
+				// the other way is taken only when clearly bigger, so a hair doesn't decide - the way that worked last does.
+				biggest = boxArea(found) * SAME_SIZE;
+			}
+		}
+	}
+	if (!chosen) return seen;
+	const turnedOriginal = await createImageBitmap(turnedPicture(original, chosen.turns));
+	original.close();
+	return { original: turnedOriginal, photo: chosen.photo, framed: null, cardBox: chosen.cardBox, doubtfulBox: chosen.doubtfulBox, turns: chosen.turns };
 }
 
 // { cardBox, doubtfulBox }: the card's box in the photo, found by its yellow border or its shape, or
@@ -666,12 +879,12 @@ function guessCardName(lines, textArea, { maxMistakes = Infinity, minConfidence 
 		const trainerWins = otherCard && pokemon && (otherCard.mistakes < pokemon.mistakes
 			|| (otherCard.mistakes === pokemon.mistakes && otherCard.letters > pokemon.letters));
 		if (pokemon && !trainerWins) {
-			if (best.rank < 2 || size > best.size) best = { text: pokemon.name, size: size, sure: true, rank: 2 };
+			if (best.rank < 2 || size > best.size) best = { text: pokemon.name, size: size, sure: true, rank: 2, mistakes: pokemon.mistakes };
 			continue;
 		}
 		if (best.rank === 2) continue;
 		if (otherCard) {
-			if (best.rank < 1 || size > best.size) best = { text: otherCard.name, size: size, sure: true, rank: 1 };
+			if (best.rank < 1 || size > best.size) best = { text: otherCard.name, size: size, sure: true, rank: 1, mistakes: otherCard.mistakes };
 			continue;
 		}
 		if (best.rank === 1) continue;

@@ -1376,6 +1376,7 @@ async function scanPhoto(imageFile, frame = null) {
 	}
 	// The cards the app has learned that the photo looks like (learned.js), once compared.
 	let learnedLook = null;
+	let lookedAt = null;   // the picture the learned cards were compared with
 	if (!reading) {
 		// The built-in reader finds the card in the photo first, which takes a moment. A card the app
 		// has learned then opens straight away (see openLearnedEarly), and the text - 5 to 20 seconds
@@ -1388,7 +1389,10 @@ async function scanPhoto(imageFile, frame = null) {
 			freeLook(look);
 			return;
 		}
-		if (look) learnedLook = compareWithLearned(look.photo, null, look.cardBox, learnedOfGame("pokemon"));
+		if (look) {
+			learnedLook = compareWithLearned(look.photo, null, look.cardBox, learnedOfGame("pokemon"));
+			lookedAt = look.photo;
+		}
 		let openedEarly = null;
 		if (learnedLook && learnedLook.card) openedEarly = await openLearnedEarly(learnedLook.card, look, scanId);
 		if (scanId !== latestScanId) {
@@ -1415,7 +1419,8 @@ async function scanPhoto(imageFile, frame = null) {
 	if (reading.photo) {
 		// Compared already when the card's own box was found before the reading: the place of the
 		// text isn't needed then. Otherwise now, by the place of the text.
-		if (!learnedLook || !reading.cardBox) {
+		// (Also when the reading turned the photo or cut the card out straight: a picture of its own, see readCardPhoto.)
+		if (!learnedLook || !reading.cardBox || reading.photo !== lookedAt) {
 			learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null, learnedOfGame("pokemon"));
 		}
 		lastPhoto = photoFacts(reading.photo, reading.textArea, reading.cardBox || null, reading.setName || "", learnedLook, reading.setCode || "");
@@ -1858,7 +1863,7 @@ async function scanJapanesePhoto(imageFile, frame, scanId) {
 	};
 	let look = null;
 	try {
-		look = await lookAtJapanesePhoto(imageFile, frame);
+		look = await lookAtPhoto(imageFile, frame, null, true);
 	} catch (error) {
 		console.error(error);   // a photo the browser can't open
 	}

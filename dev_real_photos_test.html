@@ -34,21 +34,118 @@ possible.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.65.0"></script>
-<script src="card-names.js?v=1.65.0"></script>
-<script src="set-codes.js?v=1.65.0"></script>
-<script src="card-finder.js?v=1.65.0"></script>
-<script src="sparkle.js?v=1.65.0"></script>
-<script src="reader.js?v=1.65.0"></script>
-<script src="storage.js?v=1.65.0"></script>
-<script src="card-ids.js?v=1.65.0"></script>
-<script src="cards.js?v=1.65.0"></script>
-<script src="matcher.js?v=1.65.0"></script>
+<script src="pokemon-names.js?v=1.66.0"></script>
+<script src="card-names.js?v=1.66.0"></script>
+<script src="set-codes.js?v=1.66.0"></script>
+<script src="card-finder.js?v=1.66.0"></script>
+<script src="sparkle.js?v=1.66.0"></script>
+<script src="reader.js?v=1.66.0"></script>
+<script src="storage.js?v=1.66.0"></script>
+<script src="card-ids.js?v=1.66.0"></script>
+<script src="cards.js?v=1.66.0"></script>
+<script src="matcher.js?v=1.66.0"></script>
 <script>
 "use strict";
 
 // ?list=cut-photos reads dev-local/cut-photos.json instead: another set of photos, listed the same way.
 const PHOTO_LIST_URL = "dev-local/" + (new URLSearchParams(location.search).get("list") || "real-photos") + ".json";
+
+// ?turn=1 (or 3) turns every photo that many quarter turns clockwise before reading it, as a photo sent through
+// a messenger can lose which way is up (roadmap 1.12): the reader has to turn the card upright itself.
+const TURN = Number(new URLSearchParams(location.search).get("turn") || 0);
+
+async function turnedBlob(blob, turns) {
+	if (!turns) return blob;
+	const bitmap = await createImageBitmap(blob);
+	const turned = turnedPicture(bitmap, turns);
+	bitmap.close();
+	return await new Promise((resolve) => turned.toBlob(resolve, "image/jpeg", 0.92));
+}
+
+// ?tilt=0.12&zoom=0.8 shows each photo from another place, as if the phone looked at the card from below at an angle
+// (roadmap 1.13): its top edge shortened by tilt (share of the width), moved sideways by lean (share of the width), the
+// whole shrunk about its middle by zoom (what falls outside is the photo mirrored on), contrast 0 to 1 flattening it
+// towards grey and blur (pixels) softening it. The photos are worked on at ?side=3000 pixels on the long side. Where the
+// card really is, is known then: the picture is made from a known map.
+// ?straighten=1 reads each photo cut out straight (lookAtStraightenedPhoto) first, instead of as it is.
+const PARAMS = new URLSearchParams(location.search);
+const VIEW = {
+	tilt: Number(PARAMS.get("tilt") || 0), lean: Number(PARAMS.get("lean") || 0), zoom: Number(PARAMS.get("zoom") || 1),
+	contrast: Number(PARAMS.get("contrast") || 1), blur: Number(PARAMS.get("blur") || 0),
+};
+const VIEW_SIDE = Number(PARAMS.get("side") || 3000);
+const VIEWED = VIEW.tilt !== 0 || VIEW.lean !== 0 || VIEW.zoom !== 1 || VIEW.contrast !== 1 || VIEW.blur !== 0;
+const STRAIGHTEN_FIRST = PARAMS.get("straighten") === "1";
+
+// The homography taking four points to four others, as 8 numbers (as flatToPicture in card-finder.js).
+function homography(from, to) {
+	const rows = [];
+	from.forEach(([u, v], i) => {
+		const [x, y] = to[i];
+		rows.push([u, v, 1, 0, 0, 0, -u * x, -v * x, x]);
+		rows.push([0, 0, 0, u, v, 1, -u * y, -v * y, y]);
+	});
+	for (let column = 0; column < 8; column++) {
+		let pivot = column;
+		for (let row = column + 1; row < 8; row++) if (Math.abs(rows[row][column]) > Math.abs(rows[pivot][column])) pivot = row;
+		[rows[column], rows[pivot]] = [rows[pivot], rows[column]];
+		for (let row = 0; row < 8; row++) {
+			if (row === column) continue;
+			const factor = rows[row][column] / rows[column][column];
+			for (let k = column; k < 9; k++) rows[row][k] -= factor * rows[column][k];
+		}
+	}
+	return rows.map((row, index) => row[8] / row[index]);
+}
+
+function reflect(v, size) {
+	// The plane continued past the picture's edge by mirroring it.
+	const period = 2 * size;
+	const r = ((v % period) + period) % period;
+	return r < size ? r : period - r;
+}
+
+// The blob given, seen from another place (see VIEW), as a JPEG blob.
+async function viewedBlob(blob) {
+	const bitmap = await createImageBitmap(blob);
+	const scale = Math.min(1, VIEW_SIDE / Math.max(bitmap.width, bitmap.height));
+	const w = Math.round(bitmap.width * scale), h = Math.round(bitmap.height * scale);
+	const source = document.createElement("canvas");
+	source.width = w;
+	source.height = h;
+	const sourceContext = source.getContext("2d", { willReadFrequently: true });
+	if (VIEW.blur) sourceContext.filter = "blur(" + VIEW.blur + "px)";
+	sourceContext.drawImage(bitmap, 0, 0, w, h);
+	bitmap.close();
+	const from = sourceContext.getImageData(0, 0, w, h).data;
+	const corners = [[VIEW.tilt * w / 2 + VIEW.lean * w, 0], [w - VIEW.tilt * w / 2 + VIEW.lean * w, 0], [w, h], [0, h]]
+		.map(([x, y]) => [w / 2 + (x - w / 2) * VIEW.zoom, h / 2 + (y - h / 2) * VIEW.zoom]);
+	// Every pixel of the new picture is looked up where the map says it lies in the old one.
+	const inverse = homography(corners, [[0, 0], [w, 0], [w, h], [0, h]]);
+	const out = document.createElement("canvas");
+	out.width = w;
+	out.height = h;
+	const outContext = out.getContext("2d", { willReadFrequently: true });
+	const image = outContext.createImageData(w, h);
+	for (let y = 0; y < h; y++) {
+		for (let x = 0; x < w; x++) {
+			const scaleDown = inverse[6] * x + inverse[7] * y + 1;
+			const sx = reflect((inverse[0] * x + inverse[1] * y + inverse[2]) / scaleDown, w - 1);
+			const sy = reflect((inverse[3] * x + inverse[4] * y + inverse[5]) / scaleDown, h - 1);
+			const x0 = Math.min(Math.floor(sx), w - 2), y0 = Math.min(Math.floor(sy), h - 2);
+			const shareX = sx - x0, shareY = sy - y0;
+			const at = (y0 * w + x0) * 4, below = w * 4, o = (y * w + x) * 4;
+			for (let c = 0; c < 3; c++) {
+				const top = from[at + c] * (1 - shareX) + from[at + 4 + c] * shareX;
+				const bottom = from[at + below + c] * (1 - shareX) + from[at + below + 4 + c] * shareX;
+				image.data[o + c] = 128 + (top * (1 - shareY) + bottom * shareY - 128) * VIEW.contrast;
+			}
+			image.data[o + 3] = 255;
+		}
+	}
+	outContext.putImageData(image, 0, 0);
+	return await new Promise((resolve) => out.toBlob(resolve, "image/jpeg", 0.92));
+}
 
 const rows = document.getElementById("rows");
 const summary = document.getElementById("summary");
@@ -69,12 +166,22 @@ async function runAllPhotos() {
 	const scores = { total: 0, name: 0, nameNotNeeded: 0, number: 0, found: 0, openedRight: 0, openedWrong: 0, byNumber: 0, finishRight: 0, finishTold: 0 };
 	let totalSeconds = 0;
 	for (const photo of photos) {
-		const file = await fetch("dev-local/" + photo.file, { cache: "no-store" }).then((response) => response.blob());
+		let file = await turnedBlob(await fetch("dev-local/" + photo.file, { cache: "no-store" }).then((response) => response.blob()), TURN);
+		if (VIEWED) file = await viewedBlob(file);
 		const started = performance.now();
 		// As in the app: a number that reads sure is looked up before the name is read (roadmap 2.4).
 		let byNumber = null;
+		const straightLook = STRAIGHTEN_FIRST ? await lookAtStraightenedPhoto(file, 0) : null;
 		const reading = await readCardPhoto(file, () => {}, null, {
-			onSureNumber: async (numberRead) => (byNumber = await cardByNumberAlone(numberRead)) !== null,
+			look: straightLook,
+			// (When the database doesn't answer, the reading goes on to the name, as in the app.)
+			onSureNumber: async (numberRead) => {
+				try {
+					return (byNumber = await cardByNumberAlone(numberRead)) !== null;
+				} catch (error) {
+					return false;
+				}
+			},
 		});
 		const nameOk = longestWord(reading.name).toLowerCase() === longestWord(photo.name).toLowerCase();
 		const numberOk = sameNumber(reading.number, photo.number);
@@ -120,6 +227,8 @@ async function runAllPhotos() {
 			"guesses: " + (reading.numberGuesses.join(", ") || "(none)"),
 			"set code read: " + (reading.setCode || "(none)"),
 		];
+		if (TURN) lines.push("photo turned " + TURN + ", card turned back " + (reading.turns || 0));
+		lines.push("sure of the way up: " + (reading.sure ? "yes" : "no") + (STRAIGHTEN_FIRST ? (straightLook ? ", read cut out straight" : ", no box to cut out") : ""));
 		if (matched) lines.push(matched);
 		if (looks) lines.push(looks);
 		if (opened) lines.push(opened);

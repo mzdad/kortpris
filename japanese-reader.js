@@ -27,33 +27,7 @@ const JAPANESE_CODE_PLACE = { x0: 0.02, x1: 0.45, y0: 0.90, y1: 0.995 };
 // compared, the right cards scored 0.27 at most: they can't say where the limit should be.)
 const JAPANESE_LOOK_MOST_DISTANCE = 1.0;
 
-// A card found upright that fills at least this share of the photo's height needs no turning.
-const JAPANESE_UPRIGHT_ENOUGH = 0.55;
-
-// Where the card is in a photo of a Japanese card, before any text is read: what lookAtPhoto in reader.js gives
-// - { original, photo, framed, cardBox, doubtfulBox } - plus turns: how many quarter turns clockwise the
-// photo was given so that the card stands upright in it (0, 1 or 3). A card lying sideways - laid across, or
-// in a photo that lost which way is up (16 of 32 Magic photos did; see lookAtMagicPhoto) - is found in the photo
-// turned either way: it is the biggest card-shaped box, where upright only a part of it has a card's shape.
-// frame: as for readCardPhoto.
-async function lookAtJapanesePhoto(imageFile, frame = null) {
-	const seen = await lookAtPhoto(imageFile, frame);
-	const upright = seen.cardBox ? (seen.cardBox.y1 - seen.cardBox.y0) / seen.photo.height : 0;
-	// In the app's own camera the card is held upright in the white frame.
-	if (frame || upright >= JAPANESE_UPRIGHT_ENOUGH) return { ...seen, turns: 0 };
-	let best = { turns: 0, area: boxArea(seen.cardBox), photo: seen.photo, box: seen.cardBox };
-	for (const turns of [1, 3]) {
-		const turnedPhoto = turnedPicture(seen.photo, turns);
-		const found = findYellowCard(turnedPhoto) || findCardByShape(turnedPhoto);
-		if (found && !found.doubtful && boxArea(found) > best.area) best = { turns: turns, area: boxArea(found), photo: turnedPhoto, box: found };
-	}
-	if (best.turns === 0) return { ...seen, turns: 0 };
-	const turnedOriginal = await createImageBitmap(turnedPicture(seen.original, best.turns));
-	seen.original.close();
-	return { original: turnedOriginal, photo: best.photo, framed: null, cardBox: best.box, doubtfulBox: null, turns: best.turns };
-}
-
-// Reads a photo looked at already (lookAtJapanesePhoto, or lookAtPhoto in reader.js). Returns what readCardPhoto returns for a
+// Reads a photo looked at already (lookAtPhoto in reader.js, which also turns a card lying sideways upright). Returns what readCardPhoto returns for a
 // Pokémon card - { name, nameSure, number, numberGuesses, setCode, photo, textArea, cardBox, sparkle } -
 // with no name, and setCode the set's id in TCGdex's Japanese database ("SV2a"), or "". Throws when
 // TCGdex's list of sets can't be had. stillWanted: as for readCardPhoto.
@@ -69,7 +43,7 @@ async function readJapanesePhoto(seen, stillWanted = () => true) {
 		let numberGuesses = await readJapaneseNumbers(worker, original, photo, cardBox, framed, stillWanted);
 		if (!numberGuesses.some(isWholeNumber)) {
 			// No number: perhaps the card is upside down (a card lying sideways may have been turned the wrong way,
-			// see lookAtJapanesePhoto). Its other end is read, turned right way up.
+			// see lookAtPhoto). Its other end is read, turned right way up.
 			stopUnlessWanted(stillWanted, original);
 			const turnedOriginal = await createImageBitmap(turnedPicture(original, 2));
 			const turnedPhoto = turnedPicture(photo, 2);
