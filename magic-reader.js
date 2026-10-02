@@ -121,7 +121,21 @@ const MOST_OTHER_NAMES = 2;
 // card whose English name was read isn't from them.
 const FOREIGN_ONLY_SETS = ["4bb", "fbb", "ren", "rin", "bchr"];
 
+// At most this many answers of bestNamesFor are kept; then they are forgotten and kept anew.
+const MOST_NAME_ANSWERS = 5000;
+// Collector numbers were first printed in Exodus (June 1998), at the end of the bottom line; the M15 frame
+// (July 2014) moved them to the bottom-left corner, by the set code. A card printed only before one of these
+// dates has no number in that place (see placesWorthReading).
+const MAGIC_NUMBERS_FROM = "1998-06-15";
+const MAGIC_LEFT_CORNER_FROM = "2014-07-18";
+// Every place that can tell a card's printing, read when the name's printings don't say which can't.
+const EVERY_MAGIC_PLACE = { left: true, right: true, year: true };
+
 let magicNamesPromise = null;
+// bestNamesFor's answers, per list of names (see magicNameList): Map(letters read -> names that fit).
+const bestNameAnswers = new WeakMap();
+// Each name's printings, asked once per visit (see magicPrintingsOf): Map(name -> a promise of them).
+const magicPrintingsAsked = new Map();
 
 // ---------- Where the card is ----------
 
@@ -205,10 +219,14 @@ async function readMagicPhoto(seen, stillWanted = () => true) {
 			}
 		}
 		stopUnlessWanted(stillWanted, original);
-		const corner = await readMagicCorners(worker, original, card, stillWanted);
+		// A name read sure - and fitting no other as well - has printings that say where a number, or a year,
+		// can be read at all (see placesWorthReading).
+		const places = name.sure && name.others.length === 0 ? await placesWorthReading(name.name) : EVERY_MAGIC_PLACE;
+		stopUnlessWanted(stillWanted, original);
+		const corner = await readMagicCorners(worker, original, card, stillWanted, places);
 		const number = corner.number ? [corner.setCode.toUpperCase(), corner.number].filter(Boolean).join(" ") : "";
 		// Without a number, and with a name to look up, the year printed at the bottom tells printings apart.
-		const printedYear = !corner.number && name.name ? await readMagicYear(worker, original, card, stillWanted) : 0;
+		const printedYear = !corner.number && name.name && places.year ? await readMagicYear(worker, original, card, stillWanted) : 0;
 		return {
 			name: name.name,
 			nameSure: name.sure,
@@ -339,18 +357,34 @@ function betterName(a, b) {
 // mistakes, or [] when none is close enough (see allowedNameMistakes). A name is tried whole, and with
 // its end lost (see MAGIC_PARTIAL_NAME_SHARE): a long name can run into the mana cost. Not with its start
 // lost: names start at the card's left edge, and a word read on its own is often the end of some other
-// card's name ("Invocation", of Devout Invocation).
+// card's name ("Invocation", of Devout Invocation). The same letters are read again and again - each way of
+// reading the strip reads its lines - so each answer is worked out once (at most MOST_NAME_ANSWERS kept).
 function bestNamesFor(key, names) {
+	if (!bestNameAnswers.has(names) || bestNameAnswers.get(names).size >= MOST_NAME_ANSWERS) bestNameAnswers.set(names, new Map());
+	const answers = bestNameAnswers.get(names);
+	if (!answers.has(key)) answers.set(key, namesThatFit(key, names));
+	return answers.get(key);
+}
+
+function namesThatFit(key, names) {
 	let best = [];
 	const allowed = allowedNameMistakes(key.length);
+	const keyLetters = letterCounts(key);
 	// Only a start of at least MAGIC_LONG_NAME_LETTERS letters counts: "Knioht" isn't enough of Knighthood.
 	const cutOff = key.length >= MAGIC_LONG_NAME_LETTERS;
 	const longest = cutOff ? Math.floor(key.length / MAGIC_PARTIAL_NAME_SHARE) : key.length + allowed;
 	for (let letters = key.length - allowed; letters <= Math.max(longest, key.length + allowed); letters++) {
 		for (const entry of names.get(letters) || []) {
 			const limit = allowedNameMistakes(entry.key.length);
-			let mistakes = entry.key === key ? 0 : editDistance(key, entry.key, limit);
-			if (cutOff && entry.key.length > key.length && key.length >= entry.key.length * MAGIC_PARTIAL_NAME_SHARE) {
+			const endLost = cutOff && entry.key.length > key.length && key.length >= entry.key.length * MAGIC_PARTIAL_NAME_SHARE;
+			// Most names are ruled out by their letters alone, much quicker than by editDistance (see
+			// fewestMistakes): whole, and with the end lost.
+			if (!entry.letters) entry.letters = letterCounts(entry.key);
+			const wholeMayFit = fewestMistakes(keyLetters, entry.letters) <= limit;
+			const startMayFit = endLost && fewestMistakes(keyLetters, letterCounts(entry.key.slice(0, key.length))) <= allowed;
+			if (!wholeMayFit && !startMayFit) continue;
+			let mistakes = entry.key === key ? 0 : wholeMayFit ? editDistance(key, entry.key, limit) : limit + 1;
+			if (startMayFit) {
 				// The lost end counts as one mistake.
 				const misread = editDistance(key, entry.key.slice(0, key.length), allowed);
 				if (misread <= allowed) mistakes = Math.min(mistakes, misread + 1);
@@ -361,6 +395,27 @@ function bestNamesFor(key, names) {
 		}
 	}
 	return best;
+}
+
+// How many of each letter, a to z, some plain letters (see lettersOnly) hold.
+function letterCounts(key) {
+	const counts = new Uint8Array(26);
+	for (let i = 0; i < key.length; i++) counts[key.charCodeAt(i) - 97]++;
+	return counts;
+}
+
+// The fewest mistakes (see editDistance) that can turn letters with these counts (see letterCounts) into
+// each other: each added, lost or changed letter mends at most one letter too many and one too few. Never
+// more than editDistance gives, so a name this rules out would have been ruled out by editDistance too.
+function fewestMistakes(a, b) {
+	let tooMany = 0;
+	let tooFew = 0;
+	for (let i = 0; i < 26; i++) {
+		const difference = a[i] - b[i];
+		if (difference > 0) tooMany += difference;
+		else tooFew -= difference;
+	}
+	return Math.max(tooMany, tooFew);
 }
 
 function allowedNameMistakes(letters) {
@@ -374,10 +429,12 @@ function allowedNameMistakes(letters) {
 // Reads the bottom corners (card is the card's box in the full-size original): the left one first, for
 // the number and set code of cards from 2014 on; the right one when it holds no number, for older cards'
 // number and set size. Each in the ways of MAGIC_CORNER_READS until one reads a number; then, when neither
-// did, the taller strip of MAGIC_CORNER_STRIP. Returns { setCode, number }: the set's code in Scryfall's
-// small letters when it was read ("soi"), or "", and the card's number without zeros in front ("82"), or "".
-async function readMagicCorners(worker, original, card, stillWanted) {
-	for (const place of [MAGIC_CORNER_LEFT, MAGIC_CORNER_RIGHT]) {
+// did, the taller strip of MAGIC_CORNER_STRIP. Only the places worth reading (see placesWorthReading): the
+// strip with the left corner. Returns { setCode, number }: the set's code in Scryfall's small letters when it
+// was read ("soi"), or "", and the card's number without zeros in front ("82"), or "".
+async function readMagicCorners(worker, original, card, stillWanted, places = EVERY_MAGIC_PLACE) {
+	const corners = [places.left ? MAGIC_CORNER_LEFT : null, places.right ? MAGIC_CORNER_RIGHT : null].filter(Boolean);
+	for (const place of corners) {
 		let numberOnly = null;
 		for (const way of MAGIC_CORNER_READS) {
 			stopUnlessWanted(stillWanted, original);
@@ -389,7 +446,7 @@ async function readMagicCorners(worker, original, card, stillWanted) {
 		}
 		if (numberOnly) return numberOnly;
 	}
-	for (const way of MAGIC_CORNER_STRIP_READS) {
+	for (const way of places.left ? MAGIC_CORNER_STRIP_READS : []) {
 		stopUnlessWanted(stillWanted, original);
 		const facts = await readMagicCorner(worker, original, card, MAGIC_CORNER_STRIP, way);
 		// A number with its set's size ("001/080") counts without the code too: rules text doesn't print one.
@@ -535,14 +592,49 @@ async function findMagicCardsOfPhoto(name, numberText, otherNames = []) {
 	const named = corner.filter((card) => card.name.split(" // ").some((face) => keys.includes(lettersOnly(face))));
 	if (named.length > 0) return found(named, "magicPrintingsNumber", { name: named[0].name, number: shown }, true);
 	const printings = [];
-	for (const each of names) {
-		const search = await magicSearch('!"' + each.replace(/["“”]/g, "") + '"');
-		printings.push(...search.cards.filter((card) => !FOREIGN_ONLY_SETS.includes(card.set.id)).slice(0, MOST_MAGIC_PRINTINGS));
-	}
+	for (const each of names) printings.push(...(await magicPrintingsOf(each)));
 	const numbered = number ? printings.filter((card) => sameMagicNumber(card.number, number)) : [];
 	if (numbered.length > 0) return found(numbered, "magicPrintingsNumber", { name: wanted, number: shown });
 	const all = [...corner, ...printings];
 	return all.length > 0 ? found(all, "magicPrintings", { name: wanted }) : nothing;
+}
+
+// The printings of a card's name, newest first: the newest MOST_MAGIC_PRINTINGS, without the sets printed only
+// in other languages (see FOREIGN_ONLY_SETS). Asked once per visit: a photo's reading asks for them (see
+// placesWorthReading), and its search right after. Throws when Scryfall doesn't answer.
+function magicPrintingsOf(name) {
+	const wanted = name.replace(/["“”]/g, "").trim();
+	if (!magicPrintingsAsked.has(wanted)) {
+		const asking = magicSearch('!"' + wanted + '"').then((search) =>
+			search.cards.filter((card) => !FOREIGN_ONLY_SETS.includes(card.set.id)).slice(0, MOST_MAGIC_PRINTINGS));
+		asking.catch(() => magicPrintingsAsked.delete(wanted));   // asked again next time
+		magicPrintingsAsked.set(wanted, asking);
+	}
+	return magicPrintingsAsked.get(wanted);
+}
+
+// Which places of a card can tell its printing, from the printings of its name: { left, right, year }. left
+// (the corner of cards from MAGIC_LEFT_CORNER_FROM on, and the taller strip of MAGIC_CORNER_STRIP) when a
+// printing came out from then on; right when one came out from MAGIC_NUMBERS_FROM to then; year (see
+// readMagicYear) when one came out in the years the copyright line tells apart, and they came out in more than
+// one year. A card whose name was printed only before 1998 has nothing in its corners: eight reads that could
+// find nothing are saved (version 1.70.0). Every place counts when the printings can't be had, or are too many
+// to have them all (basic lands).
+async function placesWorthReading(name) {
+	let printings;
+	try {
+		printings = await magicPrintingsOf(name);
+	} catch (error) {
+		return EVERY_MAGIC_PLACE;   // the search after the reading asks again
+	}
+	const dates = printings.map((card) => card.set.releaseDate);
+	if (printings.length === 0 || printings.length >= MOST_MAGIC_PRINTINGS || dates.some((date) => !date)) return EVERY_MAGIC_PLACE;
+	const years = new Set(printings.map(releaseYear));
+	return {
+		left: dates.some((date) => date >= MAGIC_LEFT_CORNER_FROM),
+		right: dates.some((date) => date >= MAGIC_NUMBERS_FROM && date < MAGIC_LEFT_CORNER_FROM),
+		year: years.size > 1 && [...years].some((year) => year >= MAGIC_YEAR_FIRST && year <= MAGIC_YEAR_LAST),
+	};
 }
 
 // Which of the cards found for a photo (see findMagicCardsOfPhoto) it shows, from how much each looks

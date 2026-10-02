@@ -237,6 +237,20 @@ the slash after the copyright's "Inc." is lost ("Inc 20 143"). On the 34 photos 
 numbers read 14 of 19, before 10; the right card first 29, before 28; opened by itself 23, before 20, none wrong;
 2.1 s a photo, before 1.8 (cards that print no number now read the strip too).
 
+**Magic photos quicker** (version 1.70.0). Measured on the 34 photos (scratchpad `magic_timing.js`, each step
+timed): 2.2 s a photo, of which matching what was read with the 36,000 names took 0.36 s - more than reading the name
+- and the corners 0.95 s, 5.7 reads. Now 1.7 s, with the same cards found and opened:
+- `bestNamesFor` rules most names out by their letters alone (`letterCounts`, `fewestMistakes`: a lower bound of
+  `editDistance`, so it never rules out a name that would fit), before the slower comparison, and keeps its answers, as
+  every way of reading the strip reads the same lines (`MOST_NAME_ANSWERS`). The same answers on 2,998 made-up readings
+  as before, 10 times quicker: 0.05 s a photo.
+- A name read sure has printings that say where a number or a year can be at all (`placesWorthReading`, with the
+  printings asked once per visit, `magicPrintingsOf`): numbers came with Exodus (June 1998, `MAGIC_NUMBERS_FROM`), in
+  the bottom-right corner, and moved to the bottom-left with the M15 frame (July 2014, `MAGIC_LEFT_CORNER_FROM`); the
+  year tells printings apart only when they came out in more than one year, one of them 1994 to 2003. So a name
+  printed only before 1998 reads no corner at all (eight reads saved), and one printed only from 2014 on no right
+  corner. 4.4 corner reads a photo, before 5.7; a false "96" an old Storm Shaman's corner gave is gone with it.
+
 **Pokémon photos lying sideways or at an angle** (version 1.66.0, `reader.js` and `card-finder.js`, roadmap 1.12 and
 1.13). A photo sent through a messenger can lose which way is up, and a card in a binder pocket, or photographed from
 below, has slanted sides. `readCardPhoto` reads a photo once. When that reading is not *sure* of the way up (`isSure`:

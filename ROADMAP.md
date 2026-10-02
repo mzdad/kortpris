@@ -5,6 +5,20 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.70.0
+
+- **Magic cards read quicker** (you asked: "Can we improve the reading time of cards on magic cards?"). Each step timed
+  on the 34 Magic photos: **2.2 seconds a photo before, 1.7 now** on the PC (a phone is slower, and gains more: the
+  biggest saving is plain arithmetic, which phones do several times slower), with the same cards found and opened -
+  23 right, none wrong.
+  - **Matching the name with Scryfall's 36,000 names** took 0.36 s a photo, more than reading it. Most names are now
+    ruled out by their letters alone before the slow comparison, and each answer is kept: 0.05 s. Checked on 2,998
+    made-up readings: exactly the same answers, 10 times quicker.
+  - **The corners are only read where the card's name was ever printed with a number**: numbers came in 1998 (bottom
+    right) and moved to the bottom left in 2014. A card whose name was only printed before 1998 now skips eight reads
+    that could find nothing; 4.4 corner reads a photo instead of 5.7. An old Storm Shaman lost a false number with it.
+    Likewise the year at the bottom is only read when the name's printings came out in more than one year.
+
 ## Done in 1.69.0
 
 - **Magic numbers read on cards in a case** (you asked: "Looking at the pictures in magic folder, can you improve how
@@ -1172,6 +1186,7 @@ Coast asks fan apps to say they are unofficial, which the page's foot now does.
 | 7.7 | **Faint names on old white Magic cards**, the last two: Kismet and Kjeldoran Knight. | Two of your 32 photos read no name; the name box can be typed in meanwhile. 1.58.0 reads the others (Femeref Knight, Radiant, Archangel), but no way of reading this Tesseract reader has tried gets more than half of these two names: light letters with a shadow, on a bar of the same grey, about 30 pixels tall in a photo cut down by Signal. First try photos from the app's own camera. | S |
 | 7.9 | **Magic printings that differ by border**: Unlimited and Beta (black) against Revised (white), by the border's colour in the photo. | They print no year, so 1.59.0's year doesn't help, and a Beta or Unlimited card is worth far more than a Revised one with the same picture. It needs a photo of each to test: none of your 32 is one. | S |
 | 7.10 | **The card game picked and the card in the photo don't match**, the rest: a Pokémon card with no yellow border in Magic mode, and a Magic card in Pokémon mode. | 1.60.0 catches Pokémon cards with a yellow border (37 of 46 photos). The others (silver borders, a toploader, a reverse holo) still get a made-up name from the Magic reader, 2 of 9 - and a Magic card given to the Pokémon reader isn't checked at all. Two ways of telling them apart were tried and dropped (see 1.60.0). Could also switch the game itself and read the photo again, when the border is sure. | M |
+| 7.11 | **Magic photos quicker still** (1.70.0 does the first part). | 1.7 s a photo on the PC: the corners still take 0.7 s (4.4 reads), as a name reprinted in many years can have its number in either corner. Ideas: read the name and the corners at the same time with a second reader (phones have several cores; a second reader takes more of the phone's memory, not yet measured), or tell the frame from the picture before reading (an old frame has no number in the bottom-left corner). | M |
 | 7.4 | **Other card games** with a free database, the same way (Yu-Gi-Oh!, Lorcana). | With a game switch in place, each game is its database, its reading and its texts. | M each |
 
 ## Not planned
