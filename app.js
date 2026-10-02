@@ -91,6 +91,7 @@ const KID_STATUS = {
 	readFailed: "kidNotFound",
 	unsureName: "kidNotFound",
 	needNameOrNumber: "kidNotFound",
+	typeCardName: "kidTypeCard",   // "Not your card? Write it" was pressed
 	magicStatusIdle: "kidMagicIdle",   // under the big photo button: the other way, typing the name
 	magicNeedName: "kidMagicIdle",
 	magicNoMatch: "kidMagicNotFound",
@@ -106,7 +107,7 @@ const KID_STATUS = {
 // ...with a picture, so it can be understood without reading...
 const KID_STATUS_ICONS = {
 	kidIdle: "📷", kidBusy: "🔎", kidFound: "🎉", kidPickOne: "👇", kidNotFound: "🤔", kidTryLater: "⏳",
-	kidMagicIdle: "✏️", kidMagicNotFound: "🤔", kidPokemonCard: "⚡",
+	kidMagicIdle: "✏️", kidMagicNotFound: "🤔", kidPokemonCard: "⚡", kidTypeCard: "✏️",
 };
 // ...and these are also said out loud. (A found card is said with its name and value instead.)
 const KID_SPOKEN = {
@@ -117,6 +118,7 @@ const KID_SPOKEN = {
 	kidMagicIdle: "sayMagicIdle",
 	kidMagicNotFound: "sayMagicNotFound",
 	kidPokemonCard: "sayPokemonCard",
+	kidTypeCard: "sayTypeCard",
 };
 
 // The text key for each kind of card, the group names in "My cards" (CARD_KINDS in collection.js).
@@ -278,6 +280,7 @@ let suggestedIds = [];            // learned cards the photo looks somewhat like
 let chosenVersion = null;         // the version picked on the open card ("reverseHolofoil"), or null
 let versionHint = null;           // the version Claude saw in the photo, used until one is picked
 let saveFailed = false;           // the browser refused to save "My cards"
+let kidTyping = false;            // kids mode: the name and number boxes are shown (see showKidTyping)
 let refreshingPrices = false;     // "Update prices" is busy
 let refreshMessage = null;        // what the last price update said: a text key, or null
 let noticeMessage = null;         // a yellow notice under the status: { key, values }, or null
@@ -813,6 +816,7 @@ kidsButton.addEventListener("click", () => setKidsMode(!kidsMode));
 // Kids mode on or off, remembered on this phone. speakIt: say so out loud when it goes on.
 function setKidsMode(on, speakIt = true) {
 	kidsMode = on;
+	showKidTyping(false);
 	if (on && game === "japanese") setGame("pokemon");   // kids mode has no Japanese cards (see game above)
 	writeStorage(KIDS_MODE_STORAGE_KEY, kidsMode ? "on" : "off");
 	applyLanguage();
@@ -886,6 +890,15 @@ detail.addEventListener("click", (event) => {
 	}
 	if (event.target.closest("[data-action='read-aloud']")) {
 		sayCard(card);
+		return;
+	}
+	if (event.target.closest("[data-action='kid-type']")) {
+		showKidTyping(true);
+		renderResults();   // without the button, now the boxes are there
+		setStatus("typeCardName");
+		searchForm.scrollIntoView({ behavior: "smooth", block: "center" });
+		nameInput.focus();
+		nameInput.select();   // the name read is written over by typing, or can be mended
 		return;
 	}
 	const andNext = event.target.closest("[data-action='save-and-next']");
@@ -1341,6 +1354,7 @@ async function scanPhoto(imageFile, frame = null) {
 	lastPhoto = null;
 	scannedNumbers = { shown: "", guesses: [] };
 	clearResults();
+	showKidTyping(false);   // a new photo: the big picture says it all again
 	nameInput.value = "";
 	numberInput.value = "";
 	searchButton.disabled = true;
@@ -2778,6 +2792,13 @@ function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint, onSca
 				<span aria-hidden="true">⭐📷</span> ${t("kidSaveAndNext")}
 			</button>`
 		: "";
+	// The photo may have been taken for the wrong card: then the boxes to type it in show (see showKidTyping).
+	// A Magic card's boxes are always there.
+	const typeIt = onScanScreen && !kidTyping && !isMagicCard(card)
+		? `<button type="button" class="button secondary kid-save" data-action="kid-type">
+				<span aria-hidden="true">✏️</span> ${t("kidTypeIt")}
+			</button>`
+		: "";
 	return `
 		<div class="kid-card">
 			<img class="card-image kid-card-image" src="${escapeHtml(readablePictureUrl(card.images && card.images.small))}" alt="${escapeHtml(card.name)}" crossorigin="anonymous" width="245" height="342">
@@ -2791,9 +2812,18 @@ function kidCardDetailHtml(card, pickedKey = chosenVersion || versionHint, onSca
 				<span aria-hidden="true">⭐</span> ${t(owned > 0 ? "kidSaveAnother" : "kidSave")}
 			</button>
 			${saveAndNext}
+			${typeIt}
 			${ownedNote}
 			${saveProblem}
 		</div>`;
+}
+
+// Kids mode hides the name and number boxes for Pokémon cards - the big photo button says it all - until a
+// photo's card isn't found for sure, or the child says the card shown isn't theirs: then they show, to type
+// it in (body class "kid-typing", see style.css). A new photo hides them again.
+function showKidTyping(on) {
+	kidTyping = on;
+	document.body.classList.toggle("kid-typing", on);
 }
 
 function kidWorthHtml(card, version) {
@@ -3882,6 +3912,8 @@ function setStatus(key, values = {}, tone = "") {
 	// In kids mode each new kind of message is also said out loud: once, not at every step.
 	const kidKey = KID_STATUS[key];
 	if (kidsMode && kidKey !== kidKeyBefore && KID_SPOKEN[kidKey]) say(t(KID_SPOKEN[kidKey]));
+	// The card wasn't found for sure: the boxes to type it in show (see showKidTyping).
+	if (kidsMode && (kidKey === "kidNotFound" || kidKey === "kidPickOne")) showKidTyping(true);
 }
 
 function showStatus() {

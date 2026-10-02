@@ -646,11 +646,15 @@ body.kids footer p:not(.app-version),
 body.kids .button-words { display: none; }
 /* Before the first photo, the big start picture says it all. A Magic card's name can also be typed (an
    old card's fancy letters can be too much for the reader; see renderGame in app.js): kids mode shows
-   the search box for them too, below the big start picture. */
-body.kids:not(.game-magic) .lookup:has(.scan-row.no-photo),
-body.kids:not(.game-magic) #search-form { display: none; }
-body.kids.game-magic .fields input { font-size: 1.2rem; padding: 14px; }
-body.kids.game-magic #search-button { min-height: 58px; font-size: 1.2rem; }
+   the search box for them too, below the big start picture. A Pokémon card's boxes show once a photo's
+   card isn't found for sure, or the child says the card shown isn't theirs ("kid-typing", see
+   showKidTyping in app.js). */
+body.kids:not(.game-magic):not(.kid-typing) .lookup:has(.scan-row.no-photo),
+body.kids:not(.game-magic):not(.kid-typing) #search-form { display: none; }
+body.kids.game-magic .fields input,
+body.kids.kid-typing .fields input { font-size: 1.2rem; padding: 14px; }
+body.kids.game-magic #search-button,
+body.kids.kid-typing #search-button { min-height: 58px; font-size: 1.2rem; }
 
 body.kids { --bar-height: 100px; }
 body.kids .status { font-size: 1.25rem; font-weight: 700; }

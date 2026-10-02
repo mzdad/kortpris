@@ -354,7 +354,12 @@ yet: one big picture to tap for the camera, the card with 1 to 5 Poké Balls for
 it is (one Poké Ball, then two Premier, three Great, four Ultra and five Master Balls, from 20, 40, 250 and 520 kroner), one rounded price, versions as little pictures of where the card glitters, and a big
 Save button. Two big buttons at the top pick the game, a Poké Ball for Pokémon and a gem for Magic
 (1.56.0). For Magic cards a big name box and Search button sit below the camera picture: an old card's
-fancy letters can be too much for the reader, and a child can type the name instead. A Magic card shows 1 to 5 gems instead of balls, at the same prices: they
+fancy letters can be too much for the reader, and a child can type the name instead. A Pokémon card's name
+and number boxes show once the app didn't get the card (version 1.71.0, `showKidTyping`, body class
+`kid-typing`): when a photo's card isn't found (🤔 "Couldn't find the card. Try a new photo, or write its
+name.") or only a list to pick from is shown ("Not there? Write its name."), and on the card's page a big
+"✏️ Not your card? Write it" button shows them for a card taken wrongly, with the name read selected to write
+over (status `typeCardName`, said out loud). A new photo hides them again. A Magic card shows 1 to 5 gems instead of balls, at the same prices: they
 climb like the colours of a Magic card's rarity symbol, one black (common), two silver (uncommon),
 three gold (rare), four orange (mythic rare), and five rainbow gems like a shiny foil card
 (`gemsHtml`). Magic's own mana and planeswalker symbols are left alone: Wizards of the Coast's Fan

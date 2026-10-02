@@ -5,6 +5,18 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.71.0
+
+- **Kids mode: write the card in when the app didn't get it** (you said: "When kids mode don't get hte card right, the
+  field with number and name should appear so they can type that in"). Kids mode hid the name and number boxes for
+  Pokémon cards. Now they show:
+  - when a photo's card isn't found: "🤔 Couldn't find the card. Try a new photo, or write its name.";
+  - when only a list to pick from is shown: "👇 Which card is yours? Tap it. Not there? Write its name.";
+  - when the wrong card opened: a big "✏️ Not your card? Write it" button on the card's page shows them, with the
+    name the app read selected, so typing writes over it, and the phone says what to write.
+  - A new photo hides them again, so the start stays one big picture. Magic already had its name box, and grown-up
+    mode is as before. Checked at phone size in English and Danish (15 checks), and the whole app (20 checks).
+
 ## Done in 1.70.0
 
 - **Magic cards read quicker** (you asked: "Can we improve the reading time of cards on magic cards?"). Each step timed
