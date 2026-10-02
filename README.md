@@ -146,6 +146,33 @@ typed. Learned cards (tap the right one) work for Japanese cards too, kept apart
 sets since 2016 from their pictures (number read 67, opened by itself 67 right, none wrong), and with real photos in
 `dev-local/japanese-photos.json` (4: numbers read 4, the right card first 4, 3 opened by themselves). Not yet: kids mode.
 
+**Japanese cards with Pokémon picked** (version 1.67.0, `japanese-reader.js`). A photo of a Japanese card can be
+scanned without picking "Japanese" first (still there, for typing a Japanese search). The photo is read as an English
+card, as always; when the English search didn't find the card by its name and number (`mayBeJapanese`: a Japanese
+name can't be read), it is read as a Japanese card too (`japaneseCardOfPhoto`, with the numbers the English reading
+read counted as well), and when a Japanese card opens by itself (`pickJapaneseCard`) it is shown as with Japanese
+picked, the switch staying on Pokémon (`searchJapanesePhoto` in app.js; status `japaneseChecking` meanwhile) -
+unless an English card with the name the English reading read looks about as much like the photo: a Japanese name
+can't be read in English, so that is the English print of the same card (`englishNameWins`; an English Bulbasaur
+whose number was misread opened its Japanese print, with the same picture, without it). Many
+sets are printed in both languages with the same numbers and pictures (151 is SV2a in Japanese, Shrouded Fable
+SV6a, White Flare SV11W), so an English card then opens by itself only when it looks like the photo (at most
+`LOOK_ALIKE_MOST_DISTANCE`, 1.5) and no Japanese card with the number and set size read looks as much like it
+(within `SET_SIZE_LOOK_SLACK`, or with no picture to compare): `japaneseDoubt`. Otherwise the English cards are
+listed. A card that would open by its number alone, before its name is read, waits for its English name when a
+Japanese card with the same number and set size looks as much like the photo (`englishCardIsSure`). Japanese
+cards printed no number before July 2001 (`JAPANESE_NUMBERS_PRINTED_FROM`), though TCGdex numbers them: they
+don't count (the 1996 set has 102 cards, like the Base Set). Measured: the 84 Japanese photos of
+`dev_japanese_test.html?pokemon=1` (`?just=SV11W-007,SM6a-007` tests single cards, with the very photos of a full
+run) open 72 right and none wrong, 8.1 s a photo (70 right and 2.5 s with Japanese picked); 3 of the 4 real ones
+open, and Chandelure V, which has no picture anywhere, gets the English list. English photos: none taken for a
+Japanese card on any test page, and the same cards shown first and opened as in 1.66.0 but for Water Energy 102/102
+(listed: Stellar Miracle's blue cave Stadium 102/102 looks about as alike) and, on sideways photos, a Hitmonchan
+whose number read "1/102" (listed, as Stellar Miracle's card 1 fits it; the slanted one 1.66.0 opened wrong is
+listed too). Slower where a number is misread, as the photo is read as Japanese too: special numbers 3.3 to 4.7 s a
+photo, the made-up photos 4.7 to 8.4 s, photos at a 12% angle 9.7 to 14.4 s; upright real photos 3.1 to 3.2 s. Not
+in kids mode, which has no Japanese cards.
+
 **Magic: The Gathering cards** (version 1.55.0, `magic.js`). A switch above the search picks the
 game, remembered on the phone (`setGame` in `app.js`); in kids mode two big buttons pick it (see Kids mode).
 Magic cards come from [Scryfall](https://scryfall.com), free and without a key, and are found from a
@@ -413,7 +440,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `dev_special_numbers_test.html` | Development tool: promos, gallery and other lettered numbers (see below) |
 | `dev_fullart_test.html` | Development tool: full-art, gold and illustration-rare cards (see below) |
 | `dev_magic_photos_test.html` | Development tool: runs real photos of Magic cards from the private `dev-local/` folder |
-| `dev_japanese_test.html` | Development tool: fake photos of 80 Japanese cards made from their pictures, and real ones from `dev-local/` |
+| `dev_japanese_test.html` | Development tool: fake photos of 80 Japanese cards made from their pictures, and real ones from `dev-local/`; `?pokemon=1` scans them with Pokémon picked |
 
 ## Publishing a change
 

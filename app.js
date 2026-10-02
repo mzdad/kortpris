@@ -1348,6 +1348,7 @@ async function scanPhoto(imageFile, frame = null) {
 	// With a saved API key, and signed in to an account, Claude reads the card. If that fails
 	// for any reason, the built-in reader takes over, and a notice says why.
 	let reading = null;
+	let readByClaude = false;
 	if (claudeKey() && claudeReadingAllowed()) {
 		setStatus("claudeReading");
 		showProgress(null);
@@ -1368,6 +1369,7 @@ async function scanPhoto(imageFile, frame = null) {
 				photo: await photoForLooks(imageFile),
 				textArea: null,
 			};
+			readByClaude = true;
 			versionHint = CLAUDE_FINISH_VERSIONS[answer.finish] || null;
 		} catch (error) {
 			if (scanId !== latestScanId) return;
@@ -1424,6 +1426,10 @@ async function scanPhoto(imageFile, frame = null) {
 			learnedLook = compareWithLearned(reading.photo, reading.textArea, reading.cardBox || null, learnedOfGame("pokemon"));
 		}
 		lastPhoto = photoFacts(reading.photo, reading.textArea, reading.cardBox || null, reading.setName || "", learnedLook, reading.setCode || "");
+		// Kept to read the photo as a Japanese card too, if the search says it may be one (see searchForCard) -
+		// not after Claude read it, which reads the card in its own way.
+		lastPhoto.imageFile = readByClaude ? null : imageFile;
+		lastPhoto.frame = frame;
 	}
 	nameInput.value = reading.name;
 	numberInput.value = reading.number;
@@ -1607,6 +1613,10 @@ async function openByNumber(numberRead, learnedLook, scanId) {
 		console.error(error);   // the database didn't answer: the name is read, and the search tries again
 	}
 	if (!cards || scanId !== latestScanId) return false;
+	// It may be the English print of a Japanese card with the same number and picture: then it opens only when
+	// the name strip reads its English name (see englishCardIsSure). Kids mode has no Japanese cards.
+	if (!kidsMode && !(await englishCardIsSure(numberRead, cards))) return false;
+	if (scanId !== latestScanId) return false;
 	const card = cards[0];
 	await loadPrices(card);
 	if (scanId !== latestScanId) return false;
@@ -1725,7 +1735,10 @@ async function searchForCard(byViewer = false) {
 	resultsForPhoto = lastPhoto !== null && (!byViewer || answersPhoto);
 	// Magic cards are searched for in their own way (see findMagicCardsForSearch).
 	const magic = game === "magic";
-	const japanese = game === "japanese";
+	// A Japanese card read with Pokémon picked (see searchJapanesePhoto) is searched for in the Japanese
+	// database too - but not another card the viewer looks up meanwhile.
+	const japaneseOfPhoto = game === "pokemon" && lastPhoto !== null && Boolean(lastPhoto.japanese) && (!byViewer || answersPhoto);
+	const japanese = game === "japanese" || japaneseOfPhoto;
 	const searchable = magic ? canSearchMagic(nameInput.value, numberInput.value)
 		: japanese ? canSearchJapanese(nameInput.value, numberInput.value)
 		: canSearch(nameInput.value, numberInput.value);
@@ -1750,14 +1763,42 @@ async function searchForCard(byViewer = false) {
 		if (!found && useText) {
 			found = magic
 				? await findMagicCardsForSearch(byViewer)
+				: japaneseOfPhoto
+				? await findJapaneseCards(nameInput.value, numberInput.value, lastPhoto !== null, guesses)
 				: await findCards(nameInput.value, numberInput.value, lastPhoto !== null, guesses);
 		}
 		if (!found) found = { cards: [], description: null, totalCount: 0, exactFound: false };
 		found = await withLearnedSuggestions(found, suggestions);
 		if (searchId !== latestSearchId) return;   // a newer photo or search took over
+		// With Pokémon picked, a photo whose card wasn't found by its name and number may be of a Japanese card,
+		// whose name can't be read: it is read as one too, and shown as one when a Japanese card opens by itself
+		// (see mayBeJapanese and japaneseCardOfPhoto). Not in kids mode, which has no Japanese cards.
+		let japaneseRead = null;
+		if (game === "pokemon" && !kidsMode && !byViewer && !japaneseOfPhoto && lastPhoto !== null && lastPhoto.imageFile
+			&& mayBeJapanese(found)) {
+			setStatus("japaneseChecking");
+			try {
+				japaneseRead = await japaneseCardOfPhoto(lastPhoto.imageFile, lastPhoto.frame, () => searchId === latestSearchId, [numberInput.value, ...guesses]);
+			} catch (error) {
+				if (!error.stopped) console.error(error);   // then the English cards found are shown
+			}
+			if (searchId !== latestSearchId) return;
+			if (japaneseRead && japaneseRead.pick.clear) {
+				// Unless an English card with the name read looks as much like it (see englishNameWins).
+				const english = await englishNameWins(japaneseRead, nameInput.value, found.cards, lastPhoto.picture, lastPhoto.textArea, lastPhoto.cardBox);
+				if (searchId !== latestSearchId) return;
+				if (!english) {
+					await searchJapanesePhoto(japaneseRead.reading, true);
+					return;
+				}
+			}
+			setStatus("lookingUp");
+		}
 		// A Magic card that only its name was read for opens once its picture looks like the photo
-		// (see pickMagicCard in magic-reader.js), even when it has one printing only.
-		const lookFirst = (magic || japanese) && lastPhoto !== null && !byViewer && !found.learned
+		// (see pickMagicCard in magic-reader.js), even when it has one printing only. So does an English card for a
+		// photo read as a Japanese card too: none opens when it looks little like the photo, or a Japanese card with
+		// the number read looks as much like it (see japaneseDoubt).
+		const lookFirst = (magic || japanese || japaneseRead !== null) && lastPhoto !== null && !byViewer && !found.learned
 			&& !(magic ? found.byCorner : found.exactFound);
 		if (found.learned) {
 			// Show the recognised card's own name and number, whatever was read.
@@ -1821,7 +1862,9 @@ async function searchForCard(byViewer = false) {
 				});
 			const cards = firstPageWith(pick.cards, suggested);
 			const best = cards[0].id;
-			if (pick.clear) {
+			const opening = ranked.find((entry) => entry.card === cards[0]);
+			const doubted = japaneseDoubt(japaneseRead, opening ? opening.distance : Infinity);
+			if (pick.clear && !doubted) {
 				await loadPrices(cards[0]);
 				if (searchId !== latestSearchId) return;
 				setStatus("bestMatchOpened");
@@ -1886,9 +1929,17 @@ async function scanJapanesePhoto(imageFile, frame, scanId) {
 		return;
 	}
 	if (scanId !== latestScanId) return;
+	await searchJapanesePhoto(reading, false);
+}
+
+// Searches for the Japanese card a photo was read as (see readJapanesePhoto). fromPokemon: read with Pokémon
+// picked, where it turned out to be a Japanese card (see japaneseCardOfPhoto): the switch stays on Pokémon,
+// and the photo's searches ask the Japanese database (see searchForCard).
+async function searchJapanesePhoto(reading, fromPokemon) {
 	searchButton.disabled = false;
 	const learnedLook = compareWithLearned(reading.photo, null, reading.cardBox, learnedOfGame("japanese"));
 	lastPhoto = photoFacts(reading.photo, null, reading.cardBox, "", learnedLook);
+	lastPhoto.japanese = fromPokemon;
 	// The set the code read names ("SV2a"), for telling apart cards that look alike.
 	lastPhoto.codeSets = reading.setCode ? [reading.setCode] : [];
 	const shown = [reading.setCode, reading.number].filter(Boolean).join(" ");
@@ -1897,7 +1948,8 @@ async function scanJapanesePhoto(imageFile, frame, scanId) {
 	scannedNumbers = { shown: shown, guesses: reading.numberGuesses };
 	// Nothing read, and no learned card the photo looks like: searching on nothing would show random cards.
 	if (lastPhoto.learnedCard === null && !reading.number && lastPhoto.learnedSuggestions.length === 0) {
-		failed("japaneseReadFailed");
+		hideProgress();
+		setStatus("japaneseReadFailed", {}, "error");
 		return;
 	}
 	if (lastPhoto.learnedCard === null && !reading.number) lastPhoto.textUsable = false;

@@ -34,16 +34,19 @@ possible.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.66.0"></script>
-<script src="card-names.js?v=1.66.0"></script>
-<script src="set-codes.js?v=1.66.0"></script>
-<script src="card-finder.js?v=1.66.0"></script>
-<script src="sparkle.js?v=1.66.0"></script>
-<script src="reader.js?v=1.66.0"></script>
-<script src="storage.js?v=1.66.0"></script>
-<script src="card-ids.js?v=1.66.0"></script>
-<script src="cards.js?v=1.66.0"></script>
-<script src="matcher.js?v=1.66.0"></script>
+<script src="pokemon-names.js?v=1.67.0"></script>
+<script src="card-names.js?v=1.67.0"></script>
+<script src="set-codes.js?v=1.67.0"></script>
+<script src="card-finder.js?v=1.67.0"></script>
+<script src="sparkle.js?v=1.67.0"></script>
+<script src="reader.js?v=1.67.0"></script>
+<script src="storage.js?v=1.67.0"></script>
+<script src="card-ids.js?v=1.67.0"></script>
+<script src="cards.js?v=1.67.0"></script>
+<script src="matcher.js?v=1.67.0"></script>
+<script src="japanese-sets.js?v=1.67.0"></script>
+<script src="japanese.js?v=1.67.0"></script>
+<script src="japanese-reader.js?v=1.67.0"></script>
 <script>
 "use strict";
 
@@ -163,7 +166,7 @@ async function runAllPhotos() {
 	// ?only=IMG_1988,IMG_1990 runs just the photos whose file names contain one of those.
 	const only = new URLSearchParams(location.search).get("only");
 	if (only) photos = photos.filter((photo) => only.split(",").some((part) => photo.file.includes(part)));
-	const scores = { total: 0, name: 0, nameNotNeeded: 0, number: 0, found: 0, openedRight: 0, openedWrong: 0, byNumber: 0, finishRight: 0, finishTold: 0 };
+	const scores = { total: 0, japanese: 0, japaneseTried: 0, name: 0, nameNotNeeded: 0, number: 0, found: 0, openedRight: 0, openedWrong: 0, byNumber: 0, finishRight: 0, finishTold: 0 };
 	let totalSeconds = 0;
 	for (const photo of photos) {
 		let file = await turnedBlob(await fetch("dev-local/" + photo.file, { cache: "no-store" }).then((response) => response.blob()), TURN);
@@ -177,7 +180,10 @@ async function runAllPhotos() {
 			// (When the database doesn't answer, the reading goes on to the name, as in the app.)
 			onSureNumber: async (numberRead) => {
 				try {
-					return (byNumber = await cardByNumberAlone(numberRead)) !== null;
+					byNumber = await cardByNumberAlone(numberRead);
+					// As in the app (openByNumber): not the English print of a Japanese card whose name strip doesn't read.
+					if (byNumber && !(await englishCardIsSure(numberRead, byNumber))) byNumber = null;
+					return byNumber !== null;
 				} catch (error) {
 					return false;
 				}
@@ -189,6 +195,8 @@ async function runAllPhotos() {
 		let matched = "";
 		let looks = "";
 		let opened = "";
+		let triesJapanese = false;   // read as a Japanese card too (see below)
+		let japanese = null;
 		if (reading.settled) {
 			// Opened by its number, before the name was read (see cardByNumberAlone): nothing to search.
 			foundAt = byNumber.findIndex((card) => card.id === photo.id);
@@ -197,24 +205,36 @@ async function runAllPhotos() {
 			try {
 				// The same steps as the app (searchForCard in app.js), without the screen.
 				const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
-				const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
-				const located = reading.cardBox !== null || reading.textArea !== null;
-				const pick = found.cards.length === 1
-					? { cards: found.cards, clear: true }
-					: pickBestMatch(ranked, located, {
-						setSizes: found.setSizes,
-						codeSets: setsOfCode(reading.setCode),
-						numbersRead: found.numbersRead,
-						looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
-					});
-				foundAt = pick.cards.findIndex((card) => card.id === photo.id);
-				if (pick.clear) opened = foundAt === 0 ? "opened by itself: right" : "opened by itself: WRONG";
-				if (found.matchedNumber) matched = "database confirmed " + found.matchedNumber;
-				// How alike the pictures are (0 = the same): the right card's, and the closest wrong one's.
-				const right = ranked.find((entry) => entry.card.id === photo.id);
-				const wrong = ranked.find((entry) => entry.card.id !== photo.id);
-				looks = "look: right " + (right ? right.distance.toFixed(2) : "-")
-					+ ", best wrong " + (wrong ? wrong.distance.toFixed(2) : "-");
+				// A card not found by its name and number may be a Japanese card: read as one too, and taken for one
+				// when a Japanese card opens by itself (see mayBeJapanese) - never right here.
+				triesJapanese = mayBeJapanese(found);
+				if (triesJapanese) japanese = await japaneseCardOfPhoto(file, null, () => true, [reading.number, ...reading.numberGuesses]).catch(() => null);
+				// Not when an English card with the name read looks as much like the photo (see englishNameWins): as in the app.
+				if (japanese && japanese.pick.clear && await englishNameWins(japanese, reading.name || "", found.cards, reading.photo, reading.textArea, reading.cardBox)) japanese.pick.clear = false;
+				if (japanese && japanese.pick.clear) {
+					opened = "taken for the Japanese card " + japanese.pick.cards[0].id + ": WRONG";
+				} else {
+					const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
+					const located = reading.cardBox !== null || reading.textArea !== null;
+					const pick = found.cards.length === 1
+						? { cards: found.cards, clear: true }
+						: pickBestMatch(ranked, located, {
+							setSizes: found.setSizes,
+							codeSets: setsOfCode(reading.setCode),
+							numbersRead: found.numbersRead,
+							looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
+						});
+					foundAt = pick.cards.findIndex((card) => card.id === photo.id);
+					// Read as a Japanese card too, and the English card not sure enough: listed, not opened by itself (see japaneseDoubt).
+					const opening = ranked.find((entry) => entry.card === pick.cards[0]);
+					if (pick.clear && !japaneseDoubt(japanese, opening ? opening.distance : Infinity)) opened = foundAt === 0 ? "opened by itself: right" : "opened by itself: WRONG";
+					if (found.matchedNumber) matched = "database confirmed " + found.matchedNumber;
+					// How alike the pictures are (0 = the same): the right card's, and the closest wrong one's.
+					const right = ranked.find((entry) => entry.card.id === photo.id);
+					const wrong = ranked.find((entry) => entry.card.id !== photo.id);
+					looks = "look: right " + (right ? right.distance.toFixed(2) : "-")
+						+ ", best wrong " + (wrong ? wrong.distance.toFixed(2) : "-");
+				}
 			} catch (error) {
 				console.error(error);
 			}
@@ -229,6 +249,12 @@ async function runAllPhotos() {
 		];
 		if (TURN) lines.push("photo turned " + TURN + ", card turned back " + (reading.turns || 0));
 		lines.push("sure of the way up: " + (reading.sure ? "yes" : "no") + (STRAIGHTEN_FIRST ? (straightLook ? ", read cut out straight" : ", no box to cut out") : ""));
+		if (triesJapanese) {
+			const fitting = japanese ? japaneseCardsThatFit(japanese) : [];
+			lines.push("read as a Japanese card too: " + (!japanese ? "no number read" : japanese.shown
+				+ (japanese.pick.clear ? ", opened" : fitting.length > 0 ? ", Japanese cards fit the number and set size, the closest "
+				+ fitting[0].card.id + " " + fitting[0].distance.toFixed(2) : ", no Japanese card fits")));
+		}
 		if (matched) lines.push(matched);
 		if (looks) lines.push(looks);
 		if (opened) lines.push(opened);
@@ -247,6 +273,8 @@ async function runAllPhotos() {
 		const strips = lines.join("\n");
 		scores.total++;
 		if (reading.settled) scores.byNumber++;
+		if (triesJapanese) scores.japaneseTried++;
+		if (japanese && japanese.pick.clear) scores.japanese++;
 		if (reading.settled) scores.nameNotNeeded++;
 		else if (nameOk) scores.name++;
 		if (numberOk) scores.number++;
@@ -262,6 +290,7 @@ async function runAllPhotos() {
 		+ " · right card shown first " + scores.found + "/" + scores.total
 		+ " · opened by itself " + scores.openedRight + " right, " + scores.openedWrong + " wrong"
 		+ " (" + scores.byNumber + " by the number alone)"
+		+ " · taken for a Japanese card " + scores.japanese + " (read as one too " + scores.japaneseTried + ")"
 		+ " · reverse holo or not " + scores.finishRight + "/" + scores.finishTold + " right"
 		+ " · " + (totalSeconds / scores.total).toFixed(1) + " s per photo";
 	summary.textContent = line;

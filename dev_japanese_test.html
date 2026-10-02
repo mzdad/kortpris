@@ -34,19 +34,19 @@ when there are some, are in the private <code>dev-local/</code> folder, listed w
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.66.0"></script>
-<script src="card-names.js?v=1.66.0"></script>
-<script src="set-codes.js?v=1.66.0"></script>
-<script src="card-finder.js?v=1.66.0"></script>
-<script src="sparkle.js?v=1.66.0"></script>
-<script src="reader.js?v=1.66.0"></script>
-<script src="storage.js?v=1.66.0"></script>
-<script src="card-ids.js?v=1.66.0"></script>
-<script src="cards.js?v=1.66.0"></script>
-<script src="japanese-sets.js?v=1.66.0"></script>
-<script src="japanese.js?v=1.66.0"></script>
-<script src="matcher.js?v=1.66.0"></script>
-<script src="japanese-reader.js?v=1.66.0"></script>
+<script src="pokemon-names.js?v=1.67.0"></script>
+<script src="card-names.js?v=1.67.0"></script>
+<script src="set-codes.js?v=1.67.0"></script>
+<script src="card-finder.js?v=1.67.0"></script>
+<script src="sparkle.js?v=1.67.0"></script>
+<script src="reader.js?v=1.67.0"></script>
+<script src="storage.js?v=1.67.0"></script>
+<script src="card-ids.js?v=1.67.0"></script>
+<script src="cards.js?v=1.67.0"></script>
+<script src="japanese-sets.js?v=1.67.0"></script>
+<script src="japanese.js?v=1.67.0"></script>
+<script src="matcher.js?v=1.67.0"></script>
+<script src="japanese-reader.js?v=1.67.0"></script>
 <script>
 "use strict";
 
@@ -61,6 +61,12 @@ const SET_STEP = 2;
 // ?only=SV2a,M3 runs just the sets whose id is one of these; ?real=1 the real photos alone.
 const only = new URLSearchParams(location.search).get("only");
 const realOnly = new URLSearchParams(location.search).has("real");
+// ?just=SV11W-007,SM6a-007 tests just those cards, with the very photos of a full run (all photos are made, in turn).
+const just = new URLSearchParams(location.search).get("just");
+// ?pokemon=1 reads the photos as the app does with Pokémon picked (scanPhoto and searchForCard in app.js): as an
+// English card first, and as a Japanese card too when that doesn't find a card by its name and number (see
+// mayBeJapanese and englishCardIsSure).
+const POKEMON_PICKED = new URLSearchParams(location.search).has("pokemon");
 
 const rows = document.getElementById("rows");
 const summary = document.getElementById("summary");
@@ -68,13 +74,15 @@ const summary = document.getElementById("summary");
 runAllTests();
 
 async function runAllTests() {
-	setCardSearchLanguage("ja");   // the searches ask the Japanese database (cards.js)
+	// The searches ask the Japanese database (cards.js) - or, as with Pokémon picked, the English one first.
+	setCardSearchLanguage(POKEMON_PICKED ? "en" : "ja");
 	const scores = { total: 0, number: 0, code: 0, first: 0, openedRight: 0, openedWrong: 0, seconds: 0, pictureless: 0 };
 	const random = seededRandom(RANDOM_SEED);
 	if (!realOnly) {
 		const cards = await chooseCards();
 		for (const card of cards) {
 			const photo = await makeFakePhoto(await loadImage(card.images.large), random);
+			if (just && !just.split(",").some((id) => card.id === JAPANESE_ID_START + id)) continue;
 			await testOnePhoto(card, card.name, photo, scores);
 			summary.textContent = "Running… " + scores.total + " of " + cards.length;
 		}
@@ -92,7 +100,7 @@ async function runAllTests() {
 		const photo = await fetch("dev-local/" + entry.photo, { cache: "no-store" }).then((response) => response.blob());
 		await testOnePhoto(card, "REAL " + entry.name, photo, scores);
 	}
-	const line = "Number read " + scores.number + "/" + scores.total
+	const line = (POKEMON_PICKED ? "With Pokémon picked: " : "") + "Number read " + scores.number + "/" + scores.total
 		+ " · set code read " + scores.code + "/" + scores.total
 		+ " · shown first " + scores.first + "/" + scores.total
 		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong"
@@ -127,24 +135,38 @@ async function testOnePhoto(card, label, photo, scores) {
 	let foundAt = -1;
 	let opened = "";
 	try {
-		// The same steps as the app (scanJapanesePhoto and searchForCard in app.js), without the screen.
-		const look = await lookAtPhoto(photo, null, null, true);
-		reading = await readJapanesePhoto(look);
-		if (look.turns) details.push("turned " + look.turns + " quarter(s)");
-		details.push("card found by " + (reading.cardBox ? reading.cardBox.foundBy : "nothing") + ", guesses " + JSON.stringify(reading.numberGuesses));
-		const shown = [reading.setCode, reading.number].filter(Boolean).join(" ");
-		const found = await findCards("", shown, true, reading.numberGuesses);
-		details.push("cards found: " + found.cards.length + (found.exactFound ? ", named by its code" : ""));
-		let pick = { cards: found.cards, clear: false };
-		if (found.cards.length > 0) {
-			const ranked = await rankByLook(reading.photo, null, found.cards, reading.cardBox);
-			pick = pickJapaneseCard(ranked, found, { setSizes: found.setSizes, codeSets: reading.setCode ? [reading.setCode] : [], numbersRead: found.numbersRead });
-			const right = ranked.find((entry) => entry.card.id === card.id);
-			const picked = ranked.find((entry) => entry.card === pick.cards[0]);
-			details.push("look: right " + (right ? right.distance.toFixed(2) : "-") + ", first shown " + (picked ? picked.card.id + " " + picked.distance.toFixed(2) : "-"));
+		if (POKEMON_PICKED) {
+			const result = await readWithPokemonPicked(photo, details);
+			if (result.japanese) {
+				reading = result.japanese.reading;
+				details.push("read as a Japanese card: " + result.japanese.shown);
+				foundAt = result.japanese.pick.cards.findIndex((each) => each.id === card.id);
+				opened = foundAt === 0 ? "opened by itself: right" : "opened by itself: WRONG " + result.japanese.pick.cards[0].id;
+			} else if (result.englishOpened) {
+				opened = "opened by itself as the English card " + result.englishOpened + ": WRONG";
+			} else {
+				details.push("not taken for a Japanese card: the English search's list is shown");
+			}
+		} else {
+			// The same steps as the app (scanJapanesePhoto and searchForCard in app.js), without the screen.
+			const look = await lookAtPhoto(photo, null, null, true);
+			reading = await readJapanesePhoto(look);
+			if (look.turns) details.push("turned " + look.turns + " quarter(s)");
+			details.push("card found by " + (reading.cardBox ? reading.cardBox.foundBy : "nothing") + ", guesses " + JSON.stringify(reading.numberGuesses));
+			const shown = [reading.setCode, reading.number].filter(Boolean).join(" ");
+			const found = await findCards("", shown, true, reading.numberGuesses);
+			details.push("cards found: " + found.cards.length + (found.exactFound ? ", named by its code" : ""));
+			let pick = { cards: found.cards, clear: false };
+			if (found.cards.length > 0) {
+				const ranked = await rankByLook(reading.photo, null, found.cards, reading.cardBox);
+				pick = pickJapaneseCard(ranked, found, { setSizes: found.setSizes, codeSets: reading.setCode ? [reading.setCode] : [], numbersRead: found.numbersRead });
+				const right = ranked.find((entry) => entry.card.id === card.id);
+				const picked = ranked.find((entry) => entry.card === pick.cards[0]);
+				details.push("look: right " + (right ? right.distance.toFixed(2) : "-") + ", first shown " + (picked ? picked.card.id + " " + picked.distance.toFixed(2) : "-"));
+			}
+			foundAt = pick.cards.findIndex((each) => each.id === card.id);
+			if (pick.clear && pick.cards.length > 0) opened = foundAt === 0 ? "opened by itself: right" : "opened by itself: WRONG " + pick.cards[0].id;
 		}
-		foundAt = pick.cards.findIndex((each) => each.id === card.id);
-		if (pick.clear && pick.cards.length > 0) opened = foundAt === 0 ? "opened by itself: right" : "opened by itself: WRONG " + pick.cards[0].id;
 	} catch (error) {
 		console.error(error);
 		details.push("error: " + error.message);
@@ -163,6 +185,57 @@ async function testOnePhoto(card, label, photo, scores) {
 	if (opened.includes("WRONG")) scores.openedWrong++;
 	scores.seconds += seconds;
 	addRow(photo, card, label, reading, numberOk, codeOk, foundAt, seconds, details.join("\n"));
+}
+
+// The photo read as with Pokémon picked (scanPhoto, openByNumber and searchForCard in app.js): as an English card,
+// and as a Japanese one too when the English search may have found one (mayBeJapanese). Returns { japanese, englishOpened }:
+// what japaneseCardOfPhoto gave (a Japanese card that opens by itself), or else the id of the English card the
+// app would open by itself, or "".
+async function readWithPokemonPicked(photo, details) {
+	let byNumber = null;
+	const english = await readCardPhoto(photo, () => {}, null, {
+		onSureNumber: async (numberRead) => {
+			try {
+				byNumber = await cardByNumberAlone(numberRead);
+				if (byNumber && !(await englishCardIsSure(numberRead, byNumber))) byNumber = null;
+				return byNumber !== null;
+			} catch (error) {
+				return false;
+			}
+		},
+	});
+	details.push("read as English: name " + (english.name || "-") + (english.nameSure ? " (sure)" : "") + ", number " + (english.number || "-"));
+	if (english.settled) return { japanese: null, englishOpened: byNumber[0].id };
+	const found = await findCards(english.name, english.number, true, english.numberGuesses);
+	let japanese = null;
+	if (mayBeJapanese(found)) {
+		japanese = await japaneseCardOfPhoto(photo, null, () => true, [english.number, ...english.numberGuesses]).catch((error) => {
+			details.push("read as a Japanese card too: failed, " + error.message);
+			return null;
+		});
+		details.push("read as a Japanese card too: " + (japanese ? japanese.shown + ", " + japanese.found.cards.length + " Japanese cards found"
+			+ (japaneseCardsThatFit(japanese).length > 0 ? " with that number and set size" : "") : "no number read"));
+		if (japanese && japanese.pick.clear) {
+			// Not when an English card with the name read looks as much like the photo (see englishNameWins).
+			if (!(await englishNameWins(japanese, english.name || "", found.cards, english.photo, english.textArea, english.cardBox))) return { japanese: japanese, englishOpened: "" };
+			details.push("an English card named " + english.name + " looks as much like it: taken for English");
+		}
+	}
+	if (found.cards.length === 0) return { japanese: null, englishOpened: "" };
+	const ranked = await rankByLook(english.photo, english.textArea, found.cards, english.cardBox);
+	const located = english.cardBox !== null || english.textArea !== null;
+	const pick = found.cards.length === 1
+		? { cards: found.cards, clear: true }
+		: pickBestMatch(ranked, located, {
+			setSizes: found.setSizes,
+			codeSets: setsOfCode(english.setCode),
+			numbersRead: found.numbersRead,
+			looksReverseHolo: Boolean(english.sparkle && english.sparkle.reverseHolo),
+		});
+	// Read as a Japanese card too, and the English card not sure enough: listed, not opened by itself (see japaneseDoubt).
+	const opening = ranked.find((entry) => entry.card === pick.cards[0]);
+	if (opening) details.push("the English card first: " + opening.card.id + ", look " + opening.distance.toFixed(2) + (pick.clear ? ", clear" : ""));
+	return { japanese: null, englishOpened: pick.clear && !japaneseDoubt(japanese, opening ? opening.distance : Infinity) ? pick.cards[0].id : "" };
 }
 
 // "151/165" -> "151" (no zeros in front).

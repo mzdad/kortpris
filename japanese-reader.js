@@ -26,6 +26,11 @@ const JAPANESE_CODE_PLACE = { x0: 0.02, x1: 0.45, y0: 0.90, y1: 0.995 };
 // number can fit a card that isn't the photo's. (On made-up photos, which are made from the very pictures
 // compared, the right cards scored 0.27 at most: they can't say where the limit should be.)
 const JAPANESE_LOOK_MOST_DISTANCE = 1.0;
+// Japanese cards print no number before Pokémon VS (July 2001): the 1996-99 sets and the Neo sets print none.
+// TCGdex numbers their cards all the same, and its first set (PMCG1, 1996) has 102 cards, like the English Base
+// Set - so a Base Set photo whose "102/102" was read seemed to fit a Japanese card (version 1.67.0's first try).
+// A number read on a photo can't come from a card of those sets (see printsItsNumber).
+const JAPANESE_NUMBERS_PRINTED_FROM = "2001-07-01";
 
 // Reads a photo looked at already (lookAtPhoto in reader.js, which also turns a card lying sideways upright). Returns what readCardPhoto returns for a
 // Pokémon card - { name, nameSure, number, numberGuesses, setCode, photo, textArea, cardBox, sparkle } -
@@ -163,6 +168,127 @@ function japaneseSetCodeIn(text, size, sets) {
 function lookalikeCode(code) {
 	return code.toUpperCase().replace(/[IL1|!]/g, "1").replace(/[OQD0]/g, "0").replace(/[S5]/g, "5")
 		.replace(/[B8]/g, "8").replace(/[Z2]/g, "2").replace(/[G6]/g, "6");
+}
+
+// With Pokémon picked, a photo is read as an English card (readCardPhoto in reader.js), and a Japanese card is
+// found without picking Japanese (asked for in version 1.67.0). The reader knows English only, so a Japanese
+// card's name can't be read, and what the English search finds for it (findCards in cards.js) is a card with the
+// number read and a picture like it - at best the English print of the same card: many sets are printed in both
+// languages with the same numbers and pictures (the 151 set is SV2a in Japanese, Shrouded Fable SV6a, White Flare
+// SV11W). So unless the English search found the card by its name and its number, the photo is read as a
+// Japanese card too (japaneseCardOfPhoto). found: what findCards gave.
+function mayBeJapanese(found) {
+	return !found.exactFound && !found.learned;
+}
+
+// A card found by its number alone (cardByNumberAlone in matcher.js) opens before its name is read. But when a
+// Japanese card has the same number in a set of the same size and looks as much like the photo - the same card
+// printed in Japanese, as above - the photo may be of that one, so the English card opens only when the name
+// strip reads its English name. (Stellar Miracle, SV7 in Japanese, has 102 cards like the English Base Set, but
+// other pictures: Base Set cards still open by their number - but for Water Energy 102/102, which the picture
+// comparison finds about as like SV7's blue cave Stadium 102/102, 1.08 against 0.98 on a real photo.)
+// sure: what reader.js gives onSureNumber; cards: what cardByNumberAlone found, the one it opens first.
+// When the Japanese database doesn't answer, the English card opens, as before 1.67.0.
+async function englishCardIsSure(sure, cards) {
+	const card = cards[0];
+	if (!sure.readName || !/^\d+$/.test(card.number) || !card.set.printedTotal) return true;
+	let found;
+	try {
+		found = await findJapaneseCards("", card.number + "/" + card.set.printedTotal, true, []);
+	} catch (error) {
+		return true;
+	}
+	// (The search also gives cards with that number in sets of other sizes when none fits: they don't count.)
+	const twins = found.cards.filter((each) => sameNumber(each.number, card.number) && each.set.printedTotal === card.set.printedTotal && printsItsNumber(each));
+	if (twins.length === 0) return true;
+	const ranked = await rankByLook(sure.photo, null, [card, ...twins], sure.cardBox);
+	const english = ranked.find((entry) => entry.card === card);
+	if (japaneseLookAlikes(ranked.filter((entry) => entry !== english), english.distance).length === 0) return true;
+	const name = await sure.readName();
+	return Boolean(name) && longestWord(name.text).toLowerCase() === longestWord(card.name).toLowerCase();
+}
+
+// The photo read as a Japanese card (see readJapanesePhoto), for a photo mayBeJapanese said may be of one:
+// { reading, shown, found, ranked, pick }, ranked the cards found by how much they look like the photo (see
+// rankByLook), pick.clear when a Japanese card opens by itself (see pickJapaneseCard), and
+// found.cards empty when no Japanese card has the number read; null when no number was read. shown is what goes in
+// the number box ("SV2a 151/165"). The Japanese database is asked whatever the search language is
+// (setCardSearchLanguage in cards.js). frame and stillWanted: as for readCardPhoto. otherNumbers: the numbers the
+// English reading read: they count too, as the two readings find the card's edges in their own ways, and one can
+// read the number where the other doesn't (made-up photos of a White Flare and a Heatmor card).
+async function japaneseCardOfPhoto(imageFile, frame = null, stillWanted = () => true, otherNumbers = []) {
+	const look = await lookAtPhoto(imageFile, frame, null, true);
+	const reading = await readJapanesePhoto(look, stillWanted);
+	reading.numberGuesses = [...new Set([...reading.numberGuesses, ...otherNumbers.filter(Boolean)])];
+	reading.number = reading.number || reading.numberGuesses[0] || "";
+	if (!reading.number) return null;
+	const shown = [reading.setCode, reading.number].filter(Boolean).join(" ");
+	const found = await findJapaneseCards("", shown, true, reading.numberGuesses);
+	if (!stillWanted()) return null;
+	let ranked = [];
+	let pick = { cards: [], clear: false };
+	if (found.cards.length > 0) {
+		ranked = await rankByLook(reading.photo, null, found.cards, reading.cardBox);
+		pick = pickJapaneseCard(ranked, found, { setSizes: found.setSizes, codeSets: reading.setCode ? [reading.setCode] : [], numbersRead: found.numbersRead });
+	}
+	return { reading: reading, shown: shown, found: found, ranked: ranked, pick: pick };
+}
+
+// True when the photo is of an English card after all, though a Japanese card opens by itself for it
+// (japanese.pick.clear; japanese: what japaneseCardOfPhoto gave): an English card with the name the English
+// reading read (name) looks about as much like the photo as that Japanese card - the English print of the same
+// card, as a Japanese name can't be read in English. (A made-up photo of the English Bulbasaur 001/132, its
+// number read "1/112", opened the Japanese Bulbasaur 001/063 of Mega Brave, with the very same picture.) A chance
+// name read on a Japanese card ("Natu" on a Kilowattrel ex) finds English cards that look nothing like it.
+// "About as much": within SET_SIZE_LOOK_SLACK of the Japanese card, or at most JAPANESE_LOOK_MOST_DISTANCE, as
+// the two are compared on photos cut out by two readings, and a ratio of two tiny distances says little.
+// cards: what the English search found (findCards in cards.js); photo, textArea, cardBox: as for rankByLook.
+async function englishNameWins(japanese, name, cards, photo, textArea, cardBox) {
+	const word = longestWord(name).toLowerCase();
+	const named = cards.filter((card) => word !== "" && longestWord(card.name).toLowerCase() === word);
+	if (named.length === 0) return false;
+	const ranked = await rankByLook(photo, textArea, named, cardBox);
+	const japaneseCard = japanese.ranked.find((entry) => entry.card === japanese.pick.cards[0]);
+	return ranked[0].distance <= Math.max(japaneseCard.distance * SET_SIZE_LOOK_SLACK, JAPANESE_LOOK_MOST_DISTANCE);
+}
+
+// True when an English card the search found for a photo must not open by itself with Pokémon picked: the photo
+// was read as a Japanese card too (japanese: what japaneseCardOfPhoto gave, or null), and the English card that
+// would open looks little like it, or a Japanese card with the number and set size read looks as much like it
+// (englishDistance: how far that English card is from the photo, see rankByLook). The photo may be of that
+// Japanese card - and the English card then the English print of the same card, or one that only looks somewhat
+// like it. The cards are listed to pick from instead.
+function japaneseDoubt(japanese, englishDistance) {
+	if (japanese === null) return false;
+	// A number misread fits English cards too, and with no name read (a Japanese name can't be) a card the search
+	// finds alone opens however little it looks like the photo: a Japanese Heatran 007/50 read "15/20" opened
+	// Dragon Vault's Fraxure 15/20, 1.75 from the photo. The right English cards of photos read as Japanese too
+	// scored at most 0.98 (dev_real_photos_test.html).
+	if (englishDistance > LOOK_ALIKE_MOST_DISTANCE) return true;
+	return japaneseLookAlikes(japaneseCardsThatFit(japanese), englishDistance).length > 0;
+}
+
+// The Japanese cards found for a photo read as one (japanese: what japaneseCardOfPhoto gave), as rankByLook ranked
+// them, that have the number and set size read, of a set that prints its numbers (see printsItsNumber).
+function japaneseCardsThatFit(japanese) {
+	// Only cards with the number in a set of the size read count: when none has it, the search gives cards with
+	// that number in sets of other sizes, which any number fits.
+	const sizes = japanese.found.setSizes || [];
+	return japanese.ranked.filter((entry) => sizes.includes(String(entry.card.set.printedTotal)) && printsItsNumber(entry.card));
+}
+
+// The Japanese cards (ranked by rankByLook) the photo may be of, next to an English card this far from it: one
+// with no picture can't be told apart, and one with a picture can when it looks clearly less like the photo -
+// cards with the very same picture score within about 1.13 of each other, a different card at least twice as
+// far (SET_SIZE_LOOK_SLACK in matcher.js).
+function japaneseLookAlikes(ranked, englishDistance) {
+	return ranked.filter((entry) => entry.distance === Infinity || entry.distance <= englishDistance * SET_SIZE_LOOK_SLACK);
+}
+
+// False for a Japanese card of a set that prints no number (see JAPANESE_NUMBERS_PRINTED_FROM), so a number
+// read on a photo can't be its. A set with no release date in japanese-sets.js counts as printing one.
+function printsItsNumber(card) {
+	return !card.set.releaseDate || card.set.releaseDate >= JAPANESE_NUMBERS_PRINTED_FROM;
 }
 
 // Which of the cards found for a photo (see findJapaneseCards) it shows, from how much each looks like it

@@ -432,6 +432,7 @@ async function readSeenPhoto(seen, stillWanted, onSureNumber, quick = false) {
 	// it is printed: nothing else in a photo reads the same number twice there.
 	let placesRead = false;   // the number places of cardBox were read already
 	let stripName = null;     // the name strip of cardBox was read already, and found this name
+	let stripRead = false;    // the name strip was read already
 	const numberBigEnough = (box) => (box.y1 - box.y0) * original.height / photo.height >= MIN_CARD_PIXELS_FOR_NUMBER;
 	if (!cardBox && doubtfulBox && numberBigEnough(doubtfulBox)) {
 		const recuts = NUMBER_RECUTS.map((recut) => recutBox(doubtfulBox, recut));
@@ -475,12 +476,20 @@ async function readSeenPhoto(seen, stillWanted, onSureNumber, quick = false) {
 			const sparkle = sparkleOf(photo, cardBox, null);
 			stopUnlessWanted(stillWanted, original);
 			const setCode = codeRead ? codeRead.code : "";
-			if (await onSureNumber({ numberGuesses: early, setCode: setCode, photo: photo, cardBox: cardBox, sparkle: sparkle })) {
+			// The name strip, read only when onSureNumber asks for it (the card found by its number may be the English
+			// print of a Japanese card: see englishCardIsSure in japanese-reader.js), and then not again below.
+			let nameAsked = null;
+			const readName = () => (nameAsked = nameAsked || readNameStrip(worker, original, cardInOriginal));
+			if (await onSureNumber({ numberGuesses: early, setCode: setCode, photo: photo, cardBox: cardBox, sparkle: sparkle, readName: readName })) {
 				original.close();
 				return {
 					name: "", nameSure: false, number: early[0], numberGuesses: early, setCode: setCode,
 					photo: photo, textArea: null, cardBox: cardBox, sparkle: sparkle, settled: true, turns: seen.turns, sure: true,
 				};
+			}
+			if (nameAsked) {
+				stripName = await nameAsked;
+				stripRead = true;
 			}
 		}
 	}
@@ -488,10 +497,9 @@ async function readSeenPhoto(seen, stillWanted, onSureNumber, quick = false) {
 	// When it is clear where the card is, only the card is read - not the table, cloth or
 	// toploader around it, whose patterns look like made-up letters.
 	const view = cardBox ? cardView(photo, cardBox) : { picture: photo, x0: 0, y0: 0, zoom: 1 };
-	let stripRead = false;   // the name strip was read already
 	if (quick) {
 		stopUnlessWanted(stillWanted, original);
-		if (cardBox && !stripName) stripName = await readNameStrip(worker, original, cardInOriginal);
+		if (cardBox && !stripName && !stripRead) stripName = await readNameStrip(worker, original, cardInOriginal);
 		stripRead = true;
 		if (!isSure(placeGuesses, stripName, seen.turns !== 0)) {
 			original.close();

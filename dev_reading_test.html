@@ -33,16 +33,19 @@ The fake photos are the same on every run, so scores can be compared before and 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
-<script src="pokemon-names.js?v=1.66.0"></script>
-<script src="card-names.js?v=1.66.0"></script>
-<script src="set-codes.js?v=1.66.0"></script>
-<script src="card-finder.js?v=1.66.0"></script>
-<script src="sparkle.js?v=1.66.0"></script>
-<script src="reader.js?v=1.66.0"></script>
-<script src="storage.js?v=1.66.0"></script>
-<script src="card-ids.js?v=1.66.0"></script>
-<script src="cards.js?v=1.66.0"></script>
-<script src="matcher.js?v=1.66.0"></script>
+<script src="pokemon-names.js?v=1.67.0"></script>
+<script src="card-names.js?v=1.67.0"></script>
+<script src="set-codes.js?v=1.67.0"></script>
+<script src="card-finder.js?v=1.67.0"></script>
+<script src="sparkle.js?v=1.67.0"></script>
+<script src="reader.js?v=1.67.0"></script>
+<script src="storage.js?v=1.67.0"></script>
+<script src="card-ids.js?v=1.67.0"></script>
+<script src="cards.js?v=1.67.0"></script>
+<script src="matcher.js?v=1.67.0"></script>
+<script src="japanese-sets.js?v=1.67.0"></script>
+<script src="japanese.js?v=1.67.0"></script>
+<script src="japanese-reader.js?v=1.67.0"></script>
 <script>
 "use strict";
 
@@ -78,7 +81,7 @@ runAllTests();
 
 async function runAllTests() {
 	const random = seededRandom(RANDOM_SEED);
-	const scores = { total: 0, name: 0, number: 0, found: 0, first: 0, openedRight: 0, openedWrong: 0, byNumber: 0, seconds: 0 };
+	const scores = { total: 0, japanese: 0, name: 0, number: 0, found: 0, first: 0, openedRight: 0, openedWrong: 0, byNumber: 0, seconds: 0 };
 	const allRows = [];
 	for (const card of TEST_CARDS) {
 		const cardImage = await loadImage(hiresImageUrl(card.oldId));
@@ -95,6 +98,7 @@ async function runAllTests() {
 			if (row.foundAt === 0) scores.first++;
 			if (row.opened && row.foundAt === 0) scores.openedRight++;
 			if (row.opened && row.foundAt !== 0) scores.openedWrong++;
+			if (row.japanese) scores.japanese++;
 			summary.textContent = "Running… " + scores.total + " of " + TEST_CARDS.length * Object.keys(LEVELS).length;
 		}
 	}
@@ -105,6 +109,7 @@ async function runAllTests() {
 		+ " · shown first " + scores.first + "/" + scores.total
 		+ " · opened by itself: " + scores.openedRight + " right, " + scores.openedWrong + " wrong"
 		+ " (" + scores.byNumber + " by the number alone)"
+		+ " · taken for a Japanese card " + scores.japanese
 		+ " · " + (scores.seconds / scores.total).toFixed(1) + " s per photo";
 	summary.textContent = line;
 	console.log("READING TEST: " + line);
@@ -117,11 +122,17 @@ async function testOnePhoto(card, levelName, photo) {
 	// As in the app: a number that reads sure is looked up before the name is read (roadmap 2.4).
 	let byNumber = null;
 	const reading = await readCardPhoto(photo, () => {}, null, {
-		onSureNumber: async (numberRead) => (byNumber = await cardByNumberAlone(numberRead)) !== null,
+		onSureNumber: async (numberRead) => {
+			byNumber = await cardByNumberAlone(numberRead);
+			// As in the app (openByNumber): not the English print of a Japanese card whose name strip doesn't read.
+			if (byNumber && !(await englishCardIsSure(numberRead, byNumber))) byNumber = null;
+			return byNumber !== null;
+		},
 	});
 	const nameOk = longestWord(reading.name).toLowerCase() === longestWord(card.name).toLowerCase();
 	const numberOk = sameNumber(reading.number, card.number);
 	let foundAt = -1;
+	let japanese = null;   // the Japanese card the app would take the photo for (see searchForCard in app.js)
 	let lookGap = null;
 	let opened = false;   // would the app open a card's prices without asking?
 	let error = "";
@@ -133,26 +144,38 @@ async function testOnePhoto(card, levelName, photo) {
 		} else {
 			// The same steps as the app (searchForCard in app.js), without the screen.
 			const found = await findCards(reading.name, reading.number, true, reading.numberGuesses);
-			const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
-			const located = reading.cardBox !== null || reading.textArea !== null;
-			const pick = found.cards.length === 1
-				? { cards: found.cards, clear: true }
-				: pickBestMatch(ranked, located, {
-					setSizes: found.setSizes,
-					codeSets: setsOfCode(reading.setCode),
-					numbersRead: found.numbersRead,
-					looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
-				});
-			foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
-			// How much further the runner-up is from the photo than the winner.
-			// A big gap means the winner is clear; the app uses this to open it straight away.
-			if (ranked.length >= 2) lookGap = ranked[1].distance / ranked[0].distance;
-			opened = pick.cards.length > 0 && pick.clear;
+			// A card not found by its name and number may be a Japanese card: read as one too, and taken for one
+			// when a Japanese card opens by itself (see mayBeJapanese) - never right here.
+			if (mayBeJapanese(found)) japanese = await japaneseCardOfPhoto(photo, null, () => true, [reading.number, ...reading.numberGuesses]).catch(() => null);
+			// Not when an English card with the name read looks as much like the photo (see englishNameWins): as in the app.
+			if (japanese && japanese.pick.clear && await englishNameWins(japanese, reading.name || "", found.cards, reading.photo, reading.textArea, reading.cardBox)) japanese.pick.clear = false;
+			if (japanese && japanese.pick.clear) {
+				error = "taken for the Japanese card " + japanese.pick.cards[0].id;
+				opened = true;
+			} else {
+				const ranked = await rankByLook(reading.photo, reading.textArea, found.cards, reading.cardBox);
+				const located = reading.cardBox !== null || reading.textArea !== null;
+				const pick = found.cards.length === 1
+					? { cards: found.cards, clear: true }
+					: pickBestMatch(ranked, located, {
+						setSizes: found.setSizes,
+						codeSets: setsOfCode(reading.setCode),
+						numbersRead: found.numbersRead,
+						looksReverseHolo: Boolean(reading.sparkle && reading.sparkle.reverseHolo),
+					});
+				foundAt = pick.cards.findIndex((entry) => entry.id === card.id);
+				// How much further the runner-up is from the photo than the winner.
+				// A big gap means the winner is clear; the app uses this to open it straight away.
+				if (ranked.length >= 2) lookGap = ranked[1].distance / ranked[0].distance;
+				// Read as a Japanese card too, and the English card not sure enough: listed, not opened by itself (see japaneseDoubt).
+				const opening = ranked.find((entry) => entry.card === pick.cards[0]);
+				opened = pick.cards.length > 0 && pick.clear && !japaneseDoubt(japanese, opening ? opening.distance : Infinity);
+			}
 		}
 	} catch (problem) {
 		error = String(problem);
 	}
-	const row = { settled: Boolean(reading.settled), nameOk, numberOk, foundAt, lookGap, opened, seconds: (performance.now() - started) / 1000 };
+	const row = { settled: Boolean(reading.settled), japanese: japanese !== null && japanese.pick.clear, nameOk, numberOk, foundAt, lookGap, opened, seconds: (performance.now() - started) / 1000 };
 	addRow(photo, card, levelName, reading, row, error);
 	return row;
 }

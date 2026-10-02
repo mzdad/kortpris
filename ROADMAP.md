@@ -5,6 +5,53 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.67.0
+
+- **Japanese cards found with Pokémon picked** (you asked: "would it be possible to have the japanese just included in
+  the pokemon so you jsut scan a pokemoncard with pokemon and dont have to chose japanese?"). Scan a Japanese card with
+  Pokémon picked: when the English reading doesn't find the card by its name and number, the photo is read as a
+  Japanese card too, and a Japanese card that is clearly the one opens, as if Japanese had been picked. The
+  "Japanese" choice stays, for typing a Japanese search: a typed "151/165" can't tell the English card from the
+  Japanese one. Not in kids mode, which has no Japanese cards.
+  - **The 84 Japanese photos (80 made-up and your 4 real ones), with Pokémon picked: 72 opened right, none wrong**,
+    against 70 with Japanese picked. Your Ivysaur, Mega Venusaur and sideways Ultra Necrozma open; Chandelure V, which
+    has no picture anywhere, gets the English list: pick Japanese for it (new 6.4).
+  - **Slower for a Japanese card: 8.1 s a photo, against 2.5 s with Japanese picked**, as the English reading comes
+    first. An English card found by its name and number isn't slowed; one whose number was misread is read as a
+    Japanese card too, which takes a few seconds more (new 6.4 has an idea).
+  - **English photos as before, and none taken for a Japanese card.** Right card shown first / opened right, 1.66.0
+    and now: upright **46 / 45, now 46 / 44**: your Water Energy 102/102 is listed, not opened (below). Turned a quarter
+    clockwise **44 / 43, now 45 / 42**, counter-clockwise **43 / 41, now 44 / 40**: Water Energy, and a Hitmonchan whose
+    number read "1/102" is listed (right card first), as a Japanese card 1/102 fits; your Unown [J] opens now. At an
+    angle of 12% **28 / 26 with 3 wrong, now 28 / 25 with 2 wrong**: the Hitmonchan 1.66.0 opened wrong is listed now
+    (1.14). At 6% **34 / 32, now 34 / 31** (1 wrong both). The same as before: special numbers 19 numbers read, 24
+    first, 22 opened; full-art 27 / 27; the made-up photos 13 / 12; learning 45 recognised, none wrong, 0 of 92
+    strangers taken; Japanese picked, the Japanese photos as before; Magic 32 turned, 28 names, 27 first, 20 opened.
+    Slower where a number is misread, as the photo is then read as Japanese too: special numbers 3.3 to 4.7 s a photo,
+    the made-up photos 4.7 to 8.4 s, at a 12% angle 9.7 to 14.4 s; your upright photos 3.1 to 3.2 s.
+  - **The same card in both languages.** Many sets are printed in English and in Japanese with the same numbers and
+    pictures (151, Shrouded Fable, White Flare...), so the picture can't tell them apart. An English card found by its
+    number and picture opens only when it looks like the photo and no Japanese card with the number read looks as much
+    like it; otherwise you pick from the list. The other way round, a Japanese card isn't taken when an English card
+    with the name read looks as much like the photo: a Japanese name can't be read in English. The first try opened 10
+    wrong cards; each rule below was found by the check.
+  - **Fixed on the way:** TCGdex numbers the cards of the first Japanese sets, which print no number, and its 1996 set
+    has 102 cards like the Base Set: Base Set cards stopped opening by their number, so sets from before July 2001 don't
+    count now. Stellar Miracle (2024) has 102 cards too: Base Set cards open when its card of that number looks
+    clearly different, but your Water Energy 102/102 now waits for you to pick (the picture comparison finds that
+    set's blue cave Stadium 102/102 about as alike: 1.08 against 0.98). A Japanese Heatran 007/50 misread "15/20"
+    opened Dragon Vault's Fraxure 15/20: an English card for a photo read as Japanese must now look like it (at most
+    1.5; Fraxure was 1.75). An English Bulbasaur whose number was misread opened its Japanese print: the name rule above.
+  - **The full check** ("We need to run a full control"): every test page on 1.66.0 first, then on 1.67.0 (the numbers
+    above), and the app itself clicked through in a fresh browser, 18 checks, all right: the version; with Pokémon
+    picked your Zapdos, Pinsir and Water Energy photos (English) and your Japanese Ivysaur (opened as the Japanese card,
+    DKK 52, the switch staying on Pokémon, "065/063" in the number box), and a typed Pikachu after it searching English
+    cards; with Japanese picked your Mega Venusaur photo and a typed "SV2a 151/165"; a Magic photo and a typed Lightning
+    Bolt; saving to My cards; Danish; kids mode not taking the Ivysaur for a Japanese card. No errors but two the app
+    catches: the PSA relay answers only the real app's address, and a Japanese card with no picture. One run stopped
+    for good at photo 28, waiting for a TCGdex answer that never came (new 5.4); two Japanese cards once got no answer
+    at all ("Failed to fetch") and opened right when tried again.
+
 ## Done in 1.66.0
 
 - **1.12 Pokémon cards photographed sideways, and 1.13 cards photographed at an angle** (you said: "do 1.12 and 1.13").
@@ -1031,6 +1078,7 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | | What | Why | Size |
 |---|---|---|---|
 | 5.3 | **The test pages' photos** are made from the old database's big pictures, which may go in March 2027. | Then the tests can't run. Scrydex has the same pictures under the same ids (5.2), but new photos would change the tests' results a little, so only when needed. | S |
+| 5.4 | **A question to the card database that never answers.** | The questions to TCGdex (`askTcgdexNow` in cards.js) have no time limit. In the 1.67.0 check a test stopped for good at photo 28, waiting for an answer that never came. In the app a new scan takes over, but the "looking up" stays until you scan again. Idea: give each question 15 seconds, then ask again. | S |
 
 ## 6. Cards in other languages
 
@@ -1047,6 +1095,7 @@ number in plain letters ("SV2P 006/071"), which with the picture comparison shou
 | 6.1 | **Japanese cards**, the rest: **kids mode**, **more real Japanese photos** (4 so far: see 1.65.0), and the set's code (read in 1 of the 4 real photos, 26 of 84 in all). | 1.63.0 to 1.65.0 do typing, prices, My cards and reading a photo. Cards before about 2001 print no number, and 28 sets have no picture at all (the 1996-99 sets, the e-Card sets and Sword & Shield's 2021 sets), so those can only be found by number, or typed. PSA prices and sales links for Japanese cards would need PriceCharting's Japanese sets. A wider search by number alone, when nothing of the size read looks like the photo, would catch a size TCGdex has wrong. | M |
 | 6.2 | **Chinese and Indonesian cards**, the same way, with the price clearly marked as the Japanese version's. | TCGdex has the cards, but only the Japanese card's price, which these printings usually sell for less than. | M |
 | 6.3 | **Korean cards**, if TCGdex (or another free database) gets them. | 239 cards and no pictures in September 2026: not enough to find cards by. | - |
+| 6.4 | **Japanese cards with Pokémon picked, the rest** (1.67.0 does the most): quicker, and the Japanese cards listed when none opens. | A Japanese card takes 8.1 s a photo with Pokémon picked, against 2.5 s with Japanese picked: the English reading comes first. An English card whose number was misread is read as a Japanese card too, a few seconds more: idea, skip that when an English card with the name read already looks like the photo (a Japanese name can't be read in English). A Japanese card with no picture (your Chandelure V) or one that doesn't open gets the English list, without the Japanese cards that fit: idea, show those too. A chance English name read on a Japanese card kept one from opening (1 of 84: a Petilil read "Aron"), and an English Hitmonchan whose number read "1/102" is listed, not opened, when photographed sideways: letting the English name read count more would win it back, but by the distances measured would also open the slanted Hitmonchan wrong again (1.14). | S-M |
 
 **The TCGdex trial (27 September 2026)**, before 5.1 was done. TCGdex (api.tcgdex.net) is free, needs no key, and answers
 web pages directly, pictures included. Of 40 requests none failed (pokemontcg.io fails about half),
