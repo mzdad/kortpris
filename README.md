@@ -226,6 +226,17 @@ of the 17 that print one, the right card first 27, opened by itself 20 - all rig
 years read, all right; none of the Magic photos taken for a Pokémon card, and 37 of the 46 Pokémon photos told apart. Still hard: a foil and its normal copy, the faintest names on old white cards
 (Kismet, Kjeldoran Knight), Unlimited and Beta against Revised (only their borders differ), and glare.
 
+**Magic cards in a case** (version 1.69.0, `readMagicCorners`). A card in a magnetic case is often found by the
+case's inside edges, a few percent bigger than the card, or by other lines of the case, so the corner cut from the
+box held the case's plastic, and the number wasn't read (two foil cards of a friend's, Indoraptor REX 0015 and
+Kaalia MH3 0290: the box reached 5% and 20% of the card's height past its bottom). Now, when neither corner reads a
+number, a taller strip at the bottom left, reaching past the box (`MAGIC_CORNER_STRIP`), is read in two ways, and
+there only a set code with a number, or a number with its set's size ("001/080"), counts, as the strip holds the
+rules text too (a third way read a "1" on a Fourth Edition card that prints none). The set size is also read when
+the slash after the copyright's "Inc." is lost ("Inc 20 143"). On the 34 photos (`dev-local/magic-photos.json`):
+numbers read 14 of 19, before 10; the right card first 29, before 28; opened by itself 23, before 20, none wrong;
+2.1 s a photo, before 1.8 (cards that print no number now read the strip too).
+
 **Pokémon photos lying sideways or at an angle** (version 1.66.0, `reader.js` and `card-finder.js`, roadmap 1.12 and
 1.13). A photo sent through a messenger can lose which way is up, and a card in a binder pocket, or photographed from
 below, has slanted sides. `readCardPhoto` reads a photo once. When that reading is not *sure* of the way up (`isSure`:

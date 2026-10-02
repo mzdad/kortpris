@@ -74,6 +74,18 @@ const MAGIC_CORNER_READS = [
 // the bottom line, by the copyright.
 const MAGIC_CORNER_LEFT = { x0: 0.02, x1: 0.45, y0: 0.925, y1: 0.995 };
 const MAGIC_CORNER_RIGHT = { x0: 0.5, x1: 0.98, y0: 0.925, y1: 0.995 };
+// A card in a case is often found by the case's inside edges, a few percent bigger than the card, or by other
+// lines of the case: the corner is then above the bottom of the box found, and the corners read nothing (two
+// foil cards in magnetic cases, version 1.69.0: the box reached 5% and 20% of the card's height past its
+// bottom). So when neither corner reads a number, this taller strip, reaching past the box, is read in these
+// ways - and as it holds the rules text too, only a set code with a number counts there.
+const MAGIC_CORNER_STRIP = { x0: -0.05, x1: 0.5, y0: 0.7, y1: 1.05 };
+// (A third way, dark ink at 2000, read a Geist of Saint Traft's "001/080" - but a "1" on a Fourth Edition
+// Sengir Vampire, which prints no number, so its year wasn't read and the right printing came second.)
+const MAGIC_CORNER_STRIP_READS = [
+	{ cardWidth: 2500, ink: "light", mode: "ink" },
+	{ cardWidth: 2500, ink: "", mode: "block" },
+];
 // Cards from 1994 to about 2003 print the year of their printing in the copyright line at the bottom
 // ("1995 Wizards of the Coast, Inc. All rights reserved." on Fourth Edition; a range, "1993-1999", on
 // later ones; Summer Magic prints it in the artist's line, "Illus. (c) 1994 Anson Maddocks"). Printings
@@ -361,18 +373,15 @@ function allowedNameMistakes(letters) {
 
 // Reads the bottom corners (card is the card's box in the full-size original): the left one first, for
 // the number and set code of cards from 2014 on; the right one when it holds no number, for older cards'
-// number and set size. Each in the ways of MAGIC_CORNER_READS until one reads a number. Returns
-// { setCode, number }: the set's code in Scryfall's small letters when it was read ("soi"), or "", and
-// the card's number without zeros in front ("82"), or "".
+// number and set size. Each in the ways of MAGIC_CORNER_READS until one reads a number; then, when neither
+// did, the taller strip of MAGIC_CORNER_STRIP. Returns { setCode, number }: the set's code in Scryfall's
+// small letters when it was read ("soi"), or "", and the card's number without zeros in front ("82"), or "".
 async function readMagicCorners(worker, original, card, stillWanted) {
 	for (const place of [MAGIC_CORNER_LEFT, MAGIC_CORNER_RIGHT]) {
 		let numberOnly = null;
 		for (const way of MAGIC_CORNER_READS) {
 			stopUnlessWanted(stillWanted, original);
-			const closeUp = cutFromCard(original, card, place, way.cardWidth);
-			const picture = way.ink ? inkAgainstBackground(closeUp, way.style || "soft", way.ink === "light") : closeUp;
-			const read = await readPage(worker, picture, way.mode);
-			const facts = magicCornerFacts(read.text);
+			const facts = await readMagicCorner(worker, original, card, place, way);
 			if (facts.setCode && facts.number) return facts;
 			// A number without a set code is kept, while another way may still read the code too.
 			if (facts.number && !numberOnly) numberOnly = facts;
@@ -380,7 +389,21 @@ async function readMagicCorners(worker, original, card, stillWanted) {
 		}
 		if (numberOnly) return numberOnly;
 	}
+	for (const way of MAGIC_CORNER_STRIP_READS) {
+		stopUnlessWanted(stillWanted, original);
+		const facts = await readMagicCorner(worker, original, card, MAGIC_CORNER_STRIP, way);
+		// A number with its set's size ("001/080") counts without the code too: rules text doesn't print one.
+		if (facts.number && (facts.setCode || facts.size)) return facts;
+	}
 	return { setCode: "", number: "" };
+}
+
+// What one way of reading (see MAGIC_CORNER_READS) finds in one place of the card: see magicCornerFacts.
+async function readMagicCorner(worker, original, card, place, way) {
+	const closeUp = cutFromCard(original, card, place, way.cardWidth);
+	const picture = way.ink ? inkAgainstBackground(closeUp, way.style || "soft", way.ink === "light") : closeUp;
+	const read = await readPage(worker, picture, way.mode);
+	return magicCornerFacts(read.text);
 }
 
 // The year printed in the copyright line at the bottom of an old card (card is the card's box in the
@@ -423,16 +446,17 @@ function cutFromCard(original, card, place, cardWidth) {
 	return cropAndZoom(original, area, cardWidth / width);
 }
 
-// The number and set code in the text read from a corner: { setCode, number }, each "" when not read.
-// The number is the one before a "/" and the set's size ("082/297", "28/350"), or else one printed with
-// zeros in front, as cards from 2014 on print it: "0146" from 2023 on, which prints no set size, and
-// "051" of a "051/297" whose "/297" wasn't read. The set code is the three to five letters and digits
-// before the language, "EN" - whatever the dot between them was read as ("SOT CEN", "ORI*EN", "KLD « EN")
-// - made a real set's code (see realSetCode).
+// The number and set code in the text read from a corner: { setCode, number, size }, each "" (size 0) when
+// not read. The number is the one before a "/" and the set's size ("082/297", "28/350") - or after the
+// copyright's "Inc." with the slash lost ("Inc 20 143" of a 1999 card, read so by two ways) - or else one
+// printed with zeros in front, as cards from 2014 on print it: "0146" from 2023 on, which prints no set size,
+// and "051" of a "051/297" whose "/297" wasn't read. size is the set's size read after the number. The set
+// code is the three to five letters and digits before the language, "EN" - whatever the dot between them was
+// read as ("SOT CEN", "ORI*EN", "KLD « EN") - made a real set's code (see realSetCode).
 function magicCornerFacts(text) {
 	let number = "";
 	let size = 0;
-	const numbered = text.match(/(?<!\d)(\d{1,4})\s*\/\s*(\d{2,4})(?!\d)/);
+	const numbered = text.match(/(?<!\d)(\d{1,4})\s*\/\s*(\d{2,4})(?!\d)/) || text.match(/\bIn[cg]\b[.,]?\s+(\d{1,3})\s+(\d{2,3})(?!\d)/);
 	if (numbered) {
 		number = String(Number(numbered[1]));
 		size = Number(numbered[2]);
@@ -449,7 +473,7 @@ function magicCornerFacts(text) {
 		const code = realSetCode(tokens[i - 1], size);
 		if (code) setCode = code;
 	}
-	return { setCode: number ? setCode : "", number: number };
+	return { setCode: number ? setCode : "", number: number, size: number ? size : 0 };
 }
 
 // The real set code (see magic-sets.js) that a code read may be: itself when it is one - and fits the

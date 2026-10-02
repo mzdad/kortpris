@@ -5,6 +5,22 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.69.0
+
+- **Magic numbers read on cards in a case** (you asked: "Looking at the pictures in magic folder, can you improve how
+  it reads the numbers"). Your friend's two foil cards in magnetic cases, Indoraptor (REX 0015) and Kaalia of the Vast
+  (MH3 0290), had their names read but not their numbers: the app found the case's edges, not the card's, and so read
+  the case's plastic below the card where the number should be. Now, when the corner reads no number, a taller strip
+  at the bottom left is read too, and only the corner's own pattern counts there (a set code with a number, or a
+  number with its set's size), never the rules text. Both cards now open by themselves, named by their corner - in the
+  app too. On all 34 Magic photos: **numbers read 14 of 19 (10 before), the right card first 29 (28), opened by itself
+  23 (20), none wrong**, 2.1 s a photo (1.8): cards that print no number read the strip as well. Also read now: an
+  Invocation of Saint Traft (SOI 246) and a Radiant, Archangel whose "20/143" lost its slash.
+  - **Tried and left out:** a third way of reading the strip read a Geist of Saint Traft's "001/080", but also a "1"
+    on a Fourth Edition Sengir Vampire, which prints no number, putting the wrong printing first.
+  - **Still not read:** in the older photos sent through Signal (smaller than a phone's own), two of Icy Manipulator
+    (one misread as 30), two of Geist of Saint Traft and one of Exalted Angel.
+
 ## Done in 1.68.0
 
 - **The app's camera blurry and grainy on your friend's Samsung** (you said: "With magic, my friends Samsung used the
