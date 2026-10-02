@@ -16,6 +16,8 @@ const START_ZOOM = 2;
 const START_LIGHT = true;
 const CAMERA_ZOOM_STORAGE_KEY = "kortpris.cameraZoom";
 const CAMERA_LIGHT_STORAGE_KEY = "kortpris.cameraLight";
+// The back camera picked after looking for the one with the light (see openMainBackCamera).
+const CAMERA_LENS_STORAGE_KEY = "kortpris.cameraLens";
 // The zoom button switches between these.
 const CAMERA_ZOOMS = [1, 2];
 // The live picture is asked for this large: a 4K video picture is nearly as sharp as a photo.
@@ -62,10 +64,12 @@ function liveCameraPossible() {
 }
 
 // Starts the back camera, shown in this <video>. Returns the camera: { stream, track, zoomRange,
-// canLight }, where zoomRange is { min, max } or null when it can't zoom. Throws when the camera
-// can't start: no camera, or the viewer didn't allow it (error.name "NotAllowedError").
+// canLight, label, othersTried }, where zoomRange is { min, max } or null when it can't zoom, label is
+// the browser's name for the camera ("camera2 0, facing back"), and othersTried how many other back
+// cameras were tried for the light this time (see openMainBackCamera). Throws when the camera can't
+// start: no camera, or the viewer didn't allow it (error.name "NotAllowedError").
 async function startLiveCamera(video) {
-	const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: LIVE_PICTURE });
+	const { stream, othersTried } = await openMainBackCamera();
 	video.srcObject = stream;
 	await video.play();
 	const track = stream.getVideoTracks()[0];
@@ -75,7 +79,90 @@ async function startLiveCamera(video) {
 		track: track,
 		zoomRange: capabilities.zoom && capabilities.zoom.max > 1 ? capabilities.zoom : null,
 		canLight: Boolean(capabilities.torch),
+		label: track.label,
+		othersTried: othersTried,
 	};
+}
+
+// A phone with several back cameras has its light by the main one, and the browser may give a page
+// another: on a friend's Samsung phone in Chrome, the live picture had no light button and was grainy and
+// blurry, where the phone's own camera was sharp - likely the wide-angle camera, which on many phones
+// can't focus close up (version 1.68.0). So when the camera given has no light, and the browser can switch
+// a light on at all, the other back cameras are tried, and the first with a light is used. What was found
+// is remembered on the phone, so the looking is done once. Returns { stream, othersTried }.
+async function openMainBackCamera() {
+	const remembered = readStorage(CAMERA_LENS_STORAGE_KEY);
+	if (remembered) {
+		try {
+			return { stream: await openCameraById(remembered), othersTried: 0 };
+		} catch (error) {
+			if (error.name === "NotAllowedError") throw error;
+			removeStorage(CAMERA_LENS_STORAGE_KEY);   // that camera is gone, or its id changed: look again
+		}
+	}
+	const first = await navigator.mediaDevices.getUserMedia({ audio: false, video: LIVE_PICTURE });
+	if (hasLight(first) || !lightsPossible()) return { stream: first, othersTried: 0 };
+	const firstId = first.getVideoTracks()[0].getSettings().deviceId;
+	const others = await otherBackCameras(firstId);
+	if (others.length === 0) return { stream: first, othersTried: 0 };
+	// A phone may have only one camera open at a time: the first is closed while the others are tried.
+	stopStream(first);
+	let tried = 0;
+	for (const id of others) {
+		tried++;
+		let stream;
+		try {
+			stream = await openCameraById(id);
+		} catch (error) {
+			console.error(error);   // this one can't be opened: the next is tried
+			continue;
+		}
+		if (hasLight(stream)) {
+			writeStorage(CAMERA_LENS_STORAGE_KEY, id);
+			return { stream: stream, othersTried: tried };
+		}
+		stopStream(stream);
+	}
+	// None has a light: the first is as good as any, and is opened straight away from now on.
+	writeStorage(CAMERA_LENS_STORAGE_KEY, firstId);
+	return { stream: await openCameraById(firstId), othersTried: tried };
+}
+
+// Opens the camera with this id (from enumerateDevices), as large as LIVE_PICTURE asks.
+function openCameraById(deviceId) {
+	return navigator.mediaDevices.getUserMedia({
+		audio: false,
+		video: { deviceId: { exact: deviceId }, width: LIVE_PICTURE.width, height: LIVE_PICTURE.height },
+	});
+}
+
+// The ids of the back cameras other than this one. Known only once the viewer has allowed the camera.
+async function otherBackCameras(exceptId) {
+	const devices = await navigator.mediaDevices.enumerateDevices();
+	return devices.filter((device) => device.kind === "videoinput" && device.deviceId !== exceptId && facesBack(device))
+		.map((device) => device.deviceId);
+}
+
+// True for a back camera: Chrome says so in its capabilities, and on Android in its name too
+// ("camera2 2, facing back").
+function facesBack(device) {
+	const capabilities = device.getCapabilities ? device.getCapabilities() : {};
+	return (capabilities.facingMode || []).includes("environment") || /facing back/i.test(device.label);
+}
+
+function hasLight(stream) {
+	const track = stream.getVideoTracks()[0];
+	return Boolean(track.getCapabilities && track.getCapabilities().torch);
+}
+
+// False in a browser that can't switch a camera's light on at all (Safari before iOS 18): then no
+// camera has one, and looking would only take time.
+function lightsPossible() {
+	return Boolean(navigator.mediaDevices.getSupportedConstraints().torch);
+}
+
+function stopStream(stream) {
+	for (const track of stream.getTracks()) track.stop();
 }
 
 // Sets the camera's zoom and light, as far as it can do them. The light only goes on once the
@@ -254,7 +341,7 @@ function sharpnessOf(picture, pictureWidth, pictureHeight) {
 
 // Turns the camera (and its light) off.
 function stopLiveCamera(camera, video) {
-	for (const track of camera.stream.getTracks()) track.stop();
+	stopStream(camera.stream);
 	video.srcObject = null;
 }
 

@@ -289,6 +289,18 @@ until 1.41.2). The same line says what the phone remembers about "Auto" and whet
 (`storageDetails`, from 1.62.0: `cameraAuto=on (in use: on), storage ok`). "Use the phone's own camera" at the bottom opens the old camera screen, and so does
 the button when the page can't have a live camera.
 
+**Which back camera** (version 1.68.0, `openMainBackCamera` in `camera.js`). A phone with several back cameras has
+its light by the main one, and the browser may give a page another: on a friend's Samsung phone in Chrome the live
+picture had no light button and was grainy and blurry, where the phone's own camera was sharp - likely the wide-angle
+camera, which on many phones can't focus close up. So when the camera the browser gives has no light, and the browser
+can switch a light on at all (`getSupportedConstraints().torch`; not Safari before iOS 18), the other back cameras
+(`enumerateDevices`, facing back) are opened one at a time - a phone may have only one open - and the first with a light
+is used. What was found is remembered on the phone (`kortpris.cameraLens`), so the looking is done once; a remembered
+camera that has gone is looked for again. An iPhone's first back camera has the light, and a computer's webcam faces no
+way, so neither looks. With `?camera` the bottom of the page names the camera ("lens camera2 0, facing back (with
+light) · 1 other back cameras tried"). Checked with made-up cameras in a browser (scratchpad `lens_checks.js`, 14
+checks); not yet on the Samsung itself.
+
 **Learning.** When the app can't tell which card a photo shows (or opens the wrong one) and the
 viewer taps or types the right one, or saves the card the photo found, the app remembers how that
 card's artwork looked in the photo (`learned.js`): the same small colour thumbnail the picture
@@ -417,7 +429,7 @@ What comes next, and why: [ROADMAP.md](ROADMAP.md).
 | `collection.js` | "My cards": saved cards, how many of each, total value |
 | `claude.js` | Optional: Claude reads the card instead, with the viewer's own API key |
 | `sparkle.js` | Tells a reverse holo from the photo: glitter everywhere except the picture |
-| `camera.js` | The app's own camera: live picture, 2x zoom, light, and the photo |
+| `camera.js` | The app's own camera: the back camera with the light, live picture, 2x zoom, light, and the photo |
 | `learned.js` | Remembers cards the viewer picked for a photo, and recognises the next photo of them |
 | `graded.js` | PSA prices of a card, asked from the relay and kept on the phone for a day |
 | `relay/` | The PSA price relay that runs on Cloudflare, not in the page |

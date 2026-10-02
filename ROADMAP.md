@@ -5,6 +5,24 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.68.0
+
+- **The app's camera blurry and grainy on your friend's Samsung** (you said: "With magic, my friends Samsung used the
+  camera from the app ... if he used his own camera its looks fine. Why is it all blury"). His screenshot
+  (`dev-local/Magic/`) had no light button by the shutter, and the app only shows it when the camera it was given has a
+  light - on a phone with several back cameras, the main one. So Chrome most likely gave the app another back camera,
+  often the wide-angle one, which on many phones can't focus close up and is grainier. Now, when the camera given has
+  no light, the app tries the phone's other back cameras and uses the one with the light, and the phone remembers it,
+  so that is done once. iPhones and computers are as before.
+  - **Not yet tried on the Samsung itself:** checked with made-up cameras in a browser (14 checks: the Samsung case,
+    the next time, a remembered camera gone, an iPhone, an older iPhone, no camera with a light, one that won't open,
+    a computer, camera not allowed). For your friend: open https://mzdad.github.io/kortpris/?camera, take a photo with
+    the app's camera, and look at the bottom of the page: it says which camera ("lens camera2 0, facing back (with
+    light)"). If the picture is still blurry, send that line.
+  - **Even on the right camera** a web page gets the plain video, without the clean-up Samsung's own camera app does,
+    and the 2× zoom crops it: "Brug telefonens eget kamera" (use the phone's own camera) stays at the bottom of the
+    camera screen.
+
 ## Done in 1.67.0
 
 - **Japanese cards found with Pokémon picked** (you asked: "would it be possible to have the japanese just included in

@@ -328,6 +328,8 @@ let cameraAuto = chosenCameraAuto();
 let autoWatch = 0;   // counts the watches, so an older one stops when a newer one starts
 // The size and kind of the last photo from the app's camera, shown at the bottom of the page.
 let lastCameraPhoto = null;
+// Which of the phone's cameras the app's camera used last (see openMainBackCamera), shown there too.
+let lastCameraLens = null;
 // The number the reader put in the box, and every other number it thought possible.
 let scannedNumbers = { shown: "", guesses: [] };
 
@@ -483,6 +485,14 @@ function renderFooter() {
 			appVersionText.textContent += " · " + t(lastCameraPhoto.sharpened ? "cameraSharpened" : "cameraSharp", values);
 		}
 	}
+	// Which camera: a phone's browser may give the page another than the main one (see openMainBackCamera).
+	if (lastCameraLens && SHOWS_CAMERA_DETAILS) {
+		appVersionText.textContent += " · " + t("cameraLens", {
+			label: lastCameraLens.label || "?",
+			light: t(lastCameraLens.canLight ? "cameraLensLight" : "cameraLensNoLight"),
+		});
+		if (lastCameraLens.othersTried > 0) appVersionText.textContent += " · " + t("cameraLensesTried", { count: lastCameraLens.othersTried });
+	}
 	if (SHOWS_CAMERA_DETAILS) appVersionText.textContent += " · " + storageDetails();
 	if (shownCurrency() !== currency) {
 		ratesNote.textContent = t("ratesMissing");
@@ -621,6 +631,8 @@ async function openLiveCamera(afterSave = false) {
 		return;
 	}
 	liveCamera = camera;
+	lastCameraLens = { label: camera.label, canLight: camera.canLight, othersTried: camera.othersTried };
+	if (SHOWS_CAMERA_DETAILS) renderFooter();
 	fitCameraBox();
 	await setLiveCameraSafely();
 	let hint = autoShutterOn() ? "cameraAutoHint" : "cameraHint";
