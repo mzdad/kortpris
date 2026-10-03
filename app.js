@@ -252,6 +252,13 @@ const cameraLightButton = document.getElementById("camera-light");
 const cameraShutterButton = document.getElementById("camera-shutter");
 const cameraZoomButton = document.getElementById("camera-zoom");
 const cameraAutoButton = document.getElementById("camera-auto");
+const cameraLiveButton = document.getElementById("camera-live");
+const cameraResult = document.getElementById("camera-result");
+const cameraResultCount = document.getElementById("camera-result-count");
+const cameraResultOpen = document.getElementById("camera-result-open");
+const cameraResultName = document.getElementById("camera-result-name");
+const cameraResultDetail = document.getElementById("camera-result-detail");
+const cameraResultSave = document.getElementById("camera-result-save");
 const cameraPhoneButton = document.getElementById("camera-phone");
 
 // ---------- What is on screen right now ----------
@@ -329,6 +336,13 @@ let cameraLight = chosenCameraLight();
 // on or off: then it is on in kids mode only.
 let cameraAuto = chosenCameraAuto();
 let autoWatch = 0;   // counts the watches, so an older one stops when a newer one starts
+// "Live" (Magic cards): the camera stays open and reads one card after another (see watchLive).
+let cameraLive = chosenCameraLive();
+let liveRead = null;        // what the strip over the camera shows: { kind, card, name, count }, or null
+let liveLast = null;        // the card read last: { id, saved } - saved: the strip's Save button was pressed for it
+let liveCount = 0;          // the cards read since the camera was opened
+let liveReadNow = false;    // the shutter was pressed: read what is in the frame at the next look
+let lastLiveMs = null;      // how long the last live read took, from the picture grabbed to the card opened
 // The size and kind of the last photo from the app's camera, shown at the bottom of the page.
 let lastCameraPhoto = null;
 // Which of the phone's cameras the app's camera used last (see openMainBackCamera), shown there too.
@@ -496,6 +510,7 @@ function renderFooter() {
 		});
 		if (lastCameraLens.othersTried > 0) appVersionText.textContent += " · " + t("cameraLensesTried", { count: lastCameraLens.othersTried });
 	}
+	if (lastLiveMs !== null && SHOWS_CAMERA_DETAILS) appVersionText.textContent += " · " + t("cameraLiveTiming", { seconds: (lastLiveMs / 1000).toFixed(1) });
 	if (SHOWS_CAMERA_DETAILS) appVersionText.textContent += " · " + storageDetails();
 	if (shownCurrency() !== currency) {
 		ratesNote.textContent = t("ratesMissing");
@@ -638,11 +653,23 @@ async function openLiveCamera(afterSave = false) {
 	if (SHOWS_CAMERA_DETAILS) renderFooter();
 	fitCameraBox();
 	await setLiveCameraSafely();
-	let hint = autoShutterOn() ? "cameraAutoHint" : "cameraHint";
-	if (afterSave) hint = "cameraSavedHint";
-	showCameraMessage(hint);
+	showCameraMessage(afterSave ? "cameraSavedHint" : cameraHintKey());
 	renderCameraButtons();
-	if (autoShutterOn()) watchForCard(afterSave);
+	watchCamera(afterSave);
+}
+
+// What the camera says before a card is in the frame: how the photo gets taken.
+function cameraHintKey() {
+	if (liveScanOn()) return "cameraLiveHint";
+	return autoShutterOn() ? "cameraAutoHint" : "cameraHint";
+}
+
+// Starts whatever watches the frame for the way the camera is set: live scanning, or "Auto", or nothing
+// (then the shutter does it all).
+function watchCamera(afterSave) {
+	if (liveScanOn()) watchLive(afterSave);
+	else if (autoShutterOn()) watchForCard(afterSave);
+	else autoWatch++;
 }
 
 function fitCameraBox() {
@@ -658,6 +685,8 @@ function closeLiveCamera() {
 	liveCamera = null;
 	liveCameraView.hidden = true;
 	document.body.classList.remove("camera-open");
+	liveReadNow = false;
+	showLiveResult(null);
 }
 
 async function setLiveCameraSafely() {
@@ -680,9 +709,12 @@ function renderCameraButtons() {
 	cameraShutterButton.disabled = !running;
 	cameraLightButton.hidden = !running || !liveCamera.canLight;
 	cameraZoomButton.hidden = !running || !liveCamera.zoomRange;
-	cameraAutoButton.hidden = !running;
+	// Magic cards have "Live" in the place of "Auto": live scanning takes the photos by itself, and more.
+	cameraAutoButton.hidden = !running || liveScanPossible();
+	cameraLiveButton.hidden = !running || !liveScanPossible();
 	cameraLightButton.setAttribute("aria-pressed", String(cameraLight));
 	cameraAutoButton.setAttribute("aria-pressed", String(autoShutterOn()));
+	cameraLiveButton.setAttribute("aria-pressed", String(cameraLive));
 	cameraZoomButton.textContent = cameraZoom + "×";
 }
 
@@ -767,7 +799,261 @@ async function watchForCard(afterSave) {
 	}
 }
 
-cameraShutterButton.addEventListener("click", takeCameraPhoto);
+// ---------- Live scanning (Magic cards) ----------
+// "Live": the camera stays open while the cards are read, one after another, as in the apps made for this.
+// A card in the frame is read from the live picture as soon as it has stayed still for half a second: no
+// photo to take, no camera to close and start again (which takes a phone a second or two), and no button
+// to press for the next card. Its name, set and price show in a strip over the camera (showLiveResult), and
+// the next card is read as soon as it is shown. The reading is the one a photo gets (scanPhoto), so the
+// card's page is ready behind the camera when the camera is closed.
+
+// Live scanning is for Magic cards, and not in kids mode: a child gets the big card page after each photo, as
+// ever (and "Auto" for the photo, see autoShutterOn).
+function liveScanPossible() {
+	return game === "magic" && !kidsMode;
+}
+
+// ...and on until the viewer switches it off.
+function liveScanOn() {
+	return liveScanPossible() && cameraLive;
+}
+
+// The first card is read sooner when the text reader and Scryfall's list of names are fetched at once.
+function readyMagicReader() {
+	getOcrWorker();
+	magicNameList().catch(() => {});
+}
+
+cameraLiveButton.addEventListener("click", () => {
+	cameraLive = !cameraLive;
+	chooseCameraLive(cameraLive);
+	renderCameraButtons();
+	showLiveResult(null);
+	showCameraMessage(cameraHintKey());
+	watchCamera(false);
+});
+
+// Watches the frame, as watchForCard does, and reads each card that comes into it. afterSave: opened by "Save
+// and scan the next", when the card just saved may still be in the frame - it must leave first.
+async function watchLive(afterSave) {
+	const watch = ++autoWatch;
+	const stillWatching = () => watch === autoWatch && liveCamera !== null && liveScanOn();
+	readyMagicReader();
+	liveCount = 0;
+	liveLast = null;
+	showLiveResult(null);
+	let mustLeave = afterSave;   // the card there was before the camera opened is still to leave
+	let readBox = null;          // where the card read last sits in the frame, until it leaves or is moved far
+	let left = true;             // the frame has been empty since the card read last
+	let before = null;           // where the card was in the look before
+	let stillLooks = 0;
+	let fitSince = null;         // when the card came into the frame
+	let tries = 0;               // how many times this card was read without coming out
+	while (stillWatching()) {
+		await new Promise((resolve) => setTimeout(resolve, AUTO_LOOK_MS));
+		if (!stillWatching()) return;
+		if (cameraVideo.videoWidth === 0) continue;   // no live picture yet
+		const forced = liveReadNow;   // the shutter was pressed
+		liveReadNow = false;
+		const boxes = lookForCard(cameraVideo, cameraFrameShares());
+		if (boxes.length === 0 && !forced) {
+			// An empty frame: whatever card was there is gone, and the next one is read as it comes.
+			mustLeave = false;
+			readBox = null;
+			left = true;
+			tries = 0;
+			before = null;
+			stillLooks = 0;
+			fitSince = null;
+			const waiting = liveCount > 0 ? "cameraLiveNext" : "cameraLiveHint";
+			if (cameraMessage.dataset.key !== waiting) showCameraMessage(waiting);
+			continue;
+		}
+		if (mustLeave && !forced) continue;
+		if (readBox && !forced) {
+			// The card read last, still there: not read again, unless it has been moved far (see LIVE_NEW_CARD_MOVE).
+			if (nearestBox(readBox, boxes).move <= LIVE_NEW_CARD_MOVE) continue;
+			readBox = null;
+			tries = 0;
+			before = null;
+			stillLooks = 0;
+			fitSince = null;
+		}
+		if (fitSince === null) fitSince = performance.now();
+		let ready = forced;
+		if (!ready) {
+			const nearest = nearestBox(before, boxes);
+			stillLooks = nearest.move <= STILL_MOVE ? stillLooks + 1 : 0;
+			before = nearest.box;
+			ready = stillLooks >= LIVE_STILL_LOOKS || performance.now() - fitSince >= LIVE_LONGEST_WAIT_MS;
+		}
+		if (!ready) {
+			if (cameraMessage.dataset.key !== "cameraHoldStill") showCameraMessage("cameraHoldStill");
+			continue;
+		}
+		showCameraMessage("cameraLiveReading");
+		const sat = before;   // where the card sits, to tell it from another afterwards
+		const changes = watchForChange(sat);
+		const outcome = await readLiveFrame();
+		const change = changes.stop();
+		if (!stillWatching()) return;
+		tries++;
+		const settled = outcome.kind !== "none" || tries >= LIVE_MOST_TRIES || statusMessage.key === "magicPokemonCard";
+		if (outcome.kind === "card") {
+			// The same card again, with the frame not empty in between, is the viewer's hand moving it: not another.
+			const again = !left && liveLast !== null && liveLast.id === outcome.card.id;
+			if (!again) {
+				liveCount++;
+				liveLast = { id: outcome.card.id, saved: false };
+			}
+			showLiveResult(outcome);
+			showCameraMessage("cameraLiveNext");
+		} else if (settled) {
+			showLiveResult(outcome);
+			if (outcome.kind === "none") showCameraMessage(liveFailureKey());
+			else showCameraMessage("cameraLiveNext");
+		} else {
+			showLiveResult(null);
+			showCameraMessage("cameraLiveHint");
+		}
+		before = null;
+		stillLooks = 0;
+		fitSince = null;
+		if (change.gone || change.moved) {
+			// The card was swapped (or lifted) while it was read: what is in the frame now is read as it comes.
+			left = change.gone;
+			readBox = null;
+			tries = 0;
+		} else {
+			left = false;
+			// Read, or given up on: until another card.
+			if (settled) readBox = sat;
+		}
+	}
+}
+
+// While a card is read - which takes a second or more - the frame goes on being looked at, so that a card
+// swapped for the next one meanwhile isn't taken for the one just read. box: where that card sits.
+// stop() gives { gone, moved }: the frame was empty at some look, or the card was moved far from box.
+function watchForChange(box) {
+	const change = { gone: false, moved: false };
+	const timer = setInterval(() => {
+		if (cameraVideo.videoWidth === 0) return;
+		const boxes = lookForCard(cameraVideo, cameraFrameShares());
+		if (boxes.length === 0) change.gone = true;
+		else if (box && nearestBox(box, boxes).move > LIVE_NEW_CARD_MOVE) change.moved = true;
+	}, AUTO_LOOK_MS);
+	return { stop: () => { clearInterval(timer); return change; } };
+}
+
+// Why a card wasn't read, as the camera says it: Scryfall not answering, a Pokémon card, or just not readable.
+function liveFailureKey() {
+	return ["apiDown", "magicTooMany", "magicPokemonCard"].includes(statusMessage.key) ? statusMessage.key : "cameraLiveNotRead";
+}
+
+// Reads the live picture as it is now, the way a photo of it would be read (scanPhoto), with the camera
+// staying open. Returns what came out: { kind: "card", card } when a card opened by itself, { kind: "list",
+// count, name } when several prints fit and the viewer must choose, or { kind: "none" }.
+async function readLiveFrame() {
+	const frame = cameraFrameShares();
+	const started = performance.now();
+	let photo;
+	try {
+		photo = await grabLiveFrame(cameraVideo);
+	} catch (error) {
+		console.error(error);
+		return { kind: "none" };
+	}
+	lastCameraPhoto = photo;
+	try {
+		await scanPhoto(photo.file, frame, { onName: showLiveName });
+	} catch (error) {
+		console.error(error);
+		return { kind: "none" };
+	}
+	lastLiveMs = performance.now() - started;
+	if (SHOWS_CAMERA_DETAILS) renderFooter();
+	const card = shownCards.find((shown) => shown.id === selectedCardId);
+	if (card) return { kind: "card", card: card };
+	if (shownCards.length > 1) return { kind: "list", count: shownCards.length, name: nameInput.value || shownCards[0].name };
+	return { kind: "none" };
+}
+
+// The card's name has been read, but not yet which print it is: shown at once, with its price to come.
+function showLiveName(name) {
+	if (liveCamera === null) return;
+	showLiveResult({ kind: "name", name: name });
+}
+
+// The strip over the camera, for what readLiveFrame gave (or showLiveName): what card, from which set, at what
+// price - with a button to save it, and a tap to open its page. null hides it.
+function showLiveResult(outcome) {
+	if (!outcome || outcome.kind === "none") {
+		liveRead = null;
+	} else {
+		liveRead = {
+			kind: outcome.kind,
+			card: outcome.card || null,
+			name: outcome.card ? outcome.card.name : outcome.name,
+			count: outcome.count || 0,
+		};
+	}
+	renderLiveResult();
+}
+
+function renderLiveResult() {
+	cameraResult.hidden = liveRead === null;
+	if (liveRead === null) return;
+	cameraResultCount.textContent = String(liveCount);
+	cameraResultCount.hidden = liveCount === 0;
+	cameraResultName.textContent = liveRead.name;
+	if (liveRead.kind === "card") {
+		const card = liveRead.card;
+		cameraResultDetail.textContent = [card.set.name, "#" + collectorNumber(card), liveCardPrice(card)].join(" · ");
+	} else if (liveRead.kind === "list") {
+		cameraResultDetail.textContent = t("cameraLiveSeveral", { count: liveRead.count });
+	} else {
+		cameraResultDetail.textContent = t("cameraLiveLooking");
+	}
+	cameraResultSave.hidden = liveRead.kind !== "card";
+	const saved = liveRead.kind === "card" && liveLast !== null && liveLast.id === liveRead.card.id && liveLast.saved;
+	cameraResultSave.disabled = saved || !collectionReady();
+	cameraResultSave.textContent = t(saved ? "cameraResultSaved" : "cameraResultSave");
+}
+
+// A card's price for the strip: the one the page opens it on (see versionOf), in the shown currency.
+function liveCardPrice(card) {
+	const version = versionOf(card);
+	const local = localPrice(version.eur, version.usd);
+	if (local !== null) return money.local.format(local);
+	if (version.usd !== null) return money.dollars.format(version.usd);
+	return t("noPrice");
+}
+
+// A tap on the card in the strip: the camera closes, on the card's page.
+cameraResultOpen.addEventListener("click", () => {
+	closeLiveCamera();
+	scrollToDetail();
+});
+
+cameraResultSave.addEventListener("click", () => {
+	if (!liveRead || !liveRead.card || !collectionReady()) return;
+	const card = liveRead.card;
+	if (liveLast && liveLast.id === card.id && liveLast.saved) return;   // saved already: once for each card read
+	saveFailed = !addToCollection(card, versionOf(card).key);
+	// Saving the card the photo was taken to be says it was right: that photo is learned too.
+	if (lastPhoto && lastPhoto.card && lastPhoto.card.id === card.id) rememberCard(card);
+	if (liveLast && liveLast.id === card.id) liveLast.saved = !saveFailed;
+	renderLiveResult();
+	renderCollection();
+	if (kidsMode && !saveFailed) say(t("saySaved"));
+});
+
+cameraShutterButton.addEventListener("click", () => {
+	// Live scanning has no photo to take: the shutter reads what is in the frame now, card-shaped or not.
+	if (liveScanOn() && liveCamera) liveReadNow = true;
+	else takeCameraPhoto();
+});
 
 // The shutter, pressed or by itself ("Auto").
 async function takeCameraPhoto() {
@@ -1346,7 +1632,8 @@ function startReaderEarly() {
 window.addEventListener("load", startReaderEarly);
 
 // frame: where the white frame was, for a photo from the app's own camera (see readCardPhoto).
-async function scanPhoto(imageFile, frame = null) {
+// hooks: { onName } for a Magic card read by live scanning (see scanMagicPhoto), or null.
+async function scanPhoto(imageFile, frame = null, hooks = null) {
 	const scanId = ++latestScanId;
 	latestSearchId++;   // cancel any search still running for the previous card
 	intro.hidden = true;
@@ -1362,7 +1649,7 @@ async function scanPhoto(imageFile, frame = null) {
 	versionHint = null;
 	// A Magic card is read in its own way (see scanMagicPhoto).
 	if (game === "magic") {
-		await scanMagicPhoto(imageFile, frame, scanId);
+		await scanMagicPhoto(imageFile, frame, scanId, hooks);
 		return;
 	}
 	// A Japanese card is read in its own way (see scanJapanesePhoto).
@@ -1487,7 +1774,8 @@ async function scanPhoto(imageFile, frame = null) {
 // A photo of a Magic: The Gathering card (scanPhoto has cleared the screen for it): the card is found and
 // read (magic-reader.js), then searched for as a Pokémon card is - its printings compared with the photo,
 // and learned from the viewer's answer (see searchForCard). Claude isn't asked: it reads Pokémon cards.
-async function scanMagicPhoto(imageFile, frame, scanId) {
+// hooks.onName: called with the card's name as soon as it is read sure, while the rest is still being read.
+async function scanMagicPhoto(imageFile, frame, scanId, hooks = null) {
 	getOcrWorker();   // the text reader gets ready meanwhile (it downloads the first time)
 	setStatus("readerStarting");
 	showProgress(null);
@@ -1520,7 +1808,8 @@ async function scanMagicPhoto(imageFile, frame, scanId) {
 	setStatus("reading");
 	let reading;
 	try {
-		reading = await readMagicPhoto(look, () => scanId === latestScanId);
+		const onName = hooks && hooks.onName ? (name) => { if (scanId === latestScanId) hooks.onName(name); } : null;
+		reading = await readMagicPhoto(look, () => scanId === latestScanId, onName);
 	} catch (error) {
 		if (error.stopped || scanId !== latestScanId) return;   // stopped: another photo came
 		console.error(error);

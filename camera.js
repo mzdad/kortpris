@@ -211,15 +211,33 @@ async function takeLivePhoto(camera, video) {
 			photoNote = { key: "cameraPhotoFailed", values: {} };
 		}
 	}
-	const softness = softnessOf(steadiest);
+	return livePictureAsPhoto(steadiest, photoNote);
+}
+
+// A live picture (a canvas) as a photo, sharpened when it is soft (see SOFT_FROM): { file, source, width,
+// height, photoNote, softness, sharpened }, as takeLivePhoto gives. The canvas's memory is let go of.
+async function livePictureAsPhoto(picture, photoNote) {
+	const softness = softnessOf(picture);
 	const sharpened = softness >= SOFT_FROM;
-	if (sharpened) sharpen(steadiest);
+	if (sharpened) sharpen(picture);
 	const file = await new Promise((resolve, reject) => {
-		steadiest.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("The camera gave no picture"))), "image/jpeg", PHOTO_JPEG_QUALITY);
+		picture.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("The camera gave no picture"))), "image/jpeg", PHOTO_JPEG_QUALITY);
 	});
-	const { width, height } = steadiest;
-	freeCanvas(steadiest);
+	const { width, height } = picture;
+	freeCanvas(picture);
 	return { file: file, source: "video", width: width, height: height, photoNote: photoNote, softness: softness, sharpened: sharpened };
+}
+
+// Live scanning (Magic): the picture on the screen right now, as a photo - at once. takeLivePhoto waits
+// 0.6 s for the sharpest of six pictures and asks the phone for its own full-size photo, which is what a
+// single photo is worth; a card shown to the camera one after another is worth more quick looks, and a
+// blurred one is simply read again (see watchLive in app.js).
+async function grabLiveFrame(video) {
+	const picture = document.createElement("canvas");
+	picture.width = video.videoWidth;
+	picture.height = video.videoHeight;
+	picture.getContext("2d", { willReadFrequently: true }).drawImage(video, 0, 0);
+	return livePictureAsPhoto(picture, null);
 }
 
 // The sharpest of a few live pictures over STEADY_WATCH_MS, as a canvas. Each is measured on a
@@ -384,6 +402,20 @@ const AUTO_LONGEST_WAIT_MS = 3000;
 // look can miss a card that is there (or come while the camera's picture is still dark).
 const AUTO_EMPTY_LOOKS = 2;
 const CAMERA_AUTO_STORAGE_KEY = "kortpris.cameraAuto";
+// Live scanning (Magic) reads a card sooner than Auto takes a photo, as the camera stays open and a
+// card not read is simply read again: after the card has stayed still for this many looks in a row (the
+// first look it was seen in doesn't count: 0.5 s), or has filled the frame this long, still or not.
+const LIVE_STILL_LOOKS = 2;
+const LIVE_LONGEST_WAIT_MS = 2000;
+// A card not read at all is looked at again, up to this many reads. (One that found a list of prints to
+// choose from isn't: an old card with no number to read gives the same list every time.)
+const LIVE_MOST_TRIES = 2;
+// A card read stays read while it is in the frame, nudged by a hand or not: it counts as another card once
+// it has been out of the frame for a look, or moved this far (a share of its size) from where it was read -
+// a card swapped by hand always does one or the other. (A picture of what is in the frame, to tell one card
+// from another, couldn't: the same card moved 4% and a different card often looked as different as each
+// other, and a card with the light changed more so, on the Magic photos' cards in a made-up camera.)
+const LIVE_NEW_CARD_MOVE = 0.25;
 
 // A look at the live picture: the card-shaped boxes found about the size and place of the white frame
 // (findCardShapesInFrame in card-finder.js), whose place frameShares gives as shares of the picture.
@@ -433,6 +465,16 @@ function cardMove(before, after) {
 		Math.abs(after.y0 - before.y0) / height,
 		Math.abs(after.y1 - before.y1) / height,
 	);
+}
+
+// Whether the viewer switched live scanning (Magic) on or off; on until they switch it off.
+const CAMERA_LIVE_STORAGE_KEY = "kortpris.cameraLive";
+function chosenCameraLive() {
+	return readStorage(CAMERA_LIVE_STORAGE_KEY) !== "off";
+}
+
+function chooseCameraLive(on) {
+	writeStorage(CAMERA_LIVE_STORAGE_KEY, on ? "on" : "off");
 }
 
 // Whether the viewer switched "Auto" on or off, or null when they never did (then kids mode decides).

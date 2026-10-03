@@ -189,8 +189,9 @@ function hasPokemonBorder(photo) {
 // printedYears: the year the copyright line printed at the bottom, when two ways of reading agree on
 // one (see MAGIC_YEAR_READS) - [1995], or [].
 // Throws when Scryfall's list of names can't be had (the reading can't tell a name from a smudge
-// without it). stillWanted: as for readCardPhoto.
-async function readMagicPhoto(seen, stillWanted = () => true) {
+// without it). stillWanted: as for readCardPhoto. onName: called with the name as soon as it is read sure -
+// before the corners are - so live scanning can show it while the rest is read (see scanLiveFrame in app.js).
+async function readMagicPhoto(seen, stillWanted = () => true, onName = null) {
 	let { original, photo, cardBox } = seen;
 	try {
 		const [worker, names] = await Promise.all([getOcrWorker(), magicNameList()]);
@@ -219,6 +220,7 @@ async function readMagicPhoto(seen, stillWanted = () => true) {
 			}
 		}
 		stopUnlessWanted(stillWanted, original);
+		if (onName && name.sure) onName(name.name);
 		// A name read sure - and fitting no other as well - has printings that say where a number, or a year,
 		// can be read at all (see placesWorthReading).
 		const places = name.sure && name.others.length === 0 ? await placesWorthReading(name.name) : EVERY_MAGIC_PLACE;

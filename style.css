@@ -564,6 +564,30 @@ body.camera-open { overflow: hidden; }
 }
 .camera-shutter:active { transform: scale(0.94); }
 .camera-shutter:disabled { opacity: 0.4; }
+/* The card live scanning read last (watchLive in app.js), above the buttons: how many cards have been
+   read, its name, set and price, and a button to save it. */
+.camera-result {
+	position: absolute; left: 12px; right: 12px; bottom: calc(168px + env(safe-area-inset-bottom, 0px));
+	margin-inline: auto; max-width: 28rem;
+	display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+	padding: 10px 12px;
+	background: rgba(0, 0, 0, 0.78); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 14px;
+}
+.camera-result[hidden] { display: none; }
+.camera-result-count {
+	min-width: 28px; height: 28px; padding-inline: 6px; box-sizing: border-box;
+	display: grid; place-items: center;
+	background: var(--accent); border-radius: 14px; font-weight: 800; font-size: 0.9rem;
+}
+.camera-result-open { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; min-width: 0; }
+.camera-result-name { display: block; font-weight: 800; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.camera-result-detail { display: block; font-size: 0.9rem; opacity: 0.9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.camera-result-save {
+	font: inherit; font-weight: 800; color: #FFFFFF; background: var(--accent);
+	border: 0; border-radius: 10px; padding: 0 14px; min-height: 44px; cursor: pointer;
+}
+.camera-result-save:disabled { opacity: 0.6; cursor: default; }
+.camera-result-save:focus-visible, .camera-result-open:focus-visible { outline: 3px solid #8FB2FF; outline-offset: 3px; }
 .camera-phone {
 	position: absolute; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
 	font: inherit; font-size: 0.9rem; color: #FFFFFF; text-decoration: underline;

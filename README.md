@@ -326,6 +326,29 @@ way, so neither looks. With `?camera` the bottom of the page names the camera ("
 light) · 1 other back cameras tried"). Checked with made-up cameras in a browser (scratchpad `lens_checks.js`, 14
 checks); not yet on the Samsung itself.
 
+**Live scanning for Magic cards** (version 1.72.0, `watchLive` in `app.js`, `grabLiveFrame` in `camera.js`). With Magic
+picked (not in kids mode), the app's camera stays open and reads one card after another, as Manabox and Delver Lens do. It
+looks at the live picture four times a second, as "Auto" does (`lookForCard`, `nearestBox`); once a card-shaped box has
+stayed put for two looks (`LIVE_STILL_LOOKS`, half a second; after 2 s anyway), the live picture is grabbed at once
+(`grabLiveFrame`: no waiting for the sharpest of six, no full-size photo, sharpened when soft as before) and read the way
+a photo is (`scanPhoto`, with `hooks.onName` so `readMagicPhoto` can say the name as soon as it is read sure, before the
+corners). The camera stays open under a strip (`#camera-result`) with the name at once, then the set, number and price
+(`showLiveResult`), a **Save** button (once for each card read: `liveLast`), a count, and a tap to open the card's page.
+The card page is drawn behind the camera as ever, so closing the camera shows the last card. While a card is read
+(a second or more), the frame goes on being looked at (`watchForChange`), so a card swapped meanwhile isn't taken for the
+one read. A card read stays read while it is in the frame, nudged by a hand or not; it counts as another once the frame
+has been empty for a look, or it has moved a quarter of its size (`LIVE_NEW_CARD_MOVE`) - a tiny picture of what is in
+the frame couldn't tell two cards apart (the same card moved 4% differed as much as two different cards).
+Nothing read is tried once more (`LIVE_MOST_TRIES`), then "Couldn't read it"; a list of prints isn't read again, as an old card with
+no number gives the same list. The round button reads the frame now, card-shaped or not. The ⚡ Live button
+(`kortpris.cameraLive`) switches it off, which gives the photo-taking of before, with "Auto" shown in its place again.
+The first card is read sooner as the text reader and Scryfall's list of names start when the camera opens
+(`readyMagicReader`). It needs a table the card's edges show against: the frame only sees a card-shaped box. Checked with
+a made-up camera in a browser (scratchpad `live_checks.js`: the cards of the Magic photos slide into the frame one after
+another - every other one with the frame empty between - 18 checks; 19 of 32 opened right, none wrong, against 22 read
+from their files; 2.2 s from the card sitting still to its strip, in the middle, on the PC); not yet on a phone. With
+`?camera` the bottom of the page says how long the last live read took.
+
 **Learning.** When the app can't tell which card a photo shows (or opens the wrong one) and the
 viewer taps or types the right one, or saves the card the photo found, the app remembers how that
 card's artwork looked in the photo (`learned.js`): the same small colour thumbnail the picture

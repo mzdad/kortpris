@@ -5,6 +5,34 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.72.0
+
+- **Live scanning for Magic cards** (you asked how Manabox and Delver Lens scan faster, then: "Yes please do start with
+  live scanning"). Before, each card took: press the button, hold still for a second, wait 0.6 s for the sharpest picture,
+  wait for the phone's own photo, close the camera, read - and the camera had to be opened again for the next card. Now,
+  with Magic picked, the camera **stays open** and reads each card by itself:
+  - a card in the white frame that has stayed still for half a second is read straight from the live picture (no photo,
+    no camera closing and starting again, no button for the next card);
+  - the card's **name shows in a strip over the camera as soon as it is read**, then the set, number and price
+    ("Femeref Knight · Mirage · #MIR 18 · DKK 1.42") when the print is known, with a **Save** button, a count of the
+    cards read, and a tap on the strip to open the card's page;
+  - the next card is read as soon as it is shown. A card nudged by a hand isn't read again; a card swapped for the next
+    - even while the first is still being read - is. A card that can't be read is tried once more, then the camera says
+    so; a list of prints to choose from shows as "7 prints fit: tap to choose" (an old card with no number gives that);
+  - the big round button now means "read what is in the frame now" (also when the card's edges aren't found); the new
+    **⚡ Live** button at the top left switches it off, which gives the old photo-taking (remembered on the phone).
+    Pokémon cards and kids mode are as before.
+  - Checked in the real app at phone size, with a made-up camera showing the cards of the 34 Magic photos sliding in
+    (scratchpad `live_checks.js`, 18 checks): of 32 cards that can be cut out whole, **19 opened right, none wrong**
+    (the same photos read from their files: 22 right, none wrong). From the card sitting still in the frame to its strip:
+    **2.2 s in the middle, 1.2 s the quickest** (the name after 1.0 to 1.3 s) on the PC; a phone is slower, and not
+    yet measured - with `?camera` in the address the bottom of the page says how long the last live read took.
+  - A few things were tried and left out: telling "the same card" from "another" by a tiny picture of what is in the
+    frame (the same card moved 4% differed as much as two different cards: so it is the card's position that decides);
+    reading a card again when its list of prints came up (an old card gives the same list every time).
+  - **Needs a table the card's edges show against** (as Manabox's own help says): a black-bordered card on a black
+    mat isn't seen by the frame; the round button reads it all the same. See 7.12.
+
 ## Done in 1.71.0
 
 - **Kids mode: write the card in when the app didn't get it** (you said: "When kids mode don't get hte card right, the
@@ -1198,7 +1226,8 @@ Coast asks fan apps to say they are unofficial, which the page's foot now does.
 | 7.7 | **Faint names on old white Magic cards**, the last two: Kismet and Kjeldoran Knight. | Two of your 32 photos read no name; the name box can be typed in meanwhile. 1.58.0 reads the others (Femeref Knight, Radiant, Archangel), but no way of reading this Tesseract reader has tried gets more than half of these two names: light letters with a shadow, on a bar of the same grey, about 30 pixels tall in a photo cut down by Signal. First try photos from the app's own camera. | S |
 | 7.9 | **Magic printings that differ by border**: Unlimited and Beta (black) against Revised (white), by the border's colour in the photo. | They print no year, so 1.59.0's year doesn't help, and a Beta or Unlimited card is worth far more than a Revised one with the same picture. It needs a photo of each to test: none of your 32 is one. | S |
 | 7.10 | **The card game picked and the card in the photo don't match**, the rest: a Pokémon card with no yellow border in Magic mode, and a Magic card in Pokémon mode. | 1.60.0 catches Pokémon cards with a yellow border (37 of 46 photos). The others (silver borders, a toploader, a reverse holo) still get a made-up name from the Magic reader, 2 of 9 - and a Magic card given to the Pokémon reader isn't checked at all. Two ways of telling them apart were tried and dropped (see 1.60.0). Could also switch the game itself and read the photo again, when the border is sure. | M |
-| 7.11 | **Magic photos quicker still** (1.70.0 does the first part). | 1.7 s a photo on the PC: the corners still take 0.7 s (4.4 reads), as a name reprinted in many years can have its number in either corner. Ideas: read the name and the corners at the same time with a second reader (phones have several cores; a second reader takes more of the phone's memory, not yet measured), or tell the frame from the picture before reading (an old frame has no number in the bottom-left corner). | M |
+| 7.11 | **Magic photos quicker still** (1.70.0 does the first part; 1.72.0's live scanning, 7.12, takes away the waiting around the reading, this row is the reading itself). | 1.7 s a photo on the PC: the corners still take 0.7 s (4.4 reads), as a name reprinted in many years can have its number in either corner. Ideas: read the name and the corners at the same time with a second reader (phones have several cores; a second reader takes more of the phone's memory, not yet measured), or tell the frame from the picture before reading (an old frame has no number in the bottom-left corner). | M |
+| 7.12 | **Live scanning (1.72.0), the rest.** | Not yet tried on a phone: ask a friend to scan a few cards and read the bottom of the page with `?camera` (how long a live read took). Ideas, biggest first: **a list of the cards scanned** to look through and save all at once (now each is saved with its own Save button, or lost when the next comes); **dark tables**: the frame only sees a card whose edges show (a black-bordered card on a black mat doesn't), idea: also read when the frame is full of fine detail and stays still, once there is a phone to tune it on; **Pokémon cards live** in the same way; **reading while the card is still arriving**, to save the half second of waiting for it to be still; handing the reader the live picture directly, without making a JPEG of it first. A card swapped in the very same spot with no look between is missed (nobody swaps that fast by hand). | M |
 | 7.4 | **Other card games** with a free database, the same way (Yu-Gi-Oh!, Lorcana). | With a game switch in place, each game is its database, its reading and its texts. | M each |
 
 ## Not planned
