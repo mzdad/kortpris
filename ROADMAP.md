@@ -5,6 +5,26 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.72.1
+
+- **Live scanning switched off again** (you said: "Can you make a rollback, the live version cam is much worse he says. Make a
+  rollback but keep the settings for a later reactivate"). Your friend found the camera of 1.72.0 much worse. The Magic
+  camera is now exactly as in 1.71.0: the round button takes the photo, "Auto" is there again, and the ⚡ Live button
+  and the strip are gone. Nothing was taken out of the code, so it can come back:
+  - **To try it again on a phone:** open **https://mzdad.github.io/kortpris/?live**. The phone remembers it (the
+    ⚡ Live button shows, and its own on/off choice is as the phone left it); **?live=0** takes it away again.
+  - **To switch it on for everyone**, `liveScanPossible()` in `app.js` just stops asking `liveScanningOffered()`
+    (`camera.js`).
+  - Checked with a made-up camera in a browser (scratchpad `rollback_checks.js`, 11 checks): without `?live` Magic's
+    camera has Auto and no Live, reads nothing by itself, and the round button takes the photo and closes the camera;
+    `?live` offers it and is remembered, `?live=0` takes it away. The live scanning checks (15 with 10 cards), the
+    whole app (20), kids mode (15) and the camera lens (14) still pass.
+  - **Why it was worse - not yet known.** One guess: live scanning reads a picture straight from the live video,
+    where the photo button asks the phone for its own full-size photo when the browser can (Chrome, Safari 18.4),
+    which is sharper - and blurry live pictures were the Samsung's trouble before. Another: it needs a card edge
+    that shows against the table. Ask him what was worse (blurry? nothing read? slower? wrong cards?) before fixing it:
+    see 7.12.
+
 ## Done in 1.72.0
 
 - **Live scanning for Magic cards** (you asked how Manabox and Delver Lens scan faster, then: "Yes please do start with
@@ -1227,7 +1247,7 @@ Coast asks fan apps to say they are unofficial, which the page's foot now does.
 | 7.9 | **Magic printings that differ by border**: Unlimited and Beta (black) against Revised (white), by the border's colour in the photo. | They print no year, so 1.59.0's year doesn't help, and a Beta or Unlimited card is worth far more than a Revised one with the same picture. It needs a photo of each to test: none of your 32 is one. | S |
 | 7.10 | **The card game picked and the card in the photo don't match**, the rest: a Pokémon card with no yellow border in Magic mode, and a Magic card in Pokémon mode. | 1.60.0 catches Pokémon cards with a yellow border (37 of 46 photos). The others (silver borders, a toploader, a reverse holo) still get a made-up name from the Magic reader, 2 of 9 - and a Magic card given to the Pokémon reader isn't checked at all. Two ways of telling them apart were tried and dropped (see 1.60.0). Could also switch the game itself and read the photo again, when the border is sure. | M |
 | 7.11 | **Magic photos quicker still** (1.70.0 does the first part; 1.72.0's live scanning, 7.12, takes away the waiting around the reading, this row is the reading itself). | 1.7 s a photo on the PC: the corners still take 0.7 s (4.4 reads), as a name reprinted in many years can have its number in either corner. Ideas: read the name and the corners at the same time with a second reader (phones have several cores; a second reader takes more of the phone's memory, not yet measured), or tell the frame from the picture before reading (an old frame has no number in the bottom-left corner). | M |
-| 7.12 | **Live scanning (1.72.0), the rest.** | Not yet tried on a phone: ask a friend to scan a few cards and read the bottom of the page with `?camera` (how long a live read took). Ideas, biggest first: **a list of the cards scanned** to look through and save all at once (now each is saved with its own Save button, or lost when the next comes); **dark tables**: the frame only sees a card whose edges show (a black-bordered card on a black mat doesn't), idea: also read when the frame is full of fine detail and stays still, once there is a phone to tune it on; **Pokémon cards live** in the same way; **reading while the card is still arriving**, to save the half second of waiting for it to be still; handing the reader the live picture directly, without making a JPEG of it first. A card swapped in the very same spot with no look between is missed (nobody swaps that fast by hand). | M |
+| 7.12 | **Live scanning (1.72.0, off since 1.72.1), the rest.** | A friend's Samsung found it much worse than the photo button, so it is off (open `?live` to try it again): first find out what was worse, and read the bottom of the page with `?camera&live` (how long a live read took). A guess: it reads the live video, which is softer than the phone's own full-size photo that the photo button takes: idea, when a live read doesn't find the card, take the phone's full-size photo (ImageCapture) and read that. Other ideas, biggest first: **a list of the cards scanned** to look through and save all at once (now each is saved with its own Save button, or lost when the next comes); **dark tables**: the frame only sees a card whose edges show (a black-bordered card on a black mat doesn't), idea: also read when the frame is full of fine detail and stays still, once there is a phone to tune it on; **Pokémon cards live** in the same way; **reading while the card is still arriving**, to save the half second of waiting for it to be still; handing the reader the live picture directly, without making a JPEG of it first. A card swapped in the very same spot with no look between is missed (nobody swaps that fast by hand). | M |
 | 7.4 | **Other card games** with a free database, the same way (Yu-Gi-Oh!, Lorcana). | With a game switch in place, each game is its database, its reading and its texts. | M each |
 
 ## Not planned

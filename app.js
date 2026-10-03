@@ -336,7 +336,10 @@ let cameraLight = chosenCameraLight();
 // on or off: then it is on in kids mode only.
 let cameraAuto = chosenCameraAuto();
 let autoWatch = 0;   // counts the watches, so an older one stops when a newer one starts
-// "Live" (Magic cards): the camera stays open and reads one card after another (see watchLive).
+// "Live" (Magic cards): the camera stays open and reads one card after another (see watchLive). Switched off for
+// everyone since 1.72.1; ?live in the address offers it on this phone again, ?live=0 takes it away (see liveScanningOffered).
+const liveAsked = new URLSearchParams(location.search).get("live");
+if (liveAsked !== null) chooseLiveScanningOffered(liveAsked !== "0");
 let cameraLive = chosenCameraLive();
 let liveRead = null;        // what the strip over the camera shows: { kind, card, name, count }, or null
 let liveLast = null;        // the card read last: { id, saved } - saved: the strip's Save button was pressed for it
@@ -808,9 +811,10 @@ async function watchForCard(afterSave) {
 // card's page is ready behind the camera when the camera is closed.
 
 // Live scanning is for Magic cards, and not in kids mode: a child gets the big card page after each photo, as
-// ever (and "Auto" for the photo, see autoShutterOn).
+// ever (and "Auto" for the photo, see autoShutterOn). And only where it was asked for (see liveScanningOffered):
+// without that, the camera is as it was in 1.71.0.
 function liveScanPossible() {
-	return game === "magic" && !kidsMode;
+	return game === "magic" && !kidsMode && liveScanningOffered();
 }
 
 // ...and on until the viewer switches it off.

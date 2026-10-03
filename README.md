@@ -326,7 +326,10 @@ way, so neither looks. With `?camera` the bottom of the page names the camera ("
 light) · 1 other back cameras tried"). Checked with made-up cameras in a browser (scratchpad `lens_checks.js`, 14
 checks); not yet on the Samsung itself.
 
-**Live scanning for Magic cards** (version 1.72.0, `watchLive` in `app.js`, `grabLiveFrame` in `camera.js`). With Magic
+**Live scanning for Magic cards** (version 1.72.0, `watchLive` in `app.js`, `grabLiveFrame` in `camera.js`; **switched off
+for everyone since 1.72.1**, a friend found the camera much worse: `?live` in the address offers it again on that phone and
+the phone remembers it, `?live=0` takes it away, see `liveScanningOffered` in `camera.js`; the rest of this paragraph is how
+it works when it is on). With Magic
 picked (not in kids mode), the app's camera stays open and reads one card after another, as Manabox and Delver Lens do. It
 looks at the live picture four times a second, as "Auto" does (`lookForCard`, `nearestBox`); once a card-shaped box has
 stayed put for two looks (`LIVE_STILL_LOOKS`, half a second; after 2 s anyway), the live picture is grabbed at once

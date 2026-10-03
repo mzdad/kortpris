@@ -477,6 +477,19 @@ function chooseCameraLive(on) {
 	writeStorage(CAMERA_LIVE_STORAGE_KEY, on ? "on" : "off");
 }
 
+// Live scanning has been switched off for everyone since version 1.72.1: a friend found the app's camera much
+// worse in 1.72.0 than before. It all stays in the code, and the Live button's own choice above stays as it was.
+// `?live` in the address offers it again on that phone (remembered there), `?live=0` takes it away.
+const LIVE_SCANNING_STORAGE_KEY = "kortpris.liveScanning";
+function liveScanningOffered() {
+	return readStorage(LIVE_SCANNING_STORAGE_KEY) === "on";
+}
+
+function chooseLiveScanningOffered(on) {
+	if (on) writeStorage(LIVE_SCANNING_STORAGE_KEY, "on");
+	else removeStorage(LIVE_SCANNING_STORAGE_KEY);
+}
+
 // Whether the viewer switched "Auto" on or off, or null when they never did (then kids mode decides).
 function chosenCameraAuto() {
 	const saved = readStorage(CAMERA_AUTO_STORAGE_KEY);
