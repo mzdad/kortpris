@@ -20,6 +20,7 @@ L = several sessions).
     country the phone's own voice is asked for.
   - Checked with a made-up list of voices (scratchpad `voice_checks.js`, 29 checks): the new choices, what is spoken
     for each, kept on the phone, an unknown country falls back to British, no English list, the Danish wording.
+  - **Confirmed on your son's iPhone (6 October 2026):** with the right country picked, the English voice works, and so does Danish.
   - **Next, once it is tried:** if one country turns out to be the right one for you, it can become the English
     choice for kids mode. Or the app could ask the phone which English it has (not possible from a web page, I think).
 
