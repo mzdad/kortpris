@@ -25,6 +25,11 @@ const VOICE_NAME_POINTS = [
 ];
 // A voice for the exact country (Danish from Denmark, British English) gets this much extra.
 const SAME_COUNTRY_POINTS = 1;
+// The settings' "the phone's own voice": the page names no voice and only says the language, so the
+// phone speaks with the voice it has set for that language. A phone may keep its best voices from the
+// page (an iPhone leaves out the downloaded "Enhanced" and "Premium" ones), so choosing from the list
+// can never reach them, but the phone's own choice can.
+const PHONE_VOICE = "phone";
 
 function canSpeak() {
 	return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
@@ -60,10 +65,22 @@ function voicesFor(language) {
 
 function voiceFor(language) {
 	// The voice chosen in the settings, if this phone still has it; else the most natural one.
-	// None at all: the phone picks one itself.
-	const voices = voicesFor(language);
+	// None at all (or the phone's own chosen): the phone picks one itself.
 	const chosen = chosenVoiceName(language);
+	if (chosen === PHONE_VOICE) return null;
+	const voices = voicesFor(language);
 	return voices.find((voice) => voice.name === chosen) || voices[0] || null;
+}
+
+// What the phone lets the page use, as one short line for the footer (see SHOWS_VOICE_DETAILS):
+// "da-DK 1 (Sara) → Sara", "en-GB 5 (Daniel, Kate, ...) → the phone's own".
+function voiceReport(language, phoneOwnText) {
+	const voices = voicesFor(language);
+	const shown = voices.slice(0, 3).map((voice) => voice.name.replace(/\s+-\s+.*$/, "")).join(", ");
+	const used = voiceFor(language);
+	return (SPEECH_LANGUAGES[language] || language) + " " + voices.length
+		+ (voices.length > 0 ? " (" + shown + (voices.length > 3 ? ", …" : "") + ")" : "")
+		+ " → " + (used ? used.name.replace(/\s+-\s+.*$/, "") : phoneOwnText);
 }
 
 function voiceScore(voice, wantedTag) {

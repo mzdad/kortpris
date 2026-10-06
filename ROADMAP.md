@@ -5,6 +5,30 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.73.0
+
+- **"The phone's own voice" for reading aloud** (you said: "When I change the voice on my son's phone to a different
+  Danish speaker, it does not translate to the app, so in the app I can still only use the robot sounding voice").
+  The app always named one voice from the list the phone gives the page, and the phone's own setting never got a say.
+  What I found out (not yet tried on your son's phone):
+  - **iPhone:** Safari does not list the downloaded "Enhanced" and "Premium" voices to web pages, and the "Siri"
+    voices are never available to them. So a voice downloaded in Settings can't be picked in the app's list, and the
+    old tip in the settings ("download Sara (Enhanced), then choose it here") could not work.
+  - **Android:** Chrome is said to use the phone's own voice for the language whatever the page asks for. If so, a
+    changed voice should already carry over there - which is why I need to know which phone it is.
+  - **What changed:** the "Reading aloud" box (hidden in kids mode: tap 🧒 to leave it) has a new choice, **The phone's
+    own voice / Telefonens egen stemme**, for each language. The app then names no voice and only says "Danish", so the
+    phone uses the one it has set. Automatic is as before (nothing changes until it is chosen). Where a phone gives
+    the page no Danish voice at all, the list says "The phone's own voice" instead of "No voice on this device".
+    The iPhone tip now says to use it.
+  - **`?voices`** in the address shows in the footer what the phone lists for Danish and English and which voice the
+    app uses - for finding out what a phone really gives the page.
+  - Checked with a made-up list of voices in a browser (scratchpad `voice_checks.js`, 16 checks): Automatic as before,
+    the new choice speaks with no voice named, is kept on the phone and can be taken away again, a phone with no Danish
+    voice in its list, the footer line, and the Danish wording.
+  - **Next, once it is tried:** if "The phone's own voice" sounds right on his phone, make it the automatic choice
+    for Danish there (an open question: it may be worse on phones where the list has a good voice). Not before.
+
 ## Done in 1.72.1
 
 - **Live scanning switched off again** (you said: "Can you make a rollback, the live version cam is much worse he says. Make a

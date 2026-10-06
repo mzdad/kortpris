@@ -395,6 +395,11 @@ in normal mode; a kid's account switches kids mode on by itself, see Kids' accou
 worth about 33 kroner."), with its own built-in voice (`speech.js`): free, and nothing is sent
 anywhere. The 🔊 buttons read aloud in normal mode too. iPhones only let a page speak after a
 tap, so the first words come from pressing the camera button.
+Which voice: the most natural one the phone lists for the page is used, and the "Reading aloud" settings
+(hidden in kids mode) can pick another, or "The phone's own voice" (1.73.0): the page then names no voice and
+the phone speaks with the one it has set for that language. An iPhone's Safari does not list the downloaded
+"Enhanced" and "Premium" voices to web pages, so that is the way to reach them. `?voices` in the address
+shows in the footer which voices the phone lists and which one is used.
 
 **Accounts.** Each person can have a username and password, and their My cards is then kept
 online and shows up on every phone they sign in on. Passwords must be at least 10

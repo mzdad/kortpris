@@ -13,6 +13,8 @@ const READER_START_DELAY_MS = 1000;
 // The camera's details (photo size, sharpness) at the bottom of the page, only with ?camera in the
 // address: they were shown to everyone to find out what iPhones give, which is known now (1.41.2).
 const SHOWS_CAMERA_DETAILS = new URLSearchParams(location.search).has("camera");
+// Which voices the phone gives the page, and which one is used, at the bottom of the page (?voices).
+const SHOWS_VOICE_DETAILS = new URLSearchParams(location.search).has("voices");
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EXAMPLE_CARD_IMAGE = "https://assets.tcgdex.net/en/base/base1/4/high.png";
 // Where the phone remembers the chosen language between visits.
@@ -515,6 +517,9 @@ function renderFooter() {
 	}
 	if (lastLiveMs !== null && SHOWS_CAMERA_DETAILS) appVersionText.textContent += " · " + t("cameraLiveTiming", { seconds: (lastLiveMs / 1000).toFixed(1) });
 	if (SHOWS_CAMERA_DETAILS) appVersionText.textContent += " · " + storageDetails();
+	if (SHOWS_VOICE_DETAILS && canSpeak()) {
+		appVersionText.textContent += " · voices: " + ["da", "en"].map((code) => voiceReport(code, t("voicePhoneOwn"))).join(" · ");
+	}
 	if (shownCurrency() !== currency) {
 		ratesNote.textContent = t("ratesMissing");
 	} else if (ratesDate && currency !== "EUR") {
@@ -1239,7 +1244,10 @@ forgetAllButton.addEventListener("click", () => {
 
 // The "Reading aloud" settings: a voice for each language, and a button to hear it.
 for (const select of voiceSelects) {
-	select.addEventListener("change", () => chooseVoice(select.dataset.voiceLanguage, select.value));
+	select.addEventListener("change", () => {
+		chooseVoice(select.dataset.voiceLanguage, select.value);
+		if (SHOWS_VOICE_DETAILS) renderFooter();
+	});
 }
 voiceSettings.addEventListener("click", (event) => {
 	const button = event.target.closest("[data-try-voice]");
@@ -1249,7 +1257,12 @@ voiceSettings.addEventListener("click", (event) => {
 	speak(STRINGS[voiceLanguage].voiceSample, voiceLanguage);
 });
 // Phones and browsers find their voices a moment after the page opens, and may add more later.
-if (canSpeak()) speechSynthesis.addEventListener("voiceschanged", renderVoiceSettings);
+if (canSpeak()) {
+	speechSynthesis.addEventListener("voiceschanged", () => {
+		renderVoiceSettings();
+		if (SHOWS_VOICE_DETAILS) renderFooter();
+	});
+}
 
 claudeForm.addEventListener("submit", (event) => {
 	event.preventDefault();   // stay on this page instead of reloading it
@@ -3293,8 +3306,14 @@ function renderVoiceSettings() {
 		const voiceLanguage = select.dataset.voiceLanguage;
 		const voices = voicesFor(voiceLanguage);
 		const chosen = chosenVoiceName(voiceLanguage);
-		const automatic = voices.length > 0 ? t("voiceAutomatic", { name: shortVoiceName(voices[0]) }) : t("voiceNone");
+		// A phone that gives the page no list still speaks, with its own voice.
+		const noList = canSpeak() ? t("voicePhoneOwn") : t("voiceNone");
+		const automatic = voices.length > 0 ? t("voiceAutomatic", { name: shortVoiceName(voices[0]) }) : noList;
 		const options = [`<option value="">${escapeHtml(automatic)}</option>`];
+		if (voices.length > 0) {
+			const selected = chosen === PHONE_VOICE ? "selected" : "";
+			options.push(`<option value="${PHONE_VOICE}" ${selected}>${escapeHtml(t("voicePhoneOwn"))}</option>`);
+		}
 		for (const voice of voices) {
 			const selected = voice.name === chosen ? "selected" : "";
 			options.push(`<option value="${escapeHtml(voice.name)}" ${selected}>${escapeHtml(shortVoiceName(voice))}</option>`);
