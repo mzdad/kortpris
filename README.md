@@ -400,6 +400,9 @@ Which voice: the most natural one the phone lists for the page is used, and the 
 the phone speaks with the one it has set for that language. An iPhone's Safari does not list the downloaded
 "Enhanced" and "Premium" voices to web pages, so that is the way to reach them. `?voices` in the address
 shows in the footer which voices the phone lists and which one is used.
+An iPhone keeps one chosen voice for each country (Settings, Voices, English, United States...), so for English
+"The phone's own voice" comes once for each country (1.73.1): the app then asks for that country's English, and
+the voice chosen under it speaks. `?voices` also lists the countries the phone's voices are for.
 
 **Accounts.** Each person can have a username and password, and their My cards is then kept
 online and shows up on every phone they sign in on. Passwords must be at least 10

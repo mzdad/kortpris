@@ -3300,8 +3300,9 @@ function learnedCardHtml(card) {
 }
 
 function renderVoiceSettings() {
-	// Each language's list: "Automatic" (the most natural voice, named), then every voice this
-	// phone has for that language, most natural first (see voicesFor in speech.js).
+	// Each language's list: "Automatic" (the most natural voice, named), "The phone's own voice" (English: once
+	// for each country, see PHONE_VOICE_TAGS), then every voice this phone has for that language, most natural
+	// first (see voicesFor in speech.js).
 	for (const select of voiceSelects) {
 		const voiceLanguage = select.dataset.voiceLanguage;
 		const voices = voicesFor(voiceLanguage);
@@ -3310,7 +3311,16 @@ function renderVoiceSettings() {
 		const noList = canSpeak() ? t("voicePhoneOwn") : t("voiceNone");
 		const automatic = voices.length > 0 ? t("voiceAutomatic", { name: shortVoiceName(voices[0]) }) : noList;
 		const options = [`<option value="">${escapeHtml(automatic)}</option>`];
-		if (voices.length > 0) {
+		const countryTags = PHONE_VOICE_TAGS[voiceLanguage] ? [SPEECH_LANGUAGES[voiceLanguage], ...PHONE_VOICE_TAGS[voiceLanguage]] : [];
+		if (canSpeak() && countryTags.length > 0) {
+			// The first country is the app's usual one: it is the plain "phone" choice.
+			countryTags.forEach((tag, order) => {
+				const value = order === 0 ? PHONE_VOICE : PHONE_VOICE_COUNTRY_PREFIX + tag;
+				const selected = value === chosen ? "selected" : "";
+				const label = t("voicePhoneOwnIn", { country: countryName(tag) });
+				options.push(`<option value="${value}" ${selected}>${escapeHtml(label)}</option>`);
+			});
+		} else if (voices.length > 0) {
 			const selected = chosen === PHONE_VOICE ? "selected" : "";
 			options.push(`<option value="${PHONE_VOICE}" ${selected}>${escapeHtml(t("voicePhoneOwn"))}</option>`);
 		}
@@ -3319,7 +3329,17 @@ function renderVoiceSettings() {
 			options.push(`<option value="${escapeHtml(voice.name)}" ${selected}>${escapeHtml(shortVoiceName(voice))}</option>`);
 		}
 		select.innerHTML = options.join("");
-		select.disabled = voices.length === 0;
+		select.disabled = !canSpeak() || (voices.length === 0 && countryTags.length === 0);
+	}
+}
+
+// "en-US" -> "United States" (in Danish: "USA"), in the page's language.
+function countryName(tag) {
+	const region = tag.split("-")[1];
+	try {
+		return new Intl.DisplayNames([language], { type: "region" }).of(region) || region;
+	} catch (error) {
+		return region;
 	}
 }
 

@@ -30,6 +30,11 @@ const SAME_COUNTRY_POINTS = 1;
 // page (an iPhone leaves out the downloaded "Enhanced" and "Premium" ones), so choosing from the list
 // can never reach them, but the phone's own choice can.
 const PHONE_VOICE = "phone";
+// English can also ask for another country's English: "phone:en-US". An iPhone keeps one chosen voice for
+// each country (Settings, Voices, English, United States...), and asking for British English never gets
+// the voice that was chosen under the United States.
+const PHONE_VOICE_COUNTRY_PREFIX = "phone:";
+const PHONE_VOICE_TAGS = { en: ["en-US", "en-AU", "en-IE", "en-IN", "en-ZA"] };
 
 function canSpeak() {
 	return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
@@ -45,7 +50,7 @@ function speak(text, language) {
 	if (!canSpeak() || !text) return;
 	speechSynthesis.cancel();
 	const utterance = new SpeechSynthesisUtterance(text);
-	utterance.lang = SPEECH_LANGUAGES[language] || language;
+	utterance.lang = speechTag(language);
 	const voice = voiceFor(language);
 	if (voice) utterance.voice = voice;
 	utterance.rate = SPEECH_RATE;
@@ -67,20 +72,37 @@ function voiceFor(language) {
 	// The voice chosen in the settings, if this phone still has it; else the most natural one.
 	// None at all (or the phone's own chosen): the phone picks one itself.
 	const chosen = chosenVoiceName(language);
-	if (chosen === PHONE_VOICE) return null;
+	if (isPhoneVoice(chosen)) return null;
 	const voices = voicesFor(language);
 	return voices.find((voice) => voice.name === chosen) || voices[0] || null;
 }
 
-// What the phone lets the page use, as one short line for the footer (see SHOWS_VOICE_DETAILS):
-// "da-DK 1 (Sara) → Sara", "en-GB 5 (Daniel, Kate, ...) → the phone's own".
+function isPhoneVoice(chosen) {
+	return chosen === PHONE_VOICE || chosen.startsWith(PHONE_VOICE_COUNTRY_PREFIX);
+}
+
+// The language tag a text is spoken in: the app's usual one ("da-DK", "en-GB"), or the country picked
+// together with "the phone's own voice" ("phone:en-US").
+function speechTag(language) {
+	const chosen = chosenVoiceName(language);
+	if (chosen.startsWith(PHONE_VOICE_COUNTRY_PREFIX)) {
+		const tag = chosen.slice(PHONE_VOICE_COUNTRY_PREFIX.length);
+		if ((PHONE_VOICE_TAGS[language] || []).includes(tag)) return tag;
+	}
+	return SPEECH_LANGUAGES[language] || language;
+}
+
+// What the phone lets the page use, as one short line for the footer (see SHOWS_VOICE_DETAILS): how many
+// voices, the first names, the countries they are for, and which one is used:
+// "da-DK 1 (Sara) [da-DK] → Sara", "en-GB 5 (Daniel, Kate, Eddy, …) [en-GB en-US] → the phone's own voice (en-US)".
 function voiceReport(language, phoneOwnText) {
 	const voices = voicesFor(language);
 	const shown = voices.slice(0, 3).map((voice) => voice.name.replace(/\s+-\s+.*$/, "")).join(", ");
+	const countries = [...new Set(voices.map((voice) => voice.lang.replace("_", "-")))].join(" ");
 	const used = voiceFor(language);
 	return (SPEECH_LANGUAGES[language] || language) + " " + voices.length
-		+ (voices.length > 0 ? " (" + shown + (voices.length > 3 ? ", …" : "") + ")" : "")
-		+ " → " + (used ? used.name.replace(/\s+-\s+.*$/, "") : phoneOwnText);
+		+ (voices.length > 0 ? " (" + shown + (voices.length > 3 ? ", …" : "") + ") [" + countries + "]" : "")
+		+ " → " + (used ? used.name.replace(/\s+-\s+.*$/, "") : phoneOwnText + " (" + speechTag(language) + ")");
 }
 
 function voiceScore(voice, wantedTag) {

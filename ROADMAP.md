@@ -5,6 +5,24 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions).
 
+## Done in 1.73.1
+
+- **"The phone's own voice" for English, by country** (you said: it worked for the Danish voice but not the English one, on
+  an iPhone). Danish only comes from Denmark, so asking the phone for "Danish" gets the voice you picked. English does
+  not: an iPhone keeps one chosen voice for each country (Settings, Voices, English, then United States, United Kingdom,
+  Australia...), and the app always asked for British English, so a voice picked under the United States was never
+  asked for. (From Apple's developer forums; not yet tried on your son's phone.)
+  - **What changed:** in "Reading aloud" the English voice list now has "The phone's own voice - United Kingdom"
+    (as before), then the same for the United States, Australia, Ireland, India and South Africa. Pick the country the
+    voice is under in the iPhone's Settings, then press Try. Danish is as before.
+  - The English list shows these even when the iPhone gives the page no English voices at all.
+  - `?voices` now also lists the countries the phone's voices are for (for example `[en-GB en-US]`) and which
+    country the phone's own voice is asked for.
+  - Checked with a made-up list of voices (scratchpad `voice_checks.js`, 29 checks): the new choices, what is spoken
+    for each, kept on the phone, an unknown country falls back to British, no English list, the Danish wording.
+  - **Next, once it is tried:** if one country turns out to be the right one for you, it can become the English
+    choice for kids mode. Or the app could ask the phone which English it has (not possible from a web page, I think).
+
 ## Done in 1.73.0
 
 - **"The phone's own voice" for reading aloud** (you said: "When I change the voice on my son's phone to a different
