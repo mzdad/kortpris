@@ -26,6 +26,7 @@ L = several sessions).
   - Checked with a made-up list of voices in a browser (scratchpad `voice_checks.js`, 16 checks): Automatic as before,
     the new choice speaks with no voice named, is kept on the phone and can be taken away again, a phone with no Danish
     voice in its list, the footer line, and the Danish wording.
+  - The same 16 checks pass on the live site (1.73.0). Doing that found 5.5 (a service worker problem in a test browser).
   - **Next, once it is tried:** if "The phone's own voice" sounds right on his phone, make it the automatic choice
     for Danish there (an open question: it may be worse on phones where the list has a good voice). Not before.
 
@@ -1211,6 +1212,7 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 |---|---|---|---|
 | 5.3 | **The test pages' photos** are made from the old database's big pictures, which may go in March 2027. | Then the tests can't run. Scrydex has the same pictures under the same ids (5.2), but new photos would change the tests' results a little, so only when needed. | S |
 | 5.4 | **A question to the card database that never answers.** | The questions to TCGdex (`askTcgdexNow` in cards.js) have no time limit. In the 1.67.0 check a test stopped for good at photo 28, waiting for an answer that never came. In the app a new scan takes over, but the "looking up" stays until you scan again. Idea: give each question 15 seconds, then ask again. | S |
+| 5.5 | **A failed save into the phone's storage can stop the start page opening.** | `startPage` in sw.js saves the page with `cache.put`; when that throws and no copy is kept yet, the page fails to load (ERR_FAILED) instead of just not being saved. Found 6 October 2026 in a headless Chrome 154 whose Cache Storage refuses every write (even a trivial one), so every second visit failed there. Not seen on a real phone; a phone with no room left could do the same. Idea: catch the error around the saving, so a failed keeping never fails the page. | S |
 
 ## 6. Cards in other languages
 
