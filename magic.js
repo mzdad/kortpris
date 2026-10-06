@@ -230,18 +230,20 @@ async function askScryfallOnce(url, question) {
 	let lastProblem = null;
 	for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
 		try {
-			const response = await fetch(url, question
-				? { method: "POST", headers: { "Accept": "application/json", "Content-Type": "application/json" }, body: JSON.stringify(question) }
-				: { headers: { "Accept": "application/json" } });
-			if (response.ok || response.status === 404) return await response.json();
-			const problem = new Error("Scryfall answered " + response.status);
-			problem.tooManyLookups = response.status === 429;
-			// Not allowed, or asked too often: asking again won't change that.
-			if (response.status >= 400 && response.status < 500) throw Object.assign(problem, { final: true });
-			lastProblem = problem;
+			return await withinAnswerWait(async (signal) => {
+				const response = await fetch(url, question
+					? { method: "POST", headers: { "Accept": "application/json", "Content-Type": "application/json" }, body: JSON.stringify(question), signal: signal }
+					: { headers: { "Accept": "application/json" }, signal: signal });
+				if (response.ok || response.status === 404) return await response.json();
+				const problem = new Error("Scryfall answered " + response.status);
+				problem.tooManyLookups = response.status === 429;
+				// Not allowed, or asked too often: asking again won't change that.
+				problem.final = response.status >= 400 && response.status < 500;
+				throw problem;
+			});
 		} catch (problem) {
 			if (problem.final) throw problem;
-			lastProblem = problem;
+			lastProblem = problem;   // also a question that took too long: it was stopped, see withinAnswerWait
 		}
 		if (attempt < MAX_API_ATTEMPTS) await wait(Math.max(SCRYFALL_GAP_MS, RETRY_DELAY_MS * attempt));
 	}

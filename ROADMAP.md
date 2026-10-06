@@ -5,6 +5,35 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions). The open parts (1 to 7) were checked against version 1.73.1 on 6 October 2026: a figure from an older version names it, and where nothing had changed the row says "checked".
 
+## Done in 1.73.2
+
+- **5.4 A question to the card database that never answers is given up on** (you said "yes" to starting with 5.4 and 5.5).
+  Each question to TCGdex, and to Scryfall for Magic cards, now has 15 seconds (`API_ANSWER_WAIT_MS`, `withinAnswerWait`
+  in `cards.js`). Then it is stopped and asked again, up to 3 times as before; after the last one the app says the price
+  database didn't answer, instead of "Looking up prices" staying until the next scan. At Scryfall it mattered more: its
+  questions go one at a time, so a single question that never answered held up every question after it.
+  - Checked in a browser with made-up answers (scratchpad `timeout_checks.js`, 17 checks): an answer at once is as
+    before (and clears its timer); one that doesn't answer is asked again after 15 s and then answered; one that never
+    answers gives up after 3 tries (46 s); 429 and 404 stop at once as before, 500 is asked again twice; at Scryfall the
+    question behind a stuck one still gets its answer; and a real search whose first TCGdex question hung found its 24
+    cards after the 15 s, with nothing left "looking up".
+  - **Not changed:** the other calls the app makes (exchange rates, the PSA relay, Firebase) have their own handling.
+- **5.5 A failed save into the phone's storage can no longer stop the start page opening.** `startPage` and `keptFirst` in
+  `sw.js` kept the page (and each file) as part of answering it, so when the phone's storage threw - full, not allowed,
+  or in a Chrome 154 with no working Cache Storage writes - the page failed to load. Now the page and the files come
+  from the internet whatever happens to the keeping, and a storage that can't even be opened is skipped. As before: no
+  internet and nothing kept still fails (there is nothing to show), and a newer start page still throws away the older
+  version's files.
+  - Checked (scratchpad `sw_checks.js`, 16 checks): on the unfixed `sw.js` it failed 6 of its own checks and the real
+    service worker in the test Chrome gave `ERR_FAILED` on every visit after the first; fixed, the first visit and the
+    three after it all open, and the made-up storage cases (refuses to keep, can't be opened, tidying fails) all show the
+    page. The cases that worked before still do: kept and shown without internet, a newer page wins, old files thrown away.
+  - I found a flaw in my first version on the way: the page could start reading the answer before the second copy (for
+    tidying the old files) was made, which would have stopped old files being thrown away. Both copies are made at once now,
+    and a check watches for it.
+- The older checks still pass on 1.73.2: the whole app (20), kids mode (15), the camera lens (14), the rollback (11), the
+  reading aloud settings (29).
+
 ## Done in 1.73.1
 
 - **"The phone's own voice" for English, by country** (you said: it worked for the Danish voice but not the English one, on
@@ -1231,8 +1260,6 @@ You asked for 1.7 to 1.9 after putting the languages on the roadmap (part 6). 1.
 | | What | Why | Size |
 |---|---|---|---|
 | 5.3 | **The test pages' photos** are made from the old database's big pictures, which may go in March 2027. | Then the tests can't run. Scrydex has the same pictures under the same ids (5.2), but new photos would change the tests' results a little, so only when needed. | S |
-| 5.4 | **A question to the card database that never answers.** | The questions to TCGdex (`askTcgdexNow` in cards.js) have no time limit. In the 1.67.0 check a test stopped for good at photo 28, waiting for an answer that never came. In the app a new scan takes over, but the "looking up" stays until you scan again. Idea: give each question 15 seconds, then ask again. Checked 6 October 2026: `askTcgdexNow` in cards.js still has no time limit. | S |
-| 5.5 | **A failed save into the phone's storage can stop the start page opening.** | `startPage` in sw.js saves the page with `cache.put`; when that throws and no copy is kept yet, the page fails to load (ERR_FAILED) instead of just not being saved. Found 6 October 2026 in a headless Chrome 154 whose Cache Storage refuses every write (even a trivial one), so every second visit failed there. Not seen on a real phone; a phone with no room left could do the same. Idea: catch the error around the saving, so a failed keeping never fails the page. | S |
 
 ## 6. Cards in other languages
 

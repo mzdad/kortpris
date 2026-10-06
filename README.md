@@ -462,6 +462,9 @@ opens, and the older version's files are thrown away. On an iPhone, the home scr
 own saved things, apart from Safari's: My cards and the learned cards start empty there until
 someone signs in, which the app says. Signed-in accounts show their cards without internet too,
 from Firebase's copy on the phone (see Accounts).
+Keeping is only a help (1.73.2): a phone that can't keep anything (full, or not allowed) still gets the start page and the files
+from the internet. A question to TCGdex or Scryfall is given up on after 15 seconds (`API_ANSWER_WAIT_MS` in `cards.js`) and asked
+again, up to 3 times, instead of waiting for ever.
 While developing on this PC (localhost) the service worker is off, because files change there
 without a new version number; `?sw` in the address switches it on to test it, and opening the page
 without `?sw` takes it away again (but not the database's answers kept).

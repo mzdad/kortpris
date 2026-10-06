@@ -23,6 +23,10 @@ const WIDE_PAGE_SIZE = 250;
 // TCGdex seldom fails (none of 40 requests in September 2026); a question that does is asked again.
 const MAX_API_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 400;
+// How long one question to a database may take, reading the answer included, before it counts as failed
+// and is asked again (roadmap 5.4). Without a limit a question that never answered left "looking up" on
+// the screen until the next scan - and kept every question after it waiting too (see askScryfallNow).
+const API_ANSWER_WAIT_MS = 15000;
 // TCGdex's answers are kept on the phone for a day (see askTcgdex), so scanning a card again, or
 // opening a saved card, doesn't ask again - and works without internet. They are kept in the
 // browser's Cache Storage, which holds far more than localStorage; sw.js leaves them alone.
@@ -714,18 +718,20 @@ async function askTcgdexNow(url, postBody) {
 	let lastProblem = null;
 	for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
 		try {
-			const response = await fetch(url, postBody
-				? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(postBody) }
-				: undefined);
-			if (response.ok) return await response.json();
-			const problem = new Error("Card database answered " + response.status);
-			problem.tooManyLookups = response.status === 429;
-			// Not there, or not allowed: asking again won't change that.
-			if (problem.tooManyLookups || (response.status >= 400 && response.status < 500)) throw Object.assign(problem, { final: true });
-			lastProblem = problem;
+			return await withinAnswerWait(async (signal) => {
+				const response = await fetch(url, postBody
+					? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(postBody), signal: signal }
+					: { signal: signal });
+				if (response.ok) return await response.json();
+				const problem = new Error("Card database answered " + response.status);
+				problem.tooManyLookups = response.status === 429;
+				// Not there, or not allowed: asking again won't change that.
+				problem.final = problem.tooManyLookups || (response.status >= 400 && response.status < 500);
+				throw problem;
+			});
 		} catch (problem) {
 			if (problem.final) throw problem;
-			lastProblem = problem;
+			lastProblem = problem;   // also a question that took too long: it was stopped, see withinAnswerWait
 		}
 		if (attempt < MAX_API_ATTEMPTS) await wait(RETRY_DELAY_MS * attempt);   // a little longer each time
 	}
@@ -734,4 +740,16 @@ async function askTcgdexNow(url, postBody) {
 
 function wait(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Runs ask(signal), one question to a database, and stops it when it takes longer than API_ANSWER_WAIT_MS:
+// the signal ends the fetch (and the reading of its answer), which then throws, as a failed question does.
+async function withinAnswerWait(ask) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), API_ANSWER_WAIT_MS);
+	try {
+		return await ask(controller.signal);
+	} finally {
+		clearTimeout(timer);
+	}
 }

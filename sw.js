@@ -77,23 +77,41 @@ function isStartPage(url) {
 // The start page: asked for from the internet, which checks it is the newest (only a few bytes
 // when nothing changed), and kept for next time. When the internet doesn't answer within
 // PAGE_WAIT_MS, or not at all, the copy kept is shown - and the newest arrives next time.
+// Keeping is only ever a help: a phone that can't keep anything (full, or not allowed) still gets the
+// page from the internet (roadmap 5.5), never a page that fails to open.
 async function startPage(event) {
-	const cache = await caches.open(FILES);
+	const cache = await openCache(FILES);
+	const fromInternet = fetch(event.request.url, { cache: "no-cache", credentials: "same-origin" });
+	if (cache === null) return fromInternet;
 	// Kept under one address, whatever the page's address ends in ("?emulator").
 	const keptAs = self.registration.scope;
-	const fromInternet = fetch(event.request.url, { cache: "no-cache", credentials: "same-origin" }).then(async (response) => {
-		if (response.ok) {
-			await cache.put(keptAs, response.clone());
-			await throwAwayOlderVersions(cache, response.clone());
+	const keeping = fromInternet.then(async (response) => {
+		if (!response.ok) return;
+		try {
+			// Both copies are made at once, before the page starts reading the answer itself.
+			const toKeep = response.clone();
+			const toRead = response.clone();
+			await cache.put(keptAs, toKeep);
+			await throwAwayOlderVersions(cache, toRead);
+		} catch (error) {
+			// Not kept: the page was answered all the same.
 		}
-		return response;
 	});
-	event.waitUntil(fromInternet.catch(() => {}));
-	const kept = await cache.match(keptAs);
+	event.waitUntil(keeping.catch(() => {}));
+	const kept = await cache.match(keptAs).catch(() => undefined);
 	if (!kept) return fromInternet;   // the very first visit: nothing kept yet
 	const answered = fromInternet.then((response) => (response.ok ? response : kept), () => kept);
 	const tooSlow = new Promise((resolve) => setTimeout(() => resolve(kept), PAGE_WAIT_MS));
 	return Promise.race([answered, tooSlow]);
+}
+
+// One of the caches, or null when the phone's storage can't be opened: then nothing is kept or found.
+async function openCache(name) {
+	try {
+		return await caches.open(name);
+	} catch (error) {
+		return null;
+	}
 }
 
 // The app's own files of other versions than the start page's (its app.js?v=...) aren't needed any more.
@@ -110,16 +128,21 @@ async function throwAwayOlderVersions(cache, page) {
 
 // Answered from the phone when kept there; otherwise from the internet, and kept when it came
 // whole. (An answer the page may not look inside - an "opaque" one - isn't kept: browsers count
-// each as megabytes.)
+// each as megabytes.) Keeping is only a help (see startPage): a file that can't be kept, or looked
+// for, still comes from the internet.
 async function keptFirst(event, cacheName) {
-	const cache = await caches.open(cacheName);
-	const kept = await cache.match(event.request);
+	const cache = await openCache(cacheName);
+	const kept = cache === null ? undefined : await cache.match(event.request).catch(() => undefined);
 	if (kept) return kept;
 	const response = await fetch(event.request);
-	if (response.ok) {
+	if (cache !== null && response.ok) {
 		event.waitUntil((async () => {
-			await cache.put(event.request, response.clone());
-			if (cacheName === PICTURES) await tidyPictures(cache);
+			try {
+				await cache.put(event.request, response.clone());
+				if (cacheName === PICTURES) await tidyPictures(cache);
+			} catch (error) {
+				// Not kept: the file was answered all the same.
+			}
 		})());
 	}
 	return response;
