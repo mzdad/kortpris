@@ -73,6 +73,8 @@ const CORNER_SHIFTS_Y = [-0.015, 0, 0.015];
 // further from the photo. A photo of the Jigglypuff reprint scored 1.32 against the original's
 // 2.31; made-up photos of Base Set originals scored ten times closer to the original.
 const REPRINT_CORNER_GAP = 1.3;
+// How many candidate pictures are loaded and compared at the same time (see rankByLook).
+const PICTURES_AT_ONCE = 8;
 
 // Returns [{ card, distance, corners }] sorted with the closest look first. Smaller distance =
 // more alike. corners is the same for the patches in STAMP_CORNERS, or null when the card's
@@ -89,7 +91,7 @@ async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = (
 	const photoCorners = cardBox ? STAMP_CORNERS.map((corner) => cornerGridsOfPhoto(photo, cardBox, corner)) : null;
 
 	let done = 0;
-	const ranked = await Promise.all(cards.map(async (card) => {
+	const ranked = await inBatches(cards, PICTURES_AT_ONCE, async (card) => {
 		let distance = Infinity;   // a picture that doesn't load goes last
 		let corners = null;
 		try {
@@ -105,9 +107,25 @@ async function rankByLook(photo, textArea, cards, cardBox = null, onProgress = (
 		done++;
 		onProgress(done, cards.length);
 		return { card, distance, corners };
-	}));
+	});
 	ranked.sort((a, b) => a.distance - b.distance);
 	return ranked;
+}
+
+// Runs work(item) for every item, this many at a time, and returns the answers in the items' order. With
+// 250 candidates, asking for every picture at once held them all in memory on a phone, and the browser
+// only downloads a few at a time anyway.
+async function inBatches(items, atOnce, work) {
+	const answers = new Array(items.length);
+	let next = 0;
+	const worker = async () => {
+		while (next < items.length) {
+			const at = next++;
+			answers[at] = await work(items[at]);
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(atOnce, items.length) }, worker));
+	return answers;
 }
 
 // The artwork window of the card in the photo as blurry thumbnails, tried a little shifted,
