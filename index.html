@@ -456,35 +456,36 @@
 
 <!-- Our own files (these, and style.css at the top) end in ?v=1.73.3. Change it on every
      release (see README), so phones never mix new and old files from their cache. -->
-<!-- Tesseract reads text out of pictures (OCR = optical character recognition). -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js" crossorigin="anonymous"></script>
-<script src="strings.js?v=1.73.3"></script>
-<script src="pokemon-names.js?v=1.73.3"></script>
-<script src="card-names.js?v=1.73.3"></script>
-<script src="set-codes.js?v=1.73.3"></script>
-<script src="storage.js?v=1.73.3"></script>
-<script src="currency.js?v=1.73.3"></script>
-<script src="firebase-config.js?v=1.73.3"></script>
-<script src="password.js?v=1.73.3"></script>
-<script src="account.js?v=1.73.3"></script>
-<script src="speech.js?v=1.73.3"></script>
-<script src="card-finder.js?v=1.73.3"></script>
-<script src="sparkle.js?v=1.73.3"></script>
-<script src="reader.js?v=1.73.3"></script>
-<script src="card-ids.js?v=1.73.3"></script>
-<script src="cards.js?v=1.73.3"></script>
-<script src="magic.js?v=1.73.3"></script>
-<script src="japanese-sets.js?v=1.73.3"></script>
-<script src="japanese.js?v=1.73.3"></script>
-<script src="japanese-reader.js?v=1.73.3"></script>
-<script src="matcher.js?v=1.73.3"></script>
-<script src="magic-sets.js?v=1.73.3"></script>
-<script src="magic-reader.js?v=1.73.3"></script>
-<script src="learned.js?v=1.73.3"></script>
-<script src="camera.js?v=1.73.3"></script>
-<script src="collection.js?v=1.73.3"></script>
-<script src="graded.js?v=1.73.3"></script>
-<script src="claude.js?v=1.73.3"></script>
-<script src="app.js?v=1.73.3"></script>
+<script defer src="strings.js?v=1.73.3"></script>
+<script defer src="pokemon-names.js?v=1.73.3"></script>
+<script defer src="card-names.js?v=1.73.3"></script>
+<script defer src="set-codes.js?v=1.73.3"></script>
+<script defer src="storage.js?v=1.73.3"></script>
+<script defer src="currency.js?v=1.73.3"></script>
+<script defer src="firebase-config.js?v=1.73.3"></script>
+<script defer src="password.js?v=1.73.3"></script>
+<script defer src="account.js?v=1.73.3"></script>
+<script defer src="speech.js?v=1.73.3"></script>
+<script defer src="card-finder.js?v=1.73.3"></script>
+<script defer src="sparkle.js?v=1.73.3"></script>
+<script defer src="reader.js?v=1.73.3"></script>
+<script defer src="card-ids.js?v=1.73.3"></script>
+<script defer src="cards.js?v=1.73.3"></script>
+<script defer src="magic.js?v=1.73.3"></script>
+<script defer src="japanese-sets.js?v=1.73.3"></script>
+<script defer src="japanese.js?v=1.73.3"></script>
+<script defer src="japanese-reader.js?v=1.73.3"></script>
+<script defer src="matcher.js?v=1.73.3"></script>
+<script defer src="magic-sets.js?v=1.73.3"></script>
+<script defer src="magic-reader.js?v=1.73.3"></script>
+<script defer src="learned.js?v=1.73.3"></script>
+<script defer src="camera.js?v=1.73.3"></script>
+<script defer src="collection.js?v=1.73.3"></script>
+<script defer src="graded.js?v=1.73.3"></script>
+<script defer src="claude.js?v=1.73.3"></script>
+<script defer src="app.js?v=1.73.3"></script>
+<!-- Tesseract reads text out of pictures (OCR = optical character recognition). Last, and deferred like
+     the files above: it needn't hold them up, and is only used once the page has loaded (reader.js). -->
+<script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js" crossorigin="anonymous"></script>
 </body>
 </html>
