@@ -5,6 +5,12 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions). The open parts (1 to 7) were checked against version 1.73.1 on 6 October 2026: a figure from an older version names it, and where nothing had changed the row says "checked".
 
+## Done in 1.74.0
+
+- A light look refresh, in `style.css` only (the block at its end): header controls in rows below the name, panels with a
+  soft shadow, and "Take photo" on one line. Checked on the Scan screen in light and dark at phone width; My cards, the card
+  page and Kids mode not checked.
+
 ## Done in 1.73.4
 
 - Scripts load with `defer` (the text reader last), so they no longer wait for each other.
