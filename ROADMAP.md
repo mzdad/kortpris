@@ -5,6 +5,13 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions). The open parts (1 to 7) were checked against version 1.73.1 on 6 October 2026: a figure from an older version names it, and where nothing had changed the row says "checked".
 
+## Done in 1.73.4
+
+- Scripts load with `defer` (the text reader last), so they no longer wait for each other.
+- The camera is let go when the live picture won't start (its light used to stay on).
+- Candidate card pictures are compared 8 at a time, not up to 250 at once (`inBatches` in `matcher.js`).
+- Not yet run: `dev_reading_test.html` against these changes.
+
 ## Done in 1.73.3
 
 Found by a read-through of the code; none of the four has been tried in a browser yet.
