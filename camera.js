@@ -71,7 +71,14 @@ function liveCameraPossible() {
 async function startLiveCamera(video) {
 	const { stream, othersTried } = await openMainBackCamera();
 	video.srcObject = stream;
-	await video.play();
+	try {
+		await video.play();
+	} catch (error) {
+		// The picture wouldn't start: the camera is let go, or its light would stay on with nothing shown.
+		stopStream(stream);
+		video.srcObject = null;
+		throw error;
+	}
 	const track = stream.getVideoTracks()[0];
 	const capabilities = track.getCapabilities ? track.getCapabilities() : {};
 	return {
