@@ -445,7 +445,8 @@ async function withPrices(card, fresh = false) {
 	if (card.pricesLoaded && !fresh) return card;
 	if (!pricesAsked.has(card.id) || fresh) {
 		const asking = askTcgdex(TCGDEX_API + "/cards/" + encodeURIComponent(card.id), null, fresh).then((full) => pricesFrom(full.pricing));
-		asking.catch(() => pricesAsked.delete(card.id));
+		// Only its own entry: a newer question for the same card may have replaced it meanwhile.
+		asking.catch(() => { if (pricesAsked.get(card.id) === asking) pricesAsked.delete(card.id); });
 		pricesAsked.set(card.id, asking);
 	}
 	const prices = await pricesAsked.get(card.id);

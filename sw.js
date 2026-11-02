@@ -101,8 +101,9 @@ async function startPage(event) {
 	const kept = await cache.match(keptAs).catch(() => undefined);
 	if (!kept) return fromInternet;   // the very first visit: nothing kept yet
 	const answered = fromInternet.then((response) => (response.ok ? response : kept), () => kept);
-	const tooSlow = new Promise((resolve) => setTimeout(() => resolve(kept), PAGE_WAIT_MS));
-	return Promise.race([answered, tooSlow]);
+	let timer;
+	const tooSlow = new Promise((resolve) => { timer = setTimeout(() => resolve(kept), PAGE_WAIT_MS); });
+	return Promise.race([answered, tooSlow]).finally(() => clearTimeout(timer));
 }
 
 // One of the caches, or null when the phone's storage can't be opened: then nothing is kept or found.

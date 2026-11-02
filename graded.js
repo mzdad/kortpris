@@ -110,8 +110,12 @@ function gradedPricesOf(card, onReady) {
 
 async function fetchGradedPrices(cardId, productId) {
 	try {
-		const response = await fetch(PSA_RELAY_URL + "?product=" + encodeURIComponent(productId));
-		const answer = await response.json();
+		// Given up on after API_ANSWER_WAIT_MS (cards.js), so "loading" never stays for ever: the card then
+		// counts as failed, and is tried again after GRADED_RETRY_MS.
+		const { response, answer } = await withinAnswerWait(async (signal) => {
+			const response = await fetch(PSA_RELAY_URL + "?product=" + encodeURIComponent(productId), { signal: signal });
+			return { response: response, answer: await response.json() };
+		});
 		noteAllowance(answer);
 		if (response.status === 429) {
 			// The day's lookups are used up: not a fault, so it gets its own message.

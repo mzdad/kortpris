@@ -51,14 +51,15 @@ function loadCollection() {
 // cards have arrived (see collectionReady): the list is empty until then, and saving it would wipe the
 // account's cards - as "Update prices" did in versions before 1.53.0, when a kid's cards were picked, or
 // someone signed in, while it was still running.
-function saveCollection() {
+function saveCollection(onSaved = null) {
 	if (!collectionReady()) return false;
 	if (accountName) {
 		// The screen shows the change at once; Firebase saves it in the background,
-		// and keeps trying if the phone is briefly offline.
+		// and keeps trying if the phone is briefly offline. onSaved runs once Firebase has it.
 		saveAccountCards(collectionOwner, collection).then(
 			() => {
 				accountSaveProblem = null;
+				if (onSaved) onSaved();
 				renderCollection();
 			},
 			(error) => {
@@ -69,7 +70,9 @@ function saveCollection() {
 		);
 		return true;
 	}
-	return writeStorage(COLLECTION_STORAGE_KEY, JSON.stringify(collection));
+	const saved = writeStorage(COLLECTION_STORAGE_KEY, JSON.stringify(collection));
+	if (saved && onSaved) onSaved();
+	return saved;
 }
 
 // True when "My cards" may be changed: always without an account, and with one as soon as
@@ -88,6 +91,7 @@ function showCollectionOf(owner) {
 	collectionOwner = owner;
 	accountCardsLoaded = false;
 	accountSaveProblem = null;
+	phoneCardsMerged = false;
 	collection = [];
 }
 
@@ -114,15 +118,25 @@ function phoneCardCount() {
 	return loadCollection().reduce((total, entry) => total + entry.count, 0);
 }
 
+// The phone's cards are in the list already (a save that failed): pressing the button again only saves
+// again, rather than adding them a second time.
+let phoneCardsMerged = false;
+
 function movePhoneCardsIntoAccount() {
-	for (const entry of loadCollection()) {
-		// The same card in the same version: a reverse holo is kept apart from the normal print.
-		const existing = findSaved(entry.id, entry.version);
-		if (existing) existing.count += entry.count;
-		else collection.push(entry);
+	if (!phoneCardsMerged) {
+		for (const entry of loadCollection()) {
+			// The same card in the same version: a reverse holo is kept apart from the normal print.
+			const existing = findSaved(entry.id, entry.version);
+			if (existing) existing.count += entry.count;
+			else collection.push(entry);
+		}
+		phoneCardsMerged = true;
 	}
-	removeStorage(COLLECTION_STORAGE_KEY);
-	saveCollection();
+	// The phone's copy goes only once the account has the cards: a refused save loses nothing.
+	saveCollection(() => {
+		phoneCardsMerged = false;
+		removeStorage(COLLECTION_STORAGE_KEY);
+	});
 }
 
 function findSaved(cardId, version) {

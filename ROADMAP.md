@@ -5,6 +5,20 @@ finished items move to "Done" with their version, and keep their number. Biggest
 within each part; the size is a rough guess of the work (S = an hour or two, M = a session,
 L = several sessions). The open parts (1 to 7) were checked against version 1.73.1 on 6 October 2026: a figure from an older version names it, and where nothing had changed the row says "checked".
 
+## Done in 1.73.3
+
+Found by a read-through of the code; none of the four has been tried in a browser yet.
+
+- **A PSA price request that never answers is given up on.** `fetchGradedPrices` in `graded.js` now uses `withinAnswerWait`
+  (15 s); before, a relay call that hung left "loading" on the card page until the app was opened again.
+- **"Move the phone's cards into the account" can no longer lose them.** `movePhoneCardsIntoAccount` in `collection.js`
+  deleted the phone's copy before the account had the cards; now it goes only when the save has succeeded
+  (`saveCollection(onSaved)`), and pressing the button again after a refused save doesn't add the cards twice.
+- **A failed price question only forgets itself** (`withPrices` in `cards.js`), not a newer question for the same card.
+- **The start page's 3 s timer is cleared** when the race ends (`startPage` in `sw.js`).
+- **Not changed:** the Tesseract and zxcvbn scripts have no integrity hashes; a Firestore document is limited to 1 MiB
+  (about 4,000 saved cards) while the rules allow 5,000.
+
 ## Done in 1.73.2
 
 - **5.4 A question to the card database that never answers is given up on** (you said "yes" to starting with 5.4 and 5.5).
